@@ -129,15 +129,17 @@ export default function Checkout() {
 
     (window as any)._xnext_initialization_scripts.push(initScript);
 
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script')
-      script.id = scriptId
-      script.src = "https://app.ecwid.com/script.js?80100025&data_platform=code&data_date=2026-02-23"
-      script.async = true;
-      script.charset = 'utf-8'
-      script.setAttribute('data-cfasync', 'false')
-      document.body.appendChild(script)
-    } else {
+    let pollingTimer: number | null = null;
+
+    const runEcwidInit = () => {
+      if (typeof (window as any).ecwid_onBodyDone === 'function') {
+        try {
+          (window as any).ecwid_onBodyDone();
+          return true;
+        } catch (e) {
+          console.error("Error executing ecwid_onBodyDone:", e);
+        }
+      }
       if (typeof (window as any).xProductBrowser === 'function') {
         try {
           (window as any).xProductBrowser(
@@ -146,32 +148,69 @@ export default function Checkout() {
             "categoryView=grid",
             "searchView=list",
             "id=my-store-80100025"
-          )
+          );
+          return true;
         } catch (e) {
-          console.error("Error executing Ecwid xProductBrowser:", e)
+          console.error("Error executing Ecwid xProductBrowser:", e);
         }
       }
+      return false;
+    };
+
+    if (!runEcwidInit()) {
+      const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+      if (existingScript) {
+        existingScript.addEventListener('load', () => {
+          runEcwidInit();
+        }, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = "https://app.ecwid.com/script.js?80100025&data_platform=code";
+        script.async = true;
+        script.charset = 'utf-8';
+        script.setAttribute('data-cfasync', 'false');
+        script.onload = () => {
+          runEcwidInit();
+        };
+        document.head.appendChild(script);
+      }
+
+      let elapsed = 0;
+      pollingTimer = window.setInterval(() => {
+        elapsed += 30;
+        if (runEcwidInit() || elapsed >= 4000) {
+          if (pollingTimer) {
+            window.clearInterval(pollingTimer);
+            pollingTimer = null;
+          }
+        }
+      }, 30);
     }
 
     return () => {
-      checkoutObserver.disconnect()
-      window.removeEventListener('hashchange', keepCheckoutUrlClean)
+      if (pollingTimer) {
+        window.clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
+      checkoutObserver.disconnect();
+      window.removeEventListener('hashchange', keepCheckoutUrlClean);
       // Clean up dynamic widget on unmount
       if ((window as any)._xnext_initialization_scripts) {
         (window as any)._xnext_initialization_scripts = (window as any)._xnext_initialization_scripts.filter(
           (s: any) => s !== initScript
-        )
+        );
       }
-      const ecwid = (window as any).Ecwid
+      const ecwid = (window as any).Ecwid;
       if (ecwid && typeof ecwid.destroy === 'function') {
         try {
-          ecwid.destroy()
+          ecwid.destroy();
         } catch (e) {
-          console.error("Error destroying Ecwid widget:", e)
+          console.error("Error destroying Ecwid widget:", e);
         }
       }
-    }
-  }, [])
+    };
+  }, []);
 
   const totalPrice = items.reduce((acc, item) => acc + item.price * item.quantity, 0)
 

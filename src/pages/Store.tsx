@@ -54,6 +54,8 @@ export default function Store({ searchQuery }: StoreProps) {
     
     (window as any)._xnext_initialization_scripts.push(initScript);
 
+    let pollingTimer: number | null = null;
+
     const triggerRedirectFallback = () => {
       if (productId) {
         const ecwid = (window as any).Ecwid;
@@ -63,31 +65,66 @@ export default function Store({ searchQuery }: StoreProps) {
       }
     };
 
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = "https://app.ecwid.com/script.js?80100025&data_platform=code&data_date=2026-02-23";
-      script.async = true;
-      script.charset = 'utf-8';
-      script.setAttribute('data-cfasync', 'false');
-      script.onload = () => {
-        triggerRedirectFallback();
-      };
-      document.body.appendChild(script);
-    } else {
-      // If the script is already loaded, initialize the widget directly
+    const runEcwidInit = () => {
+      if (typeof (window as any).ecwid_onBodyDone === 'function') {
+        try {
+          (window as any).ecwid_onBodyDone();
+          triggerRedirectFallback();
+          return true;
+        } catch (e) {
+          console.error("Error executing ecwid_onBodyDone:", e);
+        }
+      }
       if (typeof (window as any).xProductBrowser === 'function') {
         try {
           (window as any).xProductBrowser(...args);
-          // Trigger fallback redirect in case standard defaultProductId initialization doesn't catch
           triggerRedirectFallback();
+          return true;
         } catch (e) {
           console.error("Error executing Ecwid xProductBrowser:", e);
         }
       }
+      return false;
+    };
+
+    // If script is already cached/preloaded in memory, initialize immediately without delay!
+    if (!runEcwidInit()) {
+      const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+      if (existingScript) {
+        existingScript.addEventListener('load', () => {
+          runEcwidInit();
+        }, { once: true });
+      } else {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = "https://app.ecwid.com/script.js?80100025&data_platform=code";
+        script.async = true;
+        script.charset = 'utf-8';
+        script.setAttribute('data-cfasync', 'false');
+        script.onload = () => {
+          runEcwidInit();
+        };
+        document.head.appendChild(script);
+      }
+
+      // High-frequency polling (every 30ms) to fire the microsecond Ecwid finishes loading
+      let elapsed = 0;
+      pollingTimer = window.setInterval(() => {
+        elapsed += 30;
+        if (runEcwidInit() || elapsed >= 4000) {
+          if (pollingTimer) {
+            window.clearInterval(pollingTimer);
+            pollingTimer = null;
+          }
+        }
+      }, 30);
     }
 
     return () => {
+      if (pollingTimer) {
+        window.clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
       // Clean up the initialization script queue
       if ((window as any)._xnext_initialization_scripts) {
         (window as any)._xnext_initialization_scripts = (window as any)._xnext_initialization_scripts.filter(
