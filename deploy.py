@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Happy Machinery - Safe Automated Build & Production Deployment
+Happy Machinery - Safe Automated Build, Production Deployment & Cache Purge
 Usage:
     python3 deploy.py
     python3 deploy.py -m "Update about us page styling"
@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
@@ -62,12 +63,53 @@ def run_cmd(cmd: list, cwd: str = None, capture: bool = False, check: bool = Tru
         err_msg = e.stderr.strip() if e.stderr else f"Command failed with exit code {e.returncode}"
         raise RuntimeError(err_msg)
 
+def purge_server_cache():
+    """Purge PHP OPcache, filesystem stat cache, LiteSpeed cache, and touch key files."""
+    token = uuid.uuid4().hex
+    remote_purge_file = f"{REMOTE_PUBLIC}/.purge_cache_{token}.php"
+    
+    php_code = f"""<?php
+declare(strict_types=1);
+if (($_GET['token'] ?? '') !== '{token}') {{ http_response_code(403); exit; }}
+if (function_exists('opcache_reset')) {{ opcache_reset(); }}
+clearstatcache(true);
+header('X-LiteSpeed-Purge: *');
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Content-Type: application/json');
+echo json_encode(['purged' => true, 'time' => time()]);
+"""
+    # 1. Upload temporary purge script via SSH
+    upload_cmd = f"cat << 'EOF' > '{remote_purge_file}'\n{php_code}\nEOF"
+    run_cmd(["ssh", SSH_HOST, upload_cmd], capture=True)
+
+    try:
+        # 2. Trigger web request to execute inside web server's PHP-FPM environment
+        purge_url = f"{LIVE_SITE_URL}/.purge_cache_{token}.php?token={token}"
+        req = Request(purge_url, headers={"User-Agent": "HappyMachinery-CachePurge"})
+        with urlopen(req, timeout=10) as resp:
+            data = resp.read().decode('utf-8', errors='ignore')
+            if "purged" in data:
+                log_success("PHP-FPM OPcache & LiteSpeed Web Cache successfully flushed!")
+            else:
+                log_warning("Cache purge endpoint executed with unexpected response.")
+    except Exception as e:
+        log_warning(f"Could not trigger web cache flush endpoint: {e}")
+    finally:
+        # 3. Clean up the temporary purge script
+        run_cmd(["ssh", SSH_HOST, f"rm -f '{remote_purge_file}'"], capture=True)
+
+    # 4. Touch index.html and .htaccess to reload web server inode stats
+    touch_cmd = f"touch '{REMOTE_PUBLIC}/.htaccess' '{REMOTE_PUBLIC}/index.html' 2>/dev/null || true"
+    run_cmd(["ssh", SSH_HOST, touch_cmd], capture=True)
+    log_success("Web server timestamp signals touched (index.html, .htaccess).")
+
 def main():
     parser = argparse.ArgumentParser(description="Happy Machinery Safe Deployment Pipeline")
     parser.add_argument("-m", "--message", help="Commit message to auto-commit and push to Git")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip interactive confirmation prompts")
     parser.add_argument("--dry-run", action="store_true", help="Only preview the files that will be uploaded")
     parser.add_argument("--skip-git", action="store_true", help="Skip git push step")
+    parser.add_argument("--skip-cache", action="store_true", help="Skip cache purge step")
     args = parser.parse_args()
 
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -77,7 +119,7 @@ def main():
     print(f"{Colors.BOLD}{Colors.CYAN} Happy Machinery — Production Deployer & Health Guard {Colors.RESET}")
     print(f"{Colors.BOLD}{Colors.CYAN}======================================================{Colors.RESET}")
 
-    total_steps = 6 if not args.skip_git else 5
+    total_steps = 7 if not args.skip_git else 6
     current_step = 1
 
     # Step 1: Verification & Local TypeScript/Vite Build
@@ -225,7 +267,13 @@ def main():
 
     log_success("All files successfully transferred to Hostinger public_html!")
 
-    # Step 6: Post-Deployment Smoke Tests & Health Check
+    # Step 6: Clear Server, OPcache & CDN Caches
+    if not args.skip_cache:
+        log_step(current_step, total_steps, "Flushing Server, OPcache & LiteSpeed Caches")
+        current_step += 1
+        purge_server_cache()
+
+    # Step 7: Post-Deployment Smoke Tests & Health Check
     log_step(current_step, total_steps, "Post-Deployment Live Health Verification")
     
     time.sleep(1) # Brief pause for edge cache propagation
