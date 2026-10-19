@@ -55,11 +55,12 @@ def main():
     status_output = run_cmd(["git", "status", "--porcelain"], capture=True)
     if not status_output:
         # Check if ahead of remote
-        ahead = run_cmd(["git", "log", "@{u}..HEAD", "--oneline"], capture=True)
-        if not ahead:
-            print(f"{Colors.GREEN}✔ Working tree is clean and already up-to-date with remote!{Colors.RESET}\n")
-            return
-        else:
+        try:
+            ahead = run_cmd(["git", "log", "@{u}..HEAD", "--oneline"], capture=True)
+        except Exception:
+            ahead = run_cmd(["git", "log", "-n", "5", "--oneline"], capture=True)
+        
+        if ahead:
             print(f"{Colors.CYAN}ℹ Local branch has unpushed commits:{Colors.RESET}")
             for line in ahead.splitlines():
                 print(f"  {Colors.DIM}• {line}{Colors.RESET}")
