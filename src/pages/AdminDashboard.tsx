@@ -1128,7 +1128,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className={`cms-shell cms-theme-${theme}`}>
+    <div className={`cms-shell cms-theme-${theme} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       {isLoadingData && <div className="cms-top-loader" />}
       {/* Toast Notification Container */}
       {toast && (

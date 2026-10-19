@@ -70,12 +70,11 @@
   background-color: var(--cms-bg-base);
   color: var(--cms-text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  overflow-x: hidden;
   box-sizing: border-box;
 }
 
 /* ==============================================================================
-   Sidebar Navigation
+   Sidebar Navigation (Fixed Left Sidebar)
    ============================================================================== */
 .cms-sidebar {
   width: var(--cms-sidebar-width);
@@ -85,9 +84,11 @@
   flex-direction: column;
   flex-shrink: 0;
   height: 100vh;
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 40;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
   transition: width 200ms cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
 }
@@ -406,6 +407,16 @@
   flex-direction: column;
   min-width: 0;
   min-height: 100vh;
+  margin-left: var(--cms-sidebar-width);
+  width: calc(100% - var(--cms-sidebar-width));
+  transition: margin-left 200ms cubic-bezier(0.16, 1, 0.3, 1), width 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.cms-sidebar.collapsed + .cms-main-layout,
+.cms-shell.sidebar-collapsed .cms-main-layout {
+  margin-left: var(--cms-sidebar-collapsed-width);
+  width: calc(100% - var(--cms-sidebar-collapsed-width));
 }
 
 /* Top Header Bar */
@@ -1050,10 +1061,17 @@
 @media (max-width: 1024px) {
   .cms-sidebar {
     position: fixed;
-    left: -260px;
+    left: -268px;
+    z-index: 1000;
   }
   .cms-sidebar.mobile-open {
     left: 0;
+  }
+  .cms-main-layout,
+  .cms-sidebar.collapsed + .cms-main-layout,
+  .cms-shell.sidebar-collapsed .cms-main-layout {
+    margin-left: 0 !important;
+    width: 100% !important;
   }
   .cms-body-container {
     padding: 20px;
