@@ -2,6 +2,58 @@
   width: 100%;
 }
 
+/* Fluid responsive section containers for all displays (Mobile to 34" Ultrawide) */
+.features-overview,
+.specifications-section,
+.performance-section,
+.testimonials-section,
+.faq-section,
+.fleet-section,
+.v900-gallery-strip,
+.v900-cta-banner {
+  width: min(100% - 32px, var(--site-max-width, 1200px)) !important;
+  max-width: var(--site-max-width, 1200px) !important;
+}
+
+@media (min-width: 1024px) {
+  .features-overview,
+  .specifications-section,
+  .performance-section,
+  .testimonials-section,
+  .faq-section,
+  .fleet-section,
+  .v900-gallery-strip,
+  .v900-cta-banner {
+    width: min(100% - 48px, var(--site-max-width, 1200px)) !important;
+  }
+}
+
+@media (min-width: 1600px) {
+  .features-overview,
+  .specifications-section,
+  .performance-section,
+  .testimonials-section,
+  .faq-section,
+  .fleet-section,
+  .v900-gallery-strip,
+  .v900-cta-banner {
+    width: min(100% - 64px, var(--site-max-width, 1200px)) !important;
+  }
+}
+
+@media (min-width: 2100px) {
+  .features-overview,
+  .specifications-section,
+  .performance-section,
+  .testimonials-section,
+  .faq-section,
+  .fleet-section,
+  .v900-gallery-strip,
+  .v900-cta-banner {
+    width: min(100% - 80px, var(--site-max-width, 1200px)) !important;
+  }
+}
+
 .hero {
   position: relative;
   width: 100%;

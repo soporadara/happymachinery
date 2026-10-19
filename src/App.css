@@ -50,14 +50,58 @@ select {
   font: inherit;
 }
 
+/* Fluid Multi-Device Responsive Scaling (Mobile to 16", 24", 27", 32", 34" Ultrawide) */
+:root {
+  --site-max-width: 1200px;
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --site-max-width: 1440px; /* 16-inch laptops */
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --site-max-width: 1680px; /* 24-inch & 27-inch desktop monitors */
+  }
+}
+
+@media (min-width: 2100px) {
+  :root {
+    --site-max-width: 1880px; /* 32-inch & 34-inch ultrawide monitors */
+  }
+}
+
 main {
   width: 100%;
 }
 
 .container,
 .page {
-  width: min(1180px, calc(100% - 40px));
+  width: min(100% - 32px, var(--site-max-width));
   margin: 0 auto;
+}
+
+@media (min-width: 1024px) {
+  .container,
+  .page {
+    width: min(100% - 48px, var(--site-max-width));
+  }
+}
+
+@media (min-width: 1600px) {
+  .container,
+  .page {
+    width: min(100% - 64px, var(--site-max-width));
+  }
+}
+
+@media (min-width: 2100px) {
+  .container,
+  .page {
+    width: min(100% - 80px, var(--site-max-width));
+  }
 }
 
 .page {

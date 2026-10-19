@@ -15,9 +15,16 @@
 
 .raf-article-container,
 .raf-blog-container {
-  max-width: 1280px;
+  max-width: var(--site-max-width, 1280px);
   margin: 0 auto;
   padding: 0 24px;
+}
+
+@media (min-width: 1600px) {
+  .raf-article-container,
+  .raf-blog-container {
+    padding: 0 32px;
+  }
 }
 
 /* ==============================================================================

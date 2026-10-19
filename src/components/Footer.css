@@ -7,11 +7,29 @@
 }
 
 .footer-container {
-  width: min(1180px, calc(100% - 40px));
+  width: min(100% - 32px, 1200px);
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 64px;
+}
+
+@media (min-width: 1200px) {
+  .footer-container {
+    width: min(100% - 48px, 1440px);
+  }
+}
+
+@media (min-width: 1600px) {
+  .footer-container {
+    width: min(100% - 64px, 1680px);
+  }
+}
+
+@media (min-width: 2100px) {
+  .footer-container {
+    width: min(100% - 80px, 1880px);
+  }
 }
 
 .footer-brand {
