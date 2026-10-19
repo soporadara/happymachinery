@@ -554,10 +554,15 @@ export default function AdminDashboard() {
       <aside className={`cms-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="cms-sidebar-brand">
           <Link to="/ourcmskiuq" className="cms-brand-link">
-            <div className="cms-brand-logo-badge">HM</div>
-            {!isSidebarCollapsed && (
-              <div className="cms-brand-info">
-                <span className="cms-brand-name">Happy Machinery</span>
+            {isSidebarCollapsed ? (
+              <div className="cms-brand-logo-badge">HM</div>
+            ) : (
+              <div className="cms-sidebar-logo-wrapper">
+                <img
+                  src="/images/header-logo.png"
+                  alt="Happy Machinery"
+                  className="cms-sidebar-logo-img"
+                />
                 <span className="cms-brand-tag">CMS Console</span>
               </div>
             )}

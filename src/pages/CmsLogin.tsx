@@ -71,6 +71,13 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
       {/* Main Glass Card Form */}
       <div className="cms-login-card-container">
         <div className="cms-login-header">
+          <div className="cms-login-logo-container">
+            <img
+              src="/images/header-logo.png"
+              alt="Happy Machinery"
+              className="cms-login-brand-logo"
+            />
+          </div>
           <h1 className="cms-login-title">Sign in</h1>
           <p className="cms-login-subtitle">Happy Machinery Content Management System</p>
         </div>

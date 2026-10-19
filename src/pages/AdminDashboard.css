@@ -137,6 +137,19 @@
   flex-direction: column;
 }
 
+.cms-sidebar-logo-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cms-sidebar-logo-img {
+  height: 26px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+}
+
 .cms-brand-name {
   font-size: 1rem;
   font-weight: 750;
