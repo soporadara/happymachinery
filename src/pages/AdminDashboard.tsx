@@ -1235,13 +1235,21 @@ export default function AdminDashboard() {
         <div className="cms-sidebar-brand">
           <Link to="/ourcmskiuq" className="cms-brand-link">
             {isSidebarCollapsed ? (
-              <div className="cms-brand-logo-badge">HM</div>
+              <div className="cms-brand-logo-badge" data-tooltip="Happy Machinery CMS">
+                <img
+                  src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+                  alt="Happy Machinery"
+                  style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+                  onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+                />
+              </div>
             ) : (
               <div className="cms-sidebar-logo-wrapper">
                 <img
-                  src="/images/header-logo.png"
+                  src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
                   alt="Happy Machinery"
                   className="cms-sidebar-logo-img"
+                  onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
                 />
               </div>
             )}
@@ -1250,6 +1258,7 @@ export default function AdminDashboard() {
             className="cms-sidebar-toggle-btn"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            data-tooltip={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               {isSidebarCollapsed ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
@@ -1265,6 +1274,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('dashboard')}
+            data-tooltip="Dashboard"
+            title={isSidebarCollapsed ? 'Dashboard' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1286,6 +1297,8 @@ export default function AdminDashboard() {
                 setActiveTab('articles')
                 setIsArticlesExpanded(!isArticlesExpanded)
               }}
+              data-tooltip="Articles & Content"
+              title={isSidebarCollapsed ? 'Articles & Content' : undefined}
             >
               <span className="cms-nav-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1383,6 +1396,8 @@ export default function AdminDashboard() {
                 setActiveTab('products')
                 setIsProductsExpanded(!isProductsExpanded)
               }}
+              data-tooltip="Equipment & Products"
+              title={isSidebarCollapsed ? 'Equipment & Products' : undefined}
             >
               <span className="cms-nav-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1490,6 +1505,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'cart' ? 'active' : ''}`}
             onClick={() => setActiveTab('cart')}
+            data-tooltip="Cart Activity"
+            title={isSidebarCollapsed ? 'Cart Activity' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1506,6 +1523,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'media' ? 'active' : ''}`}
             onClick={() => setActiveTab('media')}
+            data-tooltip="Media Library"
+            title={isSidebarCollapsed ? 'Media Library' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1523,6 +1542,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'inquiries' ? 'active' : ''}`}
             onClick={() => setActiveTab('inquiries')}
+            data-tooltip="Inquiries & Leads"
+            title={isSidebarCollapsed ? 'Inquiries & Leads' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1537,6 +1558,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'comments' ? 'active' : ''}`}
             onClick={() => setActiveTab('comments')}
+            data-tooltip="Customer Comments"
+            title={isSidebarCollapsed ? 'Customer Comments' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1552,6 +1575,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'pages' ? 'active' : ''}`}
             onClick={() => setActiveTab('pages')}
+            data-tooltip="Home Sections"
+            title={isSidebarCollapsed ? 'Home Sections' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1566,6 +1591,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => setActiveTab('settings')}
+            data-tooltip="Pop-up & Banners"
+            title={isSidebarCollapsed ? 'Pop-up & Banners' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1582,6 +1609,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'security' ? 'active' : ''}`}
             onClick={() => setActiveTab('security')}
+            data-tooltip="Security & Access Logs"
+            title={isSidebarCollapsed ? 'Security & Access Logs' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1595,6 +1624,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'admins' ? 'active' : ''}`}
             onClick={() => setActiveTab('admins')}
+            data-tooltip="Accounts & Staff"
+            title={isSidebarCollapsed ? 'Accounts & Staff' : undefined}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1612,6 +1643,8 @@ export default function AdminDashboard() {
           <button
             className={`cms-nav-item ${activeTab === 'maintenance' ? 'active' : ''}`}
             onClick={() => setActiveTab('maintenance')}
+            data-tooltip="Maintenance Mode"
+            title={isSidebarCollapsed ? 'Maintenance Mode' : undefined}
           >
             <span className="cms-nav-icon" style={{ color: maintenanceGlobal ? 'var(--cms-warning)' : 'inherit' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1627,12 +1660,18 @@ export default function AdminDashboard() {
 
         {/* Sidebar Footer User Card */}
         <div className="cms-sidebar-footer">
-          <div className="cms-sidebar-user-card" onClick={() => setShowProfileModal(true)}>
+          <div
+            className="cms-sidebar-user-card"
+            onClick={() => setShowProfileModal(true)}
+            data-tooltip={currentUser.name ? `${currentUser.name} (Account)` : 'My Administrator Account'}
+            title={isSidebarCollapsed ? (currentUser.name || 'Admin Profile') : undefined}
+          >
             <div className="cms-avatar-badge">
               <img
-                src={currentUser.avatar || '/images/header-logo.png'}
+                src={currentUser.avatar || 'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp'}
                 alt={currentUser.name}
                 className="cms-avatar-img"
+                onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
               />
               <span className="cms-avatar-status-dot"></span>
             </div>
@@ -5904,7 +5943,12 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="cms-preview-logo-wrap">
-                          <img src="/images/header-logo.png" alt="Happy Machinery" className="cms-preview-logo-img" />
+                          <img
+                            src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+                            alt="Happy Machinery"
+                            className="cms-preview-logo-img"
+                            onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+                          />
                         </div>
 
                         <h2 className="cms-preview-heading">{maintenanceTitle}</h2>

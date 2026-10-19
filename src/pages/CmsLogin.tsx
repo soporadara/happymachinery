@@ -73,9 +73,10 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
         <div className="cms-login-header">
           <div className="cms-login-logo-container">
             <img
-              src="/images/header-logo.png"
+              src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
               alt="Happy Machinery"
               className="cms-login-brand-logo"
+              onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
             />
           </div>
           <h1 className="cms-login-title">Sign in</h1>

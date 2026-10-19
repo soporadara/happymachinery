@@ -84,7 +84,11 @@ export default function Navigation({
     <nav className="navbar">
       <div className="nav-container">
         <NavLink to="/" className="nav-logo" aria-label="Happy Machinery home">
-          <img src="/images/header-logo.png" alt="Happy Machinery" />
+          <img
+            src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+            alt="Happy Machinery"
+            onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+          />
         </NavLink>
 
         <button

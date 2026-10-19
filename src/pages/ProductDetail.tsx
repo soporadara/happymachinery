@@ -711,7 +711,12 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
           {/* Supplier Verification Card */}
           <div className="supplier-verification-card">
             <div className="sup-logo-wrap">
-              <img src="/images/header-logo.png" alt="Happy Machinery" className="sup-logo-img" />
+              <img
+                src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+                alt="Happy Machinery"
+                className="sup-logo-img"
+                onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+              />
             </div>
             <div className="sup-info-text">
               <strong>Official TYPHON Heavy Equipment Supplier</strong>

@@ -7,7 +7,12 @@ export default function Footer() {
     <footer className="footer">
       <div className="footer-container">
         <div className="footer-brand">
-          <img src="/images/header-logo.png" alt="Happy Machinery Logo" className="footer-logo" />
+          <img
+            src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+            alt="Happy Machinery Logo"
+            className="footer-logo"
+            onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+          />
           <p className="footer-desc">
             Premium mini track loaders, skid steers, mini excavators, attachments, and spare parts. Reliably serving worksites and fleets across the USA.
           </p>

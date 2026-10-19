@@ -23,7 +23,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   phone: '+1 (888) 555-0199',
   address: 'Dallas, TX, United States',
   businessHours: 'Monday – Friday: 8:00 AM – 6:00 PM CST',
-  logo: '/images/header-logo.png',
+  logo: 'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp',
   favicon: '/images/favicon.webp',
   defaultSeoTitle: 'Happy Machinery | Compact Heavy Equipment Dealer',
   defaultSeoDescription: 'Discover compact excavators, mini track loaders, and electric machinery from Happy Machinery. Compare models, specs, and pricing today.',
