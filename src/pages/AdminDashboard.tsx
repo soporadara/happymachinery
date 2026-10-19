@@ -1910,7 +1910,7 @@ export default function AdminDashboard() {
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
-                    <span>+ Add Equipment</span>
+                    <span>Add Equipment</span>
                   </button>
 
                   <button
@@ -1921,7 +1921,11 @@ export default function AdminDashboard() {
                       openNewArticle()
                     }}
                   >
-                    <span>+ Write Article</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    <span>Write Article</span>
                   </button>
 
                   <a
@@ -2492,35 +2496,55 @@ export default function AdminDashboard() {
                                 className="cms-quick-add-btn"
                                 onClick={() => handleAddSection('text')}
                               >
-                                <span>+ Text</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Text</span>
                               </button>
                               <button
                                 type="button"
                                 className="cms-quick-add-btn"
                                 onClick={() => handleAddSection('heading')}
                               >
-                                <span>+ Heading</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Heading</span>
                               </button>
                               <button
                                 type="button"
                                 className="cms-quick-add-btn"
                                 onClick={() => handleAddSection('image')}
                               >
-                                <span>+ Image</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Image</span>
                               </button>
                               <button
                                 type="button"
                                 className="cms-quick-add-btn"
                                 onClick={() => handleAddSection('video')}
                               >
-                                <span>+ Video</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Video</span>
                               </button>
                               <button
                                 type="button"
                                 className="cms-quick-add-btn"
                                 onClick={() => handleAddSection('table')}
                               >
-                                <span>+ Table</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Table</span>
                               </button>
                             </div>
                           </div>
@@ -2836,14 +2860,22 @@ export default function AdminDashboard() {
                                           className="cms-quick-add-btn"
                                           onClick={() => handleAddTableCol(sec.id)}
                                         >
-                                          + Add Column
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <line x1="12" y1="5" x2="12" y2="19" />
+                                            <line x1="5" y1="12" x2="19" y2="12" />
+                                          </svg>
+                                          <span>Add Column</span>
                                         </button>
                                         <button
                                           type="button"
                                           className="cms-quick-add-btn"
                                           onClick={() => handleAddTableRow(sec.id)}
                                         >
-                                          + Add Row
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <line x1="12" y1="5" x2="12" y2="19" />
+                                            <line x1="5" y1="12" x2="19" y2="12" />
+                                          </svg>
+                                          <span>Add Row</span>
                                         </button>
                                       </div>
                                       <span style={{ fontSize: '0.75rem', color: 'var(--cms-text-muted)' }}>
@@ -2939,35 +2971,55 @@ export default function AdminDashboard() {
                                   className="cms-add-block-bar-btn"
                                   onClick={() => handleAddSection('text', idx + 1)}
                                 >
-                                  + Text
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                  <span>Text</span>
                                 </button>
                                 <button
                                   type="button"
                                   className="cms-add-block-bar-btn"
                                   onClick={() => handleAddSection('heading', idx + 1)}
                                 >
-                                  + Heading
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                  <span>Heading</span>
                                 </button>
                                 <button
                                   type="button"
                                   className="cms-add-block-bar-btn"
                                   onClick={() => handleAddSection('image', idx + 1)}
                                 >
-                                  + Image
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                  <span>Image</span>
                                 </button>
                                 <button
                                   type="button"
                                   className="cms-add-block-bar-btn"
                                   onClick={() => handleAddSection('video', idx + 1)}
                                 >
-                                  + Video
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                  <span>Video</span>
                                 </button>
                                 <button
                                   type="button"
                                   className="cms-add-block-bar-btn"
                                   onClick={() => handleAddSection('table', idx + 1)}
                                 >
-                                  + Table
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                  </svg>
+                                  <span>Table</span>
                                 </button>
                               </div>
                             </React.Fragment>
@@ -3234,7 +3286,7 @@ export default function AdminDashboard() {
                   {/* Subnav row */}
                   <div className="cms-articles-subnav">
                     <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('list')}>All Articles</button>
-                    <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>+ New Article</button>
+                    <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>New Article</button>
                     <button type="button" className="cms-subnav-btn active">Categories & Slugs</button>
                   </div>
 
@@ -3311,7 +3363,11 @@ export default function AdminDashboard() {
                         </div>
 
                         <button type="submit" className="cms-btn cms-btn-primary" style={{ width: '100%', marginTop: '10px' }}>
-                          + Add Category
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                          <span>Add Category</span>
                         </button>
                       </form>
                     </div>
@@ -3399,7 +3455,11 @@ export default function AdminDashboard() {
                     </div>
                     <div className="cms-view-actions">
                       <button className="cms-btn cms-btn-primary" onClick={openNewArticle}>
-                        + New Article
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        <span>New Article</span>
                       </button>
                     </div>
                   </div>
@@ -3407,7 +3467,7 @@ export default function AdminDashboard() {
                   {/* Subnav row */}
                   <div className="cms-articles-subnav">
                     <button type="button" className="cms-subnav-btn active">All Articles ({posts.length})</button>
-                    <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>+ New Article</button>
+                    <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>New Article</button>
                     <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('categories')}>Categories & Slugs</button>
                   </div>
 
@@ -3972,7 +4032,7 @@ export default function AdminDashboard() {
                         <line x1="12" y1="5" x2="12" y2="19" />
                         <line x1="5" y1="12" x2="19" y2="12" />
                       </svg>
-                      <span>+ Add Product</span>
+                      <span>Add Product</span>
                     </button>
                   </div>
 
@@ -4350,7 +4410,11 @@ export default function AdminDashboard() {
                             className="cms-action-pill-btn"
                             onClick={handleAddSpecRow}
                           >
-                            + ADD SPEC
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            <span>ADD SPEC</span>
                           </button>
                         </div>
 
@@ -4371,7 +4435,12 @@ export default function AdminDashboard() {
                                 ])
                               }}
                             >
-                              + Load Standard V900 Specs
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              <span>Load Standard V900 Specs</span>
                             </button>
                           </div>
                         ) : (
@@ -5077,7 +5146,11 @@ export default function AdminDashboard() {
                 </div>
                 <div className="cms-view-actions">
                   <button className="cms-btn cms-btn-danger" onClick={() => setShowBanIpModal(true)}>
-                    + Ban IP Address
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                    <span>Ban IP Address</span>
                   </button>
                 </div>
               </div>
@@ -5450,7 +5523,11 @@ export default function AdminDashboard() {
                 </div>
                 <div className="cms-view-actions">
                   <button className="cms-btn cms-btn-primary" onClick={() => setShowAddAdminModal(true)}>
-                    + Provision Administrator
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>Provision Administrator</span>
                   </button>
                 </div>
               </div>
