@@ -275,6 +275,49 @@ export default function AdminDashboard() {
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
   const [showBanIpModal, setShowBanIpModal] = useState(false)
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null)
+  const [mediaZoom, setMediaZoom] = useState<number>(100)
+  const [mediaRotation, setMediaRotation] = useState<number>(0)
+
+  const handleOpenMedia = (item: MediaItem) => {
+    setSelectedMedia(item)
+    setMediaZoom(100)
+    setMediaRotation(0)
+  }
+
+  const handlePrevMedia = () => {
+    if (!selectedMedia || mediaList.length === 0) return
+    const currentIdx = mediaList.findIndex((m) => m.id === selectedMedia.id || m.url === selectedMedia.url)
+    const prevIdx = currentIdx > 0 ? currentIdx - 1 : mediaList.length - 1
+    setSelectedMedia(mediaList[prevIdx])
+    setMediaZoom(100)
+    setMediaRotation(0)
+  }
+
+  const handleNextMedia = () => {
+    if (!selectedMedia || mediaList.length === 0) return
+    const currentIdx = mediaList.findIndex((m) => m.id === selectedMedia.id || m.url === selectedMedia.url)
+    const nextIdx = currentIdx < mediaList.length - 1 ? currentIdx + 1 : 0
+    setSelectedMedia(mediaList[nextIdx])
+    setMediaZoom(100)
+    setMediaRotation(0)
+  }
+
+  const handleZoomIn = () => {
+    setMediaZoom((prev) => Math.min(300, prev + 25))
+  }
+
+  const handleZoomOut = () => {
+    setMediaZoom((prev) => Math.max(25, prev - 25))
+  }
+
+  const handleResetZoom = () => {
+    setMediaZoom(100)
+    setMediaRotation(0)
+  }
+
+  const handleRotate = () => {
+    setMediaRotation((prev) => (prev + 90) % 360)
+  }
 
   // Products Management States (Screenshots 1, 2, 3)
   const [isProductsExpanded, setIsProductsExpanded] = useState(true)
@@ -489,6 +532,28 @@ export default function AdminDashboard() {
   }, [currentUser, showProfileModal])
 
   // Authentication Handlers
+  useEffect(() => {
+    if (!selectedMedia) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedMedia(null)
+      } else if (e.key === 'ArrowLeft') {
+        handlePrevMedia()
+      } else if (e.key === 'ArrowRight') {
+        handleNextMedia()
+      } else if (e.key === '+' || e.key === '=') {
+        setMediaZoom((prev) => Math.min(300, prev + 25))
+      } else if (e.key === '-') {
+        setMediaZoom((prev) => Math.max(25, prev - 25))
+      } else if (e.key === '0') {
+        setMediaZoom(100)
+        setMediaRotation(0)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedMedia, mediaList])
+
   const handleLoginSuccess = (user: AdminUser) => {
     setCurrentUser(user)
     showToast(`Welcome back, ${user.name}!`, 'success')
@@ -3766,7 +3831,7 @@ export default function AdminDashboard() {
                       {mediaList
                         .filter((m) => m.title.toLowerCase().includes(mediaSearchTerm.toLowerCase()))
                         .map((item) => (
-                          <tr key={item.id} onClick={() => setSelectedMedia(item)}>
+                          <tr key={item.id} onClick={() => handleOpenMedia(item)} style={{ cursor: 'pointer' }}>
                             <td>
                               <div className="cms-file-name-cell">
                                 <img
@@ -3806,7 +3871,7 @@ export default function AdminDashboard() {
                                 <button
                                   type="button"
                                   className="cms-file-action-btn"
-                                  onClick={() => setSelectedMedia(item)}
+                                  onClick={() => handleOpenMedia(item)}
                                 >
                                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -3964,7 +4029,9 @@ export default function AdminDashboard() {
                     <div
                       key={item.id}
                       className="cms-preview-tile"
-                      onClick={() => setSelectedMedia(item)}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleOpenMedia(item)}
+                      onDoubleClick={() => handleOpenMedia(item)}
                     >
                       <div className="cms-preview-img-wrap">
                         <img src={item.url} alt={item.title} />
@@ -6338,38 +6405,146 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Media Details Modal */}
+      {/* Full-Screen Dark Image Lightbox / Viewer (Matches Image 3) */}
       {selectedMedia && (
-        <div className="cms-modal-backdrop" onClick={() => setSelectedMedia(null)}>
-          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-            <h3>Media Details</h3>
-            <div style={{ maxHeight: '200px', overflow: 'hidden', borderRadius: '10px', margin: '12px 0', background: '#050a14' }}>
-              <img src={selectedMedia.url} alt={selectedMedia.title} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <div className="cms-image-lightbox-backdrop" onClick={() => setSelectedMedia(null)}>
+          {/* Top Center Floating Pill Toolbar */}
+          <div className="cms-lightbox-toolbar" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="cms-lightbox-tool-btn"
+              title="Zoom Out (-)"
+              onClick={handleZoomOut}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <span className="cms-lightbox-zoom-text">{mediaZoom}%</span>
+            <button
+              type="button"
+              className="cms-lightbox-tool-btn"
+              title="Zoom In (+)"
+              onClick={handleZoomIn}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="cms-lightbox-badge-btn"
+              title="Reset 1:1 Scale (0)"
+              onClick={handleResetZoom}
+            >
+              1:1
+            </button>
+            <button
+              type="button"
+              className="cms-lightbox-tool-btn icon-only"
+              title="Rotate 90° Clockwise"
+              onClick={handleRotate}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M21.5 2v6h-6" />
+                <path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Top Right Close Pill Button */}
+          <button
+            type="button"
+            className="cms-lightbox-close-btn"
+            onClick={() => setSelectedMedia(null)}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+            <span>Close</span>
+          </button>
+
+          {/* Left Arrow Navigation */}
+          {mediaList.length > 1 && (
+            <button
+              type="button"
+              className="cms-lightbox-nav-btn prev"
+              title="Previous Image (←)"
+              onClick={(e) => {
+                e.stopPropagation()
+                handlePrevMedia()
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+          )}
+
+          {/* Right Arrow Navigation */}
+          {mediaList.length > 1 && (
+            <button
+              type="button"
+              className="cms-lightbox-nav-btn next"
+              title="Next Image (→)"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleNextMedia()
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          )}
+
+          {/* Center Image Canvas */}
+          <div
+            className="cms-lightbox-canvas"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={selectedMedia.url}
+              alt={selectedMedia.title}
+              className="cms-lightbox-img"
+              style={{
+                transform: `scale(${mediaZoom / 100}) rotate(${mediaRotation}deg)`,
+              }}
+              draggable={false}
+            />
+          </div>
+
+          {/* Bottom Left Title & Count Indicator */}
+          <div className="cms-lightbox-bottom-left" onClick={(e) => e.stopPropagation()}>
+            <div className="cms-lightbox-filename" title={selectedMedia.title}>
+              {selectedMedia.url.split('/').pop() || selectedMedia.title}
             </div>
-            <p><strong>Title:</strong> {selectedMedia.title}</p>
-            <p style={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.8rem' }}>
-              <strong>URL:</strong> {selectedMedia.url}
-            </p>
-            <div className="cms-modal-actions">
-              <button
-                type="button"
-                className="cms-modal-btn primary"
-                onClick={() => {
-                  navigator.clipboard.writeText(selectedMedia.url)
-                  showToast('Media URL copied to clipboard!', 'success')
-                }}
-              >
-                Copy URL
-              </button>
-              <button
-                type="button"
-                className="cms-modal-btn secondary"
-                onClick={() => setSelectedMedia(null)}
-              >
-                Close
-              </button>
+            <div className="cms-lightbox-counter">
+              {(() => {
+                const curIdx = mediaList.findIndex((m) => m.id === selectedMedia.id || m.url === selectedMedia.url)
+                return curIdx !== -1 ? `${curIdx + 1} / ${mediaList.length}` : `1 / ${mediaList.length || 1}`
+              })()}
             </div>
           </div>
+
+          {/* Bottom Right Blue Copy URL Button */}
+          <button
+            type="button"
+            className="cms-lightbox-copy-btn"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigator.clipboard.writeText(selectedMedia.url)
+              showToast('Media URL copied to clipboard!', 'success')
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>Copy URL</span>
+          </button>
         </div>
       )}
 

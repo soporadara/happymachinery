@@ -5216,3 +5216,272 @@
 .cms-sec-type-flex svg {
   color: #1d7ff3;
 }
+
+/* ==========================================================================
+   Full-Screen Dark Image Lightbox & Viewer (Matches Image 3)
+   ========================================================================== */
+.cms-image-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  background: rgba(6, 9, 15, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  animation: cmsLightboxFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cmsLightboxFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Floating Zoom & Controls Toolbar at Top Center */
+.cms-lightbox-toolbar {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100010;
+  background: rgba(26, 36, 54, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 5px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+.cms-lightbox-tool-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f1f5f9;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.cms-lightbox-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+.cms-lightbox-tool-btn:active {
+  transform: scale(0.95);
+}
+
+.cms-lightbox-tool-btn.icon-only {
+  background: transparent;
+  border-color: transparent;
+  color: #94a3b8;
+}
+
+.cms-lightbox-tool-btn.icon-only:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.cms-lightbox-zoom-text {
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: #f8fafc;
+  min-width: 44px;
+  text-align: center;
+  font-family: inherit;
+  letter-spacing: -0.01em;
+}
+
+.cms-lightbox-badge-btn {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 4px 11px;
+  font-size: 0.74rem;
+  font-weight: 750;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.cms-lightbox-badge-btn:hover {
+  background: #1d4ed8;
+  transform: scale(1.04);
+}
+
+/* Close Button at Top Right */
+.cms-lightbox-close-btn {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  z-index: 100010;
+  background: rgba(26, 36, 54, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  border-radius: 9999px;
+  padding: 8px 18px;
+  font-size: 0.84rem;
+  font-weight: 650;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transition: all 0.18s ease;
+}
+
+.cms-lightbox-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  transform: translateY(-1px);
+}
+
+/* Nav Arrows (Left / Right edges) */
+.cms-lightbox-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100010;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(26, 36, 54, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.cms-lightbox-nav-btn.prev {
+  left: 28px;
+}
+
+.cms-lightbox-nav-btn.next {
+  right: 28px;
+}
+
+.cms-lightbox-nav-btn:hover {
+  background: rgba(37, 99, 235, 0.85);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #ffffff;
+  transform: translateY(-50%) scale(1.08);
+}
+
+.cms-lightbox-nav-btn:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+/* Image Canvas */
+.cms-lightbox-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 85px 95px;
+  box-sizing: border-box;
+}
+
+.cms-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 25px 65px -12px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  pointer-events: auto;
+}
+
+/* Bottom Left: Title & Index Counter */
+.cms-lightbox-bottom-left {
+  position: absolute;
+  bottom: 28px;
+  left: 32px;
+  z-index: 100010;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.cms-lightbox-filename {
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 750;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  max-width: 480px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-lightbox-counter {
+  color: #94a3b8;
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  font-family: inherit;
+}
+
+/* Bottom Right: Blue Copy URL Button */
+.cms-lightbox-copy-btn {
+  position: absolute;
+  bottom: 28px;
+  right: 32px;
+  z-index: 100010;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 9999px;
+  padding: 10px 22px;
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 18px rgba(37, 99, 235, 0.45);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cms-lightbox-copy-btn:hover {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.55);
+}
+
+.cms-lightbox-copy-btn:active {
+  transform: translateY(0);
+}
