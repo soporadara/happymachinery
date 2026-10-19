@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DEFAULT_COMMENTS, DEFAULT_POSTS, BlogComment, BlogPost } from './adminData'
 import { readPersistentContent } from '../data/persistentStorage'
@@ -54,7 +54,7 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     return <h5 key={key} className="blog-body-h5">{line.slice(5)}</h5>
   }
 
-  // 4.5. Raw Image URL Auto-detection
+  // Raw Image URL Auto-detection
   if (/^(https?:\/\/|\/images\/)[^\s]+$/i.test(line) && /\.(png|jpg|jpeg|webp|gif|svg)/i.test(line)) {
     return (
       <div key={key} className="blog-body-image-container">
@@ -63,7 +63,7 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     )
   }
 
-  // 5. Image: "![Alt Text](url)"
+  // Image: "![Alt Text](url)"
   const imgRegex = /^!\[(.*?)\]\((.*?)\)$/
   const imgMatch = line.match(imgRegex)
   if (imgMatch) {
@@ -76,107 +76,36 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     )
   }
 
-  // 5.5. Handle raw HTML links: <a href="url" target="_blank" rel="nofollow" title="title">Link Text</a>
-  const htmlLinkRegex = /<a\s+([^>]*?)href="([^"]*)"([^>]*?)>(.*?)<\/a>/gi
-  if (htmlLinkRegex.test(line)) {
-    htmlLinkRegex.lastIndex = 0
-    const htmlParts = []
-    let currentHtmlIdx = 0
-    let htmlMatch
-
-    while ((htmlMatch = htmlLinkRegex.exec(line)) !== null) {
-      const matchIndex = htmlMatch.index
-      const [fullMatch, attrBefore, url, attrAfter, linkText] = htmlMatch
-      const attrs = (attrBefore + ' ' + attrAfter).trim()
-
-      if (matchIndex > currentHtmlIdx) {
-        htmlParts.push(line.slice(currentHtmlIdx, matchIndex))
-      }
-
-      const targetMatch = attrs.match(/target="([^"]*)"/i)
-      const relMatch = attrs.match(/rel="([^"]*)"/i)
-      const titleMatch = attrs.match(/title="([^"]*)"/i)
-
-      const target = targetMatch ? targetMatch[1] : undefined
-      const rel = relMatch ? relMatch[1] : undefined
-      const title = titleMatch ? titleMatch[1] : undefined
-
-      if (url.startsWith('/') || url.startsWith('#')) {
-        htmlParts.push(
-          <Link key={matchIndex} to={url} title={title} className="blog-body-link-internal">
-            {linkText}
-          </Link>
-        )
-      } else {
-        htmlParts.push(
-          <a
-            key={matchIndex}
-            href={url}
-            target={target || '_blank'}
-            rel={rel || 'noopener noreferrer'}
-            title={title}
-            className="blog-body-link-external"
-          >
-            {linkText} {target !== '_self' && '↗'}
-          </a>
-        )
-      }
-
-      currentHtmlIdx = matchIndex + fullMatch.length
-    }
-
-    if (currentHtmlIdx < line.length) {
-      htmlParts.push(line.slice(currentHtmlIdx))
-    }
-
-    return (
-      <p key={key} className="blog-body-p">
-        {htmlParts}
-      </p>
-    )
-  }
-
-  // 6. Handle inline links: "[Link Text](url)"
-  const parts = []
-  let currentIndex = 0
+  // Simple Markdown links: [text](url)
   const linkRegex = /\[(.*?)\]\((.*?)\)/g
-  let match
+  const parts: (string | React.ReactNode)[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
 
   while ((match = linkRegex.exec(line)) !== null) {
-    const matchIndex = match.index
-    const [fullMatch, linkText, url] = match
-
-    // Add preceding text
-    if (matchIndex > currentIndex) {
-      parts.push(line.slice(currentIndex, matchIndex))
+    if (match.index > lastIndex) {
+      parts.push(line.substring(lastIndex, match.index))
     }
-
-    // Check if internal or external link
-    if (url.startsWith('/') || url.startsWith('#')) {
+    const [, linkText, linkUrl] = match
+    const isInternal = linkUrl.startsWith('/') || linkUrl.includes('happymachinery.com')
+    if (isInternal) {
       parts.push(
-        <Link key={matchIndex} to={url} className="blog-body-link-internal">
+        <Link key={`${key}-${match.index}`} to={linkUrl} className="blog-body-link">
           {linkText}
         </Link>
       )
     } else {
       parts.push(
-        <a key={matchIndex} href={url} target="_blank" rel="noopener noreferrer" className="blog-body-link-external">
-          {linkText} ↗
+        <a key={`${key}-${match.index}`} href={linkUrl} target="_blank" rel="noopener noreferrer" className="blog-body-link external">
+          {linkText}
         </a>
       )
     }
-
-    currentIndex = matchIndex + fullMatch.length
+    lastIndex = match.index + match[0].length
   }
 
-  if (currentIndex < line.length) {
-    parts.push(line.slice(currentIndex))
-  }
-
-  // Standalone Heading Heuristic: Short lines starting with uppercase, no punctuation at the end, and no links parsed
-  const isHeadingHeuristic = currentIndex === 0 && line.length > 5 && line.length < 85 && /^[A-Z0-9]/.test(line) && !/[.,;:!?]$/.test(line)
-  if (isHeadingHeuristic) {
-    return <h3 key={key} className="blog-body-h3">{line}</h3>
+  if (lastIndex < line.length) {
+    parts.push(line.substring(lastIndex))
   }
 
   return (
@@ -184,6 +113,11 @@ export function renderMarkdownToReact(text: string, key: string | number) {
       {parts.length > 0 ? parts : line}
     </p>
   )
+}
+
+// Deterministic helper to get a view count for any post
+export const getPostViews = (post: BlogPost): number => {
+  return ((post.id * 173) % 430) + 120
 }
 
 export default function Blog() {
@@ -206,13 +140,21 @@ export default function Blog() {
     const saved = localStorage.getItem('happy-machinery-liked-comments')
     return saved ? JSON.parse(saved) : []
   })
+  const [bookmarkedPosts, setBookmarkedPosts] = useState<number[]>(() => {
+    const saved = localStorage.getItem('happy-bookmarked-posts')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [newsletterEmail, setNewsletterEmail] = useState('')
+  const [newsletterSuccess, setNewsletterSuccess] = useState(false)
   const isAdmin = localStorage.getItem('happy-admin-auth') === 'true'
+
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     const saved = localStorage.getItem('happy-machinery-blog-posts')
     return saved ? JSON.parse(saved) : DEFAULT_POSTS
   })
 
-  // Derived selectedPost from URL search parameters (Single Source of Truth)
+  // Derived selectedPost from URL search parameters or slug
   const postId = searchParams.get('post')
   const selectedPost = slug
     ? posts.find((post) => getBlogPostSlug(post) === slug) || null
@@ -223,12 +165,13 @@ export default function Blog() {
   const setSelectedPost = (post: BlogPost | null) => {
     if (post) {
       navigate(getBlogPostPath(post))
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
       navigate('/blog')
     }
   }
 
-  // Keep old shared links working, then replace them with the canonical slug URL.
+  // Canonical redirect for old ?post=ID links
   useEffect(() => {
     if (!slug && postId && selectedPost) {
       navigate(getBlogPostPath(selectedPost), { replace: true })
@@ -248,46 +191,46 @@ export default function Blog() {
     const originalCanonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href || ''
 
     const SITE_URL = 'https://happymachinery.com'
-    const shareUrl = `${SITE_URL}${getBlogPostPath(selectedPost)}`
-    const imageUrl = selectedPost.image.startsWith('http') ? selectedPost.image : `${SITE_URL}${selectedPost.image}`
-    const postTitle = `${selectedPost.title} | Happy Machinery`
+    const articleUrl = `${SITE_URL}${getBlogPostPath(selectedPost)}`
+    const seoTitle = `${selectedPost.title} | Happy Machinery`
+    const seoDesc = selectedPost.excerpt.slice(0, 160)
+    const seoImage = selectedPost.image.startsWith('http') ? selectedPost.image : `${SITE_URL}${selectedPost.image}`
 
-    document.title = postTitle
+    document.title = seoTitle
 
-    const setMeta = (selector: string, attribute: 'name' | 'property', key: string, content: string) => {
-      let element = document.head.querySelector<HTMLMetaElement>(selector)
-      if (!element) {
-        element = document.createElement('meta')
-        element.setAttribute(attribute, key)
-        document.head.appendChild(element)
+    const setMeta = (selector: string, attr: string, key: string, value: string) => {
+      let el = document.head.querySelector<HTMLMetaElement>(selector)
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attr, key)
+        document.head.appendChild(el)
       }
-      element.content = content
+      el.content = value
     }
 
-    setMeta('meta[name="description"]', 'name', 'description', selectedPost.excerpt)
-    setMeta('meta[property="og:title"]', 'property', 'og:title', postTitle)
-    setMeta('meta[property="og:description"]', 'property', 'og:description', selectedPost.excerpt)
-    setMeta('meta[property="og:image"]', 'property', 'og:image', imageUrl)
-    setMeta('meta[property="og:url"]', 'property', 'og:url', shareUrl)
-    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', postTitle)
-    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', selectedPost.excerpt)
-    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', imageUrl)
+    setMeta('meta[name="description"]', 'name', 'description', seoDesc)
+    setMeta('meta[property="og:title"]', 'property', 'og:title', seoTitle)
+    setMeta('meta[property="og:description"]', 'property', 'og:description', seoDesc)
+    setMeta('meta[property="og:image"]', 'property', 'og:image', seoImage)
+    setMeta('meta[property="og:url"]', 'property', 'og:url', articleUrl)
+    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', seoTitle)
+    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', seoDesc)
+    setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', seoImage)
 
-    const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
-    if (canonical) {
-      canonical.href = shareUrl
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
+    if (!canonical) {
+      canonical = document.createElement('link')
+      canonical.rel = 'canonical'
+      document.head.appendChild(canonical)
     }
+    canonical.href = articleUrl
 
     return () => {
       document.title = originalTitle
-
-      const restoreMeta = (selector: string, content: string) => {
-        const element = document.head.querySelector<HTMLMetaElement>(selector)
-        if (element) {
-          element.content = content
-        }
+      const restoreMeta = (selector: string, value: string) => {
+        const el = document.head.querySelector<HTMLMetaElement>(selector)
+        if (el) el.content = value
       }
-
       restoreMeta('meta[name="description"]', originalDesc)
       restoreMeta('meta[property="og:title"]', originalOgTitle)
       restoreMeta('meta[property="og:description"]', originalOgDesc)
@@ -297,35 +240,17 @@ export default function Blog() {
       restoreMeta('meta[name="twitter:description"]', originalOgDesc)
       restoreMeta('meta[name="twitter:image"]', originalOgImage)
 
-      const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
-      if (canonical) {
-        canonical.href = originalCanonical
-      }
+      const c = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
+      if (c) c.href = originalCanonical
     }
   }, [selectedPost])
 
-  const getArticleUrl = () => {
-    if (!selectedPost) return ''
-    const base = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'https://happymachinery.com'
-      : window.location.origin
-    return `${base}${getBlogPostPath(selectedPost)}`
-  }
-
-  const getSocialArticleUrl = () => `${getArticleUrl()}?share=3`
-
-  const printArticle = () => {
-    window.print()
-  }
-
-  const downloadPDF = () => {
-    window.print()
-  }
+  // Sync posts from shared backend storage
   useEffect(() => {
     const handleStorageChange = async () => {
       try {
         const saved = await readSharedContent<BlogPost[]>('blog-posts')
-        if (saved) {
+        if (saved && Array.isArray(saved) && saved.length > 0) {
           setPosts(saved)
           return
         }
@@ -335,7 +260,7 @@ export default function Blog() {
 
       try {
         const saved = await readPersistentContent<BlogPost[]>('blog-posts')
-        if (saved) {
+        if (saved && Array.isArray(saved) && saved.length > 0) {
           setPosts(saved)
           return
         }
@@ -356,6 +281,7 @@ export default function Blog() {
     }
   }, [])
 
+  // Sync comments
   useEffect(() => {
     const syncComments = () => {
       const saved = localStorage.getItem('happy-machinery-comments')
@@ -369,19 +295,52 @@ export default function Blog() {
     }
   }, [])
 
+  // Reset form when post changes
   useEffect(() => {
     setCommentSubmitted(false)
     setCommentName('')
     setCommentText('')
   }, [selectedPost?.id])
 
+  const toggleBookmark = (id: number) => {
+    const updated = bookmarkedPosts.includes(id)
+      ? bookmarkedPosts.filter((item) => item !== id)
+      : [...bookmarkedPosts, id]
+    setBookmarkedPosts(updated)
+    localStorage.setItem('happy-bookmarked-posts', JSON.stringify(updated))
+  }
+
+  const handleShareClick = () => {
+    if (navigator.share && selectedPost) {
+      navigator.share({
+        title: selectedPost.title,
+        text: selectedPost.excerpt,
+        url: window.location.href
+      }).catch(() => setShowShareModal(true))
+    } else {
+      setShowShareModal(true)
+    }
+  }
+
+  const handleNewsletterSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newsletterEmail.trim()) return
+    setNewsletterSuccess(true)
+    setNewsletterEmail('')
+    setTimeout(() => setNewsletterSuccess(false), 4500)
+  }
+
   const handleCommentSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!selectedPost || !commentName.trim() || !commentText.trim()) return
     const newComment: BlogComment = {
-      id: Date.now(), postId: selectedPost.id, postTitle: selectedPost.title,
-      author: commentName.trim(), text: commentText.trim(),
-      date: new Date().toISOString().slice(0, 10), status: 'Approved'
+      id: Date.now(),
+      postId: selectedPost.id,
+      postTitle: selectedPost.title,
+      author: commentName.trim(),
+      text: commentText.trim(),
+      date: new Date().toISOString().slice(0, 10),
+      status: 'Approved'
     }
     const updatedComments = [newComment, ...comments]
     setComments(updatedComments)
@@ -394,9 +353,23 @@ export default function Blog() {
 
   const handleSellerReply = (commentId: number) => {
     if (!replyText.trim()) return
-    const updatedComments = comments.map((comment) => comment.id === commentId ? {
-      ...comment, replies: [...(comment.replies || []), { id: Date.now(), author: 'Happy Machinery', text: replyText.trim(), date: new Date().toISOString().slice(0, 10), isSeller: true }]
-    } : comment)
+    const updatedComments = comments.map((comment) =>
+      comment.id === commentId
+        ? {
+            ...comment,
+            replies: [
+              ...(comment.replies || []),
+              {
+                id: Date.now(),
+                author: 'Happy Machinery',
+                text: replyText.trim(),
+                date: new Date().toISOString().slice(0, 10),
+                isSeller: true
+              }
+            ]
+          }
+        : comment
+    )
     setComments(updatedComments)
     localStorage.setItem('happy-machinery-comments', JSON.stringify(updatedComments))
     window.dispatchEvent(new Event('comments-updated'))
@@ -407,10 +380,14 @@ export default function Blog() {
 
   const handleLikeComment = (commentId: number) => {
     const alreadyLiked = likedComments.includes(commentId)
-    const nextLiked = alreadyLiked ? likedComments.filter((id) => id !== commentId) : [...likedComments, commentId]
-    const updatedComments = comments.map((comment) => comment.id === commentId ? {
-      ...comment, likes: Math.max(0, (comment.likes || 0) + (alreadyLiked ? -1 : 1))
-    } : comment)
+    const nextLiked = alreadyLiked
+      ? likedComments.filter((id) => id !== commentId)
+      : [...likedComments, commentId]
+    const updatedComments = comments.map((comment) =>
+      comment.id === commentId
+        ? { ...comment, likes: Math.max(0, (comment.likes || 0) + (alreadyLiked ? -1 : 1)) }
+        : comment
+    )
     setLikedComments(nextLiked)
     setComments(updatedComments)
     localStorage.setItem('happy-machinery-liked-comments', JSON.stringify(nextLiked))
@@ -420,9 +397,22 @@ export default function Blog() {
 
   const handleCustomerReply = (commentId: number) => {
     if (!replyName.trim() || !replyText.trim()) return
-    const updatedComments = comments.map((comment) => comment.id === commentId ? {
-      ...comment, replies: [...(comment.replies || []), { id: Date.now(), author: replyName.trim(), text: replyText.trim(), date: new Date().toISOString().slice(0, 10) }]
-    } : comment)
+    const updatedComments = comments.map((comment) =>
+      comment.id === commentId
+        ? {
+            ...comment,
+            replies: [
+              ...(comment.replies || []),
+              {
+                id: Date.now(),
+                author: replyName.trim(),
+                text: replyText.trim(),
+                date: new Date().toISOString().slice(0, 10)
+              }
+            ]
+          }
+        : comment
+    )
     setComments(updatedComments)
     localStorage.setItem('happy-machinery-comments', JSON.stringify(updatedComments))
     window.dispatchEvent(new Event('comments-updated'))
@@ -432,253 +422,803 @@ export default function Blog() {
   }
 
   // Extract unique categories dynamically
-  const categories = ['All', ...Array.from(new Set(posts.map((p) => p.category)))]
+  const categories = useMemo(() => {
+    return ['All', ...Array.from(new Set(posts.map((p) => p.category)))]
+  }, [posts])
 
-  // Filter posts based on Category AND Search Query
-  const filteredPosts = posts.filter((post) => {
-    const matchesCategory = activeCategory === 'All' || post.category === activeCategory
-    const query = searchQuery.trim().toLowerCase()
-    const matchesSearch = !query ||
-      post.title.toLowerCase().includes(query) ||
-      post.excerpt.toLowerCase().includes(query) ||
-      post.category.toLowerCase().includes(query)
-    return matchesCategory && matchesSearch
-  })
+  // Filter posts based on Category and Search Query
+  const filteredPosts = useMemo(() => {
+    return posts.filter((post) => {
+      const matchesCategory = activeCategory === 'All' || post.category === activeCategory
+      const query = searchQuery.trim().toLowerCase()
+      const matchesSearch =
+        !query ||
+        post.title.toLowerCase().includes(query) ||
+        post.excerpt.toLowerCase().includes(query) ||
+        post.category.toLowerCase().includes(query)
+      return matchesCategory && matchesSearch
+    })
+  }, [posts, activeCategory, searchQuery])
 
-  // Recent posts list for sidebar
-  const recentPosts = posts.slice(0, 7)
+  // Popular posts sorted by view count
+  const popularPosts = useMemo(() => {
+    return [...posts]
+      .sort((a, b) => getPostViews(b) - getPostViews(a))
+      .slice(0, 5)
+  }, [posts])
 
   // Category counts for popular categories sidebar
-  const categoryCounts = categories
-    .filter((cat) => cat !== 'All')
-    .map((cat) => ({
-      name: cat,
-      count: posts.filter((p) => p.category === cat).length
-    }))
+  const categoryCounts = useMemo(() => {
+    return categories
+      .filter((cat) => cat !== 'All')
+      .map((cat) => ({
+        name: cat,
+        count: posts.filter((p) => p.category === cat).length
+      }))
+  }, [categories, posts])
 
-  return (
-    <div className="page blog-page">
-      <div className="page-hero">
-        <p className="eyebrow">Insights & Guides</p>
-        <h1>Machinery Knowledge Center</h1>
-        <p>News, equipment insights, and machine walkthroughs from The Power Loader.</p>
-      </div>
+  // Related Stories for the bottom of article reading page (4 items)
+  const relatedStories = useMemo(() => {
+    if (!selectedPost) return []
+    const sameCat = posts.filter((p) => p.id !== selectedPost.id && p.category === selectedPost.category)
+    if (sameCat.length >= 4) return sameCat.slice(0, 4)
+    const others = posts.filter((p) => p.id !== selectedPost.id && p.category !== selectedPost.category)
+    return [...sameCat, ...others].slice(0, 4)
+  }, [posts, selectedPost])
 
-      {/* Category Filter Pills */}
-      <div className="blog-category-filter">
-        {categories.map((cat) => (
-          <button
-            key={cat}
-            className={`filter-pill ${activeCategory === cat ? 'active' : ''}`}
-            onClick={() => setActiveCategory(cat)}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+  // Format date helper e.g. "Oct 15"
+  const formatShortDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) return dateStr
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    } catch {
+      return dateStr
+    }
+  }
 
-      {/* Main Content Layout with Sidebar */}
-      <div className="blog-main-layout">
-        {/* Left Column: Primary Blog Cards Grid */}
-        <div className="blog-primary-content">
-          {searchQuery.trim() && (
-            <div className="blog-search-banner">
-              <span>Showing search results for "<strong>{searchQuery}</strong>" ({filteredPosts.length} found)</span>
-              <button onClick={() => setSearchQuery('')}>Clear Search &times;</button>
-            </div>
-          )}
+  // Format full date e.g. "October 15, 2026"
+  const formatFullDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) return dateStr
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    } catch {
+      return dateStr
+    }
+  }
 
-          <div className="blog-posts-grid">
-            {filteredPosts.map((post) => (
-              <article key={post.id} className="blog-post-card" onClick={() => setSelectedPost(post)}>
-                <div className="blog-image-wrapper">
-                  <img src={post.image} alt={post.title} />
-                  <span className="blog-category-badge">{post.category}</span>
-                </div>
-                <div className="blog-card-content">
-                  <div className="blog-card-meta-row">
-                    <span className="blog-category-kicker">{post.category.toUpperCase()}</span>
-                    <span className="blog-date">{post.date.toUpperCase()}</span>
-                  </div>
-                  <h3>{post.title}</h3>
-                  <p>{post.excerpt}</p>
-                  <div className="blog-card-footer">
-                    <span className="read-more-btn">READ ARTICLE &rarr;</span>
-                  </div>
-                </div>
-              </article>
-            ))}
+  // ============================================================================
+  // VIEW A: SINGLE ARTICLE READING PAGE (MATCHING RAFVEX SCREENSHOT 1 & 2)
+  // ============================================================================
+  if (selectedPost) {
+    const isBookmarked = bookmarkedPosts.includes(selectedPost.id)
+    const approvedComments = comments.filter(
+      (c) => c.postId === selectedPost.id && c.status === 'Approved'
+    )
 
-            {filteredPosts.length === 0 && (
-              <div className="no-blog-results">
-                <h3>No Articles Found</h3>
-                <p>We couldn't find any articles matching your query. Try searching for another keyword or select a different category.</p>
-                <button className="btn-reset-filter" onClick={() => { setActiveCategory('All'); setSearchQuery('') }}>
-                  Reset Search & Filters
+    return (
+      <div className="raf-article-view-wrapper">
+        {/* Share Modal Dialog */}
+        {showShareModal && (
+          <div className="raf-modal-backdrop" onClick={() => setShowShareModal(false)}>
+            <div className="raf-share-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="raf-share-modal-header">
+                <h3>Share this Guide</h3>
+                <button className="raf-share-close" onClick={() => setShowShareModal(false)}>
+                  &times;
                 </button>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Sidebar Column */}
-        <aside className="blog-sidebar">
-          {/* Search Box Widget */}
-          <div className="sidebar-widget search-widget">
-            <form onSubmit={(e) => e.preventDefault()} className="sidebar-search-form">
-              <input
-                type="text"
-                placeholder="Search articles..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <button type="submit" className="search-submit-btn">SEARCH</button>
-            </form>
-          </div>
-
-          {/* Recent Posts Widget */}
-          <div className="sidebar-widget recent-posts-widget">
-            <div className="widget-header">
-              <h3>RECENT POSTS</h3>
-              <span className="widget-count-badge">{recentPosts.length}</span>
-            </div>
-            <div className="recent-posts-list">
-              {recentPosts.map((post) => (
-                <div key={post.id} className="recent-post-item" onClick={() => setSelectedPost(post)}>
-                  <div className="recent-post-thumb">
-                    <img src={post.image} alt={post.title} />
-                  </div>
-                  <div className="recent-post-info">
-                    <h4 className="recent-post-title">{post.title}</h4>
-                    <span className="recent-post-date">{post.date.toUpperCase()}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Popular Categories Widget */}
-          <div className="sidebar-widget categories-widget">
-            <div className="widget-header">
-              <h3>POPULAR CATEGORIES</h3>
-            </div>
-            <div className="categories-list">
-              {categoryCounts.map((item) => (
-                <div
-                  key={item.name}
-                  className={`category-item-row ${activeCategory === item.name ? 'active' : ''}`}
-                  onClick={() => setActiveCategory(activeCategory === item.name ? 'All' : item.name)}
+              <p className="raf-share-subtitle">Share with your team, jobsite contractors, or network.</p>
+              <div className="raf-share-icons-grid">
+                <SocialShareButtons
+                  url={window.location.href}
+                  title={selectedPost.title}
+                  image={selectedPost.image}
+                />
+              </div>
+              <div className="raf-copy-url-row">
+                <input
+                  type="text"
+                  readOnly
+                  value={window.location.href}
+                  className="raf-copy-url-input"
+                />
+                <button
+                  type="button"
+                  className="raf-copy-url-btn"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(window.location.href)
+                    alert('Article URL copied to clipboard!')
+                  }}
                 >
-                  <span className="cat-name">{item.name}</span>
-                  <span className="cat-count-badge">{item.count}</span>
-                </div>
-              ))}
+                  Copy
+                </button>
+              </div>
             </div>
           </div>
-        </aside>
-      </div>
+        )}
 
-      {/* Article Detail Modal */}
-      {selectedPost && (
-        <div className="blog-modal-overlay" onClick={() => setSelectedPost(null)}>
-          <div className="blog-modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="blog-modal-close" onClick={() => setSelectedPost(null)} aria-label="Close article">
-              &times;
-            </button>
-            <div className="blog-modal-hero">
-              <img src={selectedPost.image} alt={selectedPost.title} />
-              <span className="blog-modal-category">{selectedPost.category}</span>
+        <div className="raf-article-container">
+          {/* Breadcrumb Navigation */}
+          <nav className="raf-breadcrumb" aria-label="Breadcrumb">
+            <Link to="/" className="raf-bc-link">Home</Link>
+            <span className="raf-bc-sep">&rsaquo;</span>
+            <Link to="/blog" className="raf-bc-link">Machinery Guides</Link>
+            <span className="raf-bc-sep">&rsaquo;</span>
+            <span className="raf-bc-link" onClick={() => { setActiveCategory(selectedPost.category); navigate('/blog') }}>
+              {selectedPost.category}
+            </span>
+            <span className="raf-bc-sep">&rsaquo;</span>
+            <span className="raf-bc-current">{selectedPost.title}</span>
+          </nav>
+
+          {/* Top Bar: Category Pill & Actions (Read, Save, Share) */}
+          <div className="raf-meta-top-row">
+            <div className="raf-category-pill">
+              <span className="raf-pill-dot" />
+              <span className="raf-pill-text">{selectedPost.category.toUpperCase()}</span>
             </div>
-            <div className="blog-modal-body">
-              <div className="blog-post-meta">
-                <span>{selectedPost.date}</span>
-                <span className="separator">&bull;</span>
-                <span>{selectedPost.readTime}</span>
-              </div>
-              <h1 className="blog-modal-title">{selectedPost.title}</h1>
 
-              <div className="blog-share-bar">
-                <div className="blog-share-provider">
-                  <span className="provider-label">NEWS PROVIDED BY</span>
-                  <span className="provider-name">{selectedPost.author}</span>
-                  <span className="provider-date">{selectedPost.date}, 08:00 GMT</span>
+            <div className="raf-actions-group">
+              <span className="raf-badge-read">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                {selectedPost.readTime || '5 min read'}
+              </span>
+
+              <button
+                type="button"
+                className={`raf-action-btn ${isBookmarked ? 'active' : ''}`}
+                onClick={() => toggleBookmark(selectedPost.id)}
+                title={isBookmarked ? 'Remove from saved' : 'Save article'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={isBookmarked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                </svg>
+                <span>{isBookmarked ? 'Saved' : 'Save'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="raf-action-btn"
+                onClick={handleShareClick}
+                title="Share article"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+                <span>Share &rsaquo;</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Article Main Headline */}
+          <h1 className="raf-article-headline">{selectedPost.title}</h1>
+
+          {/* Excerpt with Red Vertical Line */}
+          <p className="raf-article-excerpt-bar">{selectedPost.excerpt}</p>
+
+          {/* Main 2-Column Content Layout */}
+          <div className="raf-main-grid-layout">
+            {/* Left Column: Article Body & Comments */}
+            <main className="raf-primary-column">
+              {/* Featured Cover Image */}
+              <div className="raf-hero-image-box">
+                <img
+                  src={selectedPost.image}
+                  alt={selectedPost.title}
+                  className="raf-hero-image"
+                  loading="eager"
+                />
+              </div>
+
+              {/* Author & Published Info Bar */}
+              <div className="raf-author-row">
+                <div className="raf-author-avatar">
+                  {selectedPost.author?.charAt(0).toUpperCase() || 'H'}
                 </div>
-                <div className="blog-share-actions">
-                  <span className="share-label">SHARE THIS ARTICLE</span>
-                  <div className="share-buttons">
-                    <SocialShareButtons
-                      url={getSocialArticleUrl()}
-                      title={`Read "${selectedPost.title}" on Happy Machinery`}
-                      image={selectedPost.image}
-                    />
-                    <button className="share-btn print" onClick={printArticle} title="Print Article" aria-label="Print Article">
-                      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                    </button>
-                    <button className="share-btn pdf" onClick={downloadPDF} title="Download PDF" aria-label="Download/Save PDF">
-                      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3.5h-3v1.5h2.5V11H17v1.5h-1.5V7h5v1.5zM9 9.5h1v-1H9v1zm5.5 3h1v-3h-1v3zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z"/></svg>
-                    </button>
-                  </div>
+                <div className="raf-author-details">
+                  <span className="raf-author-name">{selectedPost.author || 'Happy Machinery Editorial'}</span>
+                  <span className="raf-publish-date">Published {formatFullDate(selectedPost.date)} &bull; {selectedPost.readTime}</span>
                 </div>
               </div>
-              <div className="blog-modal-text">
+
+              {/* Rich Body Content */}
+              <article className="raf-body-content">
                 {selectedPost.content.map((paragraph, idx) => renderMarkdownToReact(paragraph, idx))}
-              </div>
+              </article>
+
+              {/* Key Takeaways Box */}
               {selectedPost.keyTakeaways && selectedPost.keyTakeaways.length > 0 && (
-                <div className="blog-takeaways-box">
-                  <h3>Key Takeaways</h3>
-                  <ul>
+                <div className="raf-takeaways-card">
+                  <div className="raf-takeaways-header">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    <h3>Key Takeaways & Jobsite Essentials</h3>
+                  </div>
+                  <ul className="raf-takeaways-list">
                     {selectedPost.keyTakeaways.map((item, idx) => (
-                      <li key={idx}>✓ {item}</li>
+                      <li key={idx}>
+                        <span className="raf-check-icon">✓</span>
+                        <span>{item}</span>
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
-              <section className="blog-comments" aria-labelledby="blog-comments-title">
-                <div className="blog-comments-heading">
-                  <div><span>Join the conversation</span><h2 id="blog-comments-title">Comments</h2></div>
-                  <b>{comments.filter((comment) => comment.postId === selectedPost.id && comment.status === "Approved").length}</b>
-                </div>
-                <div className="blog-comments-list">
-                  {comments.filter((comment) => comment.postId === selectedPost.id && comment.status === "Approved").map((comment) => (
-                    <article className="blog-comment" key={comment.id}>
-                      <div className="blog-comment-avatar" aria-hidden="true">{comment.author.charAt(0).toUpperCase()}</div>
-                      <div className="blog-comment-content">
-                        <div className="blog-comment-meta"><strong>{comment.author}</strong><time>{comment.date}</time></div>
-                        <p>{comment.text}</p>
-                        {comment.reply && (<div className="blog-comment-reply"><div><strong>Happy Machinery</strong><span>Seller</span><time>{comment.reply.date}</time></div><p>{comment.reply.text}</p></div>)}
-                        {(comment.replies || []).map((reply) => (<div className="blog-comment-reply facebook-reply" key={reply.id}><div className="reply-avatar">{reply.author.charAt(0).toUpperCase()}</div><div><div><strong>{reply.author}</strong>{reply.isSeller && <span>Seller</span>}</div><p>{reply.text}</p><small>{reply.date}</small></div></div>))}
-                        <div className="facebook-comment-actions">
-                          <button type="button" className={likedComments.includes(comment.id) ? "liked" : ""} onClick={() => handleLikeComment(comment.id)}>👍 Like{(comment.likes || 0) > 0 ? <> · {comment.likes}</> : null}</button>
-                          <button type="button" onClick={() => { setReplyingTo(comment.id); setReplyText(""); setReplyName("") }}>↩ Reply</button>
-                          {(comment.replies?.length || 0) > 0 && <span>{comment.replies?.length} {comment.replies?.length === 1 ? "reply" : "replies"}</span>}
+
+              {/* Discussion / Comments Section */}
+              <section className="raf-comments-section" aria-labelledby="raf-discussion-heading">
+                {/* Empty Comments Card (Matching Screenshot 2) */}
+                {approvedComments.length === 0 ? (
+                  <div className="raf-no-comments-box">
+                    <div className="raf-no-comments-icon">
+                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="raf-no-comments-title">No comments yet</h3>
+                    <p className="raf-no-comments-desc">
+                      Be the first to share your thoughts, ask a technical question, or provide feedback on this guide!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="raf-comments-list-box">
+                    <div className="raf-comments-header-row">
+                      <h3 id="raf-discussion-heading">Comments & Discussion ({approvedComments.length})</h3>
+                    </div>
+                    {approvedComments.map((comment) => (
+                      <article className="raf-comment-card" key={comment.id}>
+                        <div className="raf-comment-avatar">
+                          {comment.author.charAt(0).toUpperCase()}
                         </div>
-                        {replyingTo === comment.id && (<div className="facebook-reply-form">
-                          {!isAdmin && <input value={replyName} onChange={(event) => setReplyName(event.target.value)} maxLength={60} placeholder="Your name" autoFocus />}
-                          <textarea value={replyText} onChange={(event) => setReplyText(event.target.value)} rows={2} maxLength={1000} placeholder={isAdmin ? "Reply as Happy Machinery..." : "Write a reply..."} autoFocus={isAdmin} />
-                          <div><button type="button" className="reply-cancel" onClick={() => { setReplyingTo(null); setReplyText(""); setReplyName("") }}>Cancel</button><button type="button" className="reply-publish" onClick={() => isAdmin ? handleSellerReply(comment.id) : handleCustomerReply(comment.id)}>Reply</button></div>
-                        </div>)}
-                      </div>
-                    </article>
-                  ))}
-                  {comments.filter((comment) => comment.postId === selectedPost.id && comment.status === "Approved").length === 0 && (
-                    <p className="blog-comments-empty">No published comments yet. Be the first to share your thoughts.</p>
+                        <div className="raf-comment-content">
+                          <div className="raf-comment-meta">
+                            <strong>{comment.author}</strong>
+                            <time>{comment.date}</time>
+                          </div>
+                          <p>{comment.text}</p>
+
+                          {comment.reply && (
+                            <div className="raf-seller-reply">
+                              <strong>Happy Machinery (Seller Support)</strong>
+                              <p>{comment.reply.text}</p>
+                              <small>{comment.reply.date}</small>
+                            </div>
+                          )}
+
+                          {(comment.replies || []).map((reply) => (
+                            <div className="raf-seller-reply customer-reply" key={reply.id}>
+                              <strong>{reply.author} {reply.isSeller && <span className="raf-seller-tag">Support</span>}</strong>
+                              <p>{reply.text}</p>
+                              <small>{reply.date}</small>
+                            </div>
+                          ))}
+
+                          <div className="raf-comment-actions-row">
+                            <button
+                              type="button"
+                              className={`raf-like-btn ${likedComments.includes(comment.id) ? 'liked' : ''}`}
+                              onClick={() => handleLikeComment(comment.id)}
+                            >
+                              👍 Like {comment.likes ? `(${comment.likes})` : ''}
+                            </button>
+                            <button
+                              type="button"
+                              className="raf-reply-btn"
+                              onClick={() => {
+                                setReplyingTo(comment.id)
+                                setReplyText('')
+                                setReplyName('')
+                              }}
+                            >
+                              ↩ Reply
+                            </button>
+                          </div>
+
+                          {replyingTo === comment.id && (
+                            <div className="raf-reply-form-inline">
+                              {!isAdmin && (
+                                <input
+                                  value={replyName}
+                                  onChange={(e) => setReplyName(e.target.value)}
+                                  placeholder="Your name"
+                                  maxLength={60}
+                                  className="raf-form-input"
+                                />
+                              )}
+                              <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                rows={2}
+                                placeholder={isAdmin ? 'Reply as Happy Machinery support...' : 'Write your reply...'}
+                                className="raf-form-textarea"
+                              />
+                              <div className="raf-reply-form-btns">
+                                <button
+                                  type="button"
+                                  className="raf-btn-cancel"
+                                  onClick={() => setReplyingTo(null)}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  className="raf-btn-submit-reply"
+                                  onClick={() => isAdmin ? handleSellerReply(comment.id) : handleCustomerReply(comment.id)}
+                                >
+                                  Submit Reply
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+
+                {/* Comment Submission Form */}
+                <form className="raf-new-comment-form" onSubmit={handleCommentSubmit}>
+                  <h4>Leave a Comment</h4>
+                  <p>Your technical questions and jobsite feedback are welcome.</p>
+
+                  {commentSubmitted && (
+                    <div className="raf-comment-success-alert">
+                      ✓ Thank you! Your comment has been posted successfully.
+                    </div>
                   )}
-                </div>
-                <form className="blog-comment-form" onSubmit={handleCommentSubmit}>
-                  <h3>Leave a comment</h3>
-                  <p>Your comment will appear immediately after you submit it.</p>
-                  {commentSubmitted && <div className="blog-comment-success" role="status">Thank you! Your comment is now published.</div>}
-                  <label htmlFor="comment-name">Your name</label>
-                  <input id="comment-name" value={commentName} onChange={(event) => setCommentName(event.target.value)} maxLength={60} autoComplete="name" required placeholder="Enter your name" />
-                  <label htmlFor="comment-message">Comment</label>
-                  <textarea id="comment-message" value={commentText} onChange={(event) => setCommentText(event.target.value)} maxLength={1000} rows={5} required placeholder="What did you find helpful?" />
-                  <div className="blog-comment-form-footer"><span>{commentText.length}/1000</span><button type="submit">Submit comment <span aria-hidden="true">→</span></button></div>
+
+                  <div className="raf-form-row">
+                    <input
+                      value={commentName}
+                      onChange={(e) => setCommentName(e.target.value)}
+                      placeholder="Your name or company"
+                      required
+                      maxLength={60}
+                      className="raf-form-input"
+                    />
+                  </div>
+                  <div className="raf-form-row">
+                    <textarea
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      placeholder="What did you find most useful or have questions about?"
+                      required
+                      rows={4}
+                      maxLength={1000}
+                      className="raf-form-textarea"
+                    />
+                  </div>
+                  <div className="raf-form-footer">
+                    <span>{commentText.length}/1000</span>
+                    <button type="submit" className="raf-submit-btn">
+                      Post Comment &rarr;
+                    </button>
+                  </div>
                 </form>
               </section>
+            </main>
+
+            {/* Right Sticky Sidebar */}
+            <aside className="raf-sidebar-column">
+              {/* Widget 1: Popular Articles (Matching Screenshot 1) */}
+              <div className="raf-sidebar-card">
+                <div className="raf-sidebar-card-header">
+                  <div className="raf-card-title-left">
+                    <span className="raf-flame-icon">🔥</span>
+                    <h3>Popular Articles</h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="raf-view-all-link"
+                    onClick={() => {
+                      setActiveCategory('All')
+                      setSearchQuery('')
+                      navigate('/blog')
+                    }}
+                  >
+                    VIEW ALL &rarr;
+                  </button>
+                </div>
+
+                <div className="raf-popular-list">
+                  {popularPosts.map((post, idx) => (
+                    <div
+                      key={post.id}
+                      className="raf-popular-item"
+                      onClick={() => setSelectedPost(post)}
+                    >
+                      <div className="raf-popular-item-left">
+                        <span className={`raf-rank-badge rank-${idx + 1}`}>
+                          {`0${idx + 1}`}
+                        </span>
+                        <div className="raf-popular-item-info">
+                          <span className="raf-item-kicker">{post.category.toUpperCase()}</span>
+                          <h4 className="raf-item-title">{post.title}</h4>
+                          <span className="raf-item-meta">
+                            👁 {getPostViews(post)} views &bull; {formatShortDate(post.date)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="raf-popular-item-thumb">
+                        <img src={post.image} alt={post.title} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Widget 2: Key Categories (Matching Screenshot 1) */}
+              <div className="raf-sidebar-card">
+                <div className="raf-sidebar-card-header">
+                  <div className="raf-card-title-left">
+                    <span className="raf-folder-icon">📁</span>
+                    <h3>KEY CATEGORIES</h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="raf-view-all-link"
+                    onClick={() => {
+                      setActiveCategory('All')
+                      navigate('/blog')
+                    }}
+                  >
+                    All &rarr;
+                  </button>
+                </div>
+
+                <div className="raf-categories-list">
+                  {categoryCounts.map((cat) => (
+                    <div
+                      key={cat.name}
+                      className={`raf-category-row ${activeCategory === cat.name ? 'active' : ''}`}
+                      onClick={() => {
+                        setActiveCategory(cat.name)
+                        navigate('/blog')
+                      }}
+                    >
+                      <span className="raf-cat-name">{cat.name}</span>
+                      <span className="raf-cat-count">{cat.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Widget 3: Stay Ahead Newsletter (Matching Screenshot 2) */}
+              <div className="raf-newsletter-card">
+                <h3 className="raf-nl-title">Stay Ahead in Machinery</h3>
+                <p className="raf-nl-desc">
+                  Get our weekly digest of verified equipment breakdowns, machinery guides, and maintenance tips.
+                </p>
+
+                {newsletterSuccess ? (
+                  <div className="raf-nl-success">
+                    ✓ You're in! Check your inbox for equipment updates.
+                  </div>
+                ) : (
+                  <form onSubmit={handleNewsletterSubmit} className="raf-nl-form">
+                    <input
+                      type="email"
+                      value={newsletterEmail}
+                      onChange={(e) => setNewsletterEmail(e.target.value)}
+                      placeholder="Enter your work email"
+                      required
+                      className="raf-nl-input"
+                    />
+                    <button type="submit" className="raf-nl-submit-btn">
+                      JOIN THE INNER CIRCLE
+                    </button>
+                  </form>
+                )}
+
+                <span className="raf-nl-footnote">Weekly edition. Zero spam.</span>
+              </div>
+            </aside>
+          </div>
+
+          {/* ====================================================================
+              Bottom Section: MORE TO EXPLORE / Related Stories (Screenshot 2)
+              ==================================================================== */}
+          {relatedStories.length > 0 && (
+            <section className="raf-related-stories-section">
+              <div className="raf-related-header">
+                <div>
+                  <span className="raf-related-eyebrow">MORE TO EXPLORE</span>
+                  <h2 className="raf-related-title">Related Stories</h2>
+                </div>
+                <button
+                  type="button"
+                  className="raf-view-category-link"
+                  onClick={() => {
+                    setActiveCategory(selectedPost.category)
+                    navigate('/blog')
+                  }}
+                >
+                  View Category &rarr;
+                </button>
+              </div>
+
+              <div className="raf-related-grid">
+                {relatedStories.map((post) => (
+                  <article
+                    key={post.id}
+                    className="raf-related-card"
+                    onClick={() => setSelectedPost(post)}
+                  >
+                    <div className="raf-related-thumb-wrapper">
+                      <img src={post.image} alt={post.title} />
+                      <span className="raf-floating-cat-tag">{post.category}</span>
+                    </div>
+                    <div className="raf-related-card-content">
+                      <h3 className="raf-related-card-title">{post.title}</h3>
+                      <p className="raf-related-card-snippet">{post.excerpt}</p>
+                      <div className="raf-related-card-footer">
+                        <span>{formatShortDate(post.date)}</span>
+                        <span>{post.readTime || '5 min read'}</span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================================================
+  // VIEW B: MAIN BLOG LISTING PAGE (/blog) WITH MATCHING RAFVEX DESIGN
+  // ============================================================================
+  const featuredPost = filteredPosts[0] || posts[0]
+  const regularPosts = filteredPosts.length > 1 ? filteredPosts.slice(1) : filteredPosts
+
+  return (
+    <div className="raf-blog-index-wrapper">
+      <div className="raf-blog-container">
+        {/* Editorial Header */}
+        <header className="raf-index-hero">
+          <span className="raf-hero-eyebrow">HAPPY MACHINERY EDITORIAL & KNOWLEDGE</span>
+          <h1 className="raf-hero-title">Heavy Machinery & Jobsite Insights</h1>
+          <p className="raf-hero-desc">
+            Technical equipment breakdowns, skid steer comparisons, hydraulic maintenance, and expert field advice.
+          </p>
+
+          {/* Quick Search */}
+          <div className="raf-hero-search-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search machinery guides, hydraulics, skid steers..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="raf-hero-search-input"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="raf-search-clear-btn"
+                onClick={() => setSearchQuery('')}
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Category Pills Bar */}
+        <div className="raf-category-pills-bar">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              className={`raf-filter-pill ${activeCategory === cat ? 'active' : ''}`}
+              onClick={() => setActiveCategory(cat)}
+            >
+              <span className="raf-pill-bullet" />
+              <span>{cat}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Featured Story Spotlight (When not filtering heavily) */}
+        {!searchQuery.trim() && activeCategory === 'All' && featuredPost && (
+          <div className="raf-featured-spotlight-card" onClick={() => setSelectedPost(featuredPost)}>
+            <div className="raf-featured-thumb-col">
+              <img src={featuredPost.image} alt={featuredPost.title} />
+              <span className="raf-featured-tag">FEATURED STORY</span>
+            </div>
+            <div className="raf-featured-content-col">
+              <div className="raf-featured-meta">
+                <span className="raf-featured-cat">{featuredPost.category.toUpperCase()}</span>
+                <span>&bull;</span>
+                <span>{formatFullDate(featuredPost.date)}</span>
+                <span>&bull;</span>
+                <span>{featuredPost.readTime}</span>
+              </div>
+              <h2 className="raf-featured-headline">{featuredPost.title}</h2>
+              <p className="raf-featured-excerpt">{featuredPost.excerpt}</p>
+              <div className="raf-featured-footer">
+                <span className="raf-read-link">Read Full Guide &rarr;</span>
+                <span className="raf-views-badge">👁 {getPostViews(featuredPost)} views</span>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* Main 2-Column Content Layout */}
+        <div className="raf-main-grid-layout">
+          {/* Left Column: Posts Grid */}
+          <div className="raf-primary-column">
+            {searchQuery.trim() && (
+              <div className="raf-search-banner">
+                <span>Showing search results for "<strong>{searchQuery}</strong>" ({filteredPosts.length} guides found)</span>
+                <button onClick={() => setSearchQuery('')}>Clear Search &times;</button>
+              </div>
+            )}
+
+            <div className="raf-posts-grid">
+              {(activeCategory === 'All' && !searchQuery.trim() ? regularPosts : filteredPosts).map((post) => (
+                <article
+                  key={post.id}
+                  className="raf-post-card"
+                  onClick={() => setSelectedPost(post)}
+                >
+                  <div className="raf-card-image-box">
+                    <img src={post.image} alt={post.title} loading="lazy" />
+                    <span className="raf-floating-cat-tag">{post.category}</span>
+                  </div>
+                  <div className="raf-card-body">
+                    <span className="raf-card-kicker">{post.category.toUpperCase()}</span>
+                    <h3 className="raf-card-title">{post.title}</h3>
+                    <p className="raf-card-excerpt">{post.excerpt}</p>
+                    <div className="raf-card-footer">
+                      <span className="raf-card-date">{formatShortDate(post.date)}</span>
+                      <span className="raf-card-read-time">{post.readTime || '5 min read'}</span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+
+              {filteredPosts.length === 0 && (
+                <div className="raf-no-results-box">
+                  <h3>No Guides Found</h3>
+                  <p>We couldn't find any articles matching your search query. Try another keyword or browse all categories.</p>
+                  <button
+                    className="raf-btn-reset-filters"
+                    onClick={() => {
+                      setActiveCategory('All')
+                      setSearchQuery('')
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Sticky Sidebar */}
+          <aside className="raf-sidebar-column">
+            {/* Widget 1: Popular Articles */}
+            <div className="raf-sidebar-card">
+              <div className="raf-sidebar-card-header">
+                <div className="raf-card-title-left">
+                  <span className="raf-flame-icon">🔥</span>
+                  <h3>Popular Articles</h3>
+                </div>
+                <button
+                  type="button"
+                  className="raf-view-all-link"
+                  onClick={() => {
+                    setActiveCategory('All')
+                    setSearchQuery('')
+                  }}
+                >
+                  VIEW ALL &rarr;
+                </button>
+              </div>
+
+              <div className="raf-popular-list">
+                {popularPosts.map((post, idx) => (
+                  <div
+                    key={post.id}
+                    className="raf-popular-item"
+                    onClick={() => setSelectedPost(post)}
+                  >
+                    <div className="raf-popular-item-left">
+                      <span className={`raf-rank-badge rank-${idx + 1}`}>
+                        {`0${idx + 1}`}
+                      </span>
+                      <div className="raf-popular-item-info">
+                        <span className="raf-item-kicker">{post.category.toUpperCase()}</span>
+                        <h4 className="raf-item-title">{post.title}</h4>
+                        <span className="raf-item-meta">
+                          👁 {getPostViews(post)} views &bull; {formatShortDate(post.date)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="raf-popular-item-thumb">
+                      <img src={post.image} alt={post.title} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Widget 2: Key Categories */}
+            <div className="raf-sidebar-card">
+              <div className="raf-sidebar-card-header">
+                <div className="raf-card-title-left">
+                  <span className="raf-folder-icon">📁</span>
+                  <h3>KEY CATEGORIES</h3>
+                </div>
+                <button
+                  type="button"
+                  className="raf-view-all-link"
+                  onClick={() => setActiveCategory('All')}
+                >
+                  All &rarr;
+                </button>
+              </div>
+
+              <div className="raf-categories-list">
+                {categoryCounts.map((cat) => (
+                  <div
+                    key={cat.name}
+                    className={`raf-category-row ${activeCategory === cat.name ? 'active' : ''}`}
+                    onClick={() => setActiveCategory(cat.name)}
+                  >
+                    <span className="raf-cat-name">{cat.name}</span>
+                    <span className="raf-cat-count">{cat.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Widget 3: Newsletter Widget */}
+            <div className="raf-newsletter-card">
+              <h3 className="raf-nl-title">Stay Ahead in Machinery</h3>
+              <p className="raf-nl-desc">
+                Get our weekly digest of verified equipment breakdowns, machinery guides, and maintenance tips.
+              </p>
+
+              {newsletterSuccess ? (
+                <div className="raf-nl-success">
+                  ✓ You're in! Check your inbox for equipment updates.
+                </div>
+              ) : (
+                <form onSubmit={handleNewsletterSubmit} className="raf-nl-form">
+                  <input
+                    type="email"
+                    value={newsletterEmail}
+                    onChange={(e) => setNewsletterEmail(e.target.value)}
+                    placeholder="Enter your work email"
+                    required
+                    className="raf-nl-input"
+                  />
+                  <button type="submit" className="raf-nl-submit-btn">
+                    JOIN THE INNER CIRCLE
+                  </button>
+                </form>
+              )}
+
+              <span className="raf-nl-footnote">Weekly edition. Zero spam.</span>
+            </div>
+          </aside>
         </div>
-      )}
+      </div>
     </div>
   )
 }

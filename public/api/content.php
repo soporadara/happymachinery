@@ -16,7 +16,8 @@ $allowedKeys = [
     'security-settings',
     'analytics-events',
     'site-settings',
-    'site-pages'
+    'site-pages',
+    'blog-categories'
 ];
 
 $storageDirectory = dirname(__DIR__, 2) . '/happy-machinery-storage';

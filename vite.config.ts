@@ -33,7 +33,8 @@ const sharedContentApi = () => {
     'security-settings',
     'analytics-events',
     'site-settings',
-    'site-pages'
+    'site-pages',
+    'blog-categories'
   ]
 
   return {

@@ -28,6 +28,7 @@ import {
   DEFAULT_MEDIA 
 } from './adminData'
 import { readSharedContent, writeSharedContent } from '../data/sharedContentStorage'
+import { getBlogPostPath } from '../data/blogUrls'
 import './AdminDashboard.css'
 
 type CmsTab = 
@@ -91,12 +92,41 @@ export default function AdminDashboard() {
 
   // Modals & Sub-forms State
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [showNewArticleModal, setShowNewArticleModal] = useState(false)
   const [editingArticle, setEditingArticle] = useState<BlogPost | null>(null)
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null)
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
   const [showBanIpModal, setShowBanIpModal] = useState(false)
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null)
+
+  // Articles Sub-view & Rafvex Editor States (Screenshots 3, 4, 5)
+  const [articlesSubView, setArticlesSubView] = useState<'list' | 'editor' | 'categories'>('list')
+  const [editorTitle, setEditorTitle] = useState('')
+  const [editorSlug, setEditorSlug] = useState('')
+  const [editorExcerpt, setEditorExcerpt] = useState('')
+  const [editorContent, setEditorContent] = useState('')
+  const [editorCategory, setEditorCategory] = useState('Jobsite Productivity')
+  const [editorAuthor, setEditorAuthor] = useState('Happy Machinery')
+  const [editorStatus, setEditorStatus] = useState<'Published' | 'Draft' | 'Scheduled'>('Draft')
+  const [editorCoverImage, setEditorCoverImage] = useState('/images/why-choose-v900-jobsite.png')
+  const [editorCoverAlt, setEditorCoverAlt] = useState('')
+  const [editorVideoUrl, setEditorVideoUrl] = useState('')
+  const [editorSeoTitle, setEditorSeoTitle] = useState('')
+  const [editorSeoDesc, setEditorSeoDesc] = useState('')
+
+  // Categories Taxonomy State (Screenshot 5)
+  const [blogCategories, setBlogCategories] = useState<{ name: string; slug: string; desc?: string; cover?: string }[]>([
+    { name: 'Jobsite Productivity', slug: 'jobsite-productivity', desc: 'Efficiency strategies on residential and tight job sites.' },
+    { name: 'Equipment Maintenance', slug: 'equipment-maintenance', desc: 'Hydraulic checks, oil intervals, and rubber track care.' },
+    { name: 'Attachments & Tools', slug: 'attachments-tools', desc: 'Augers, trenchers, pallet forks, and hydraulic breakers.' },
+    { name: 'Compact Loaders', slug: 'compact-loaders', desc: 'Mini skid steer walkthroughs and stand-on machinery.' },
+    { name: 'Skid Steer Comparisons', slug: 'skid-steer-comparisons', desc: 'Wheeled vs tracked loaders, gas vs diesel options.' },
+    { name: 'Hydraulic Systems', slug: 'hydraulic-systems', desc: 'Pressure testing, auxiliary circuits, and pump diagnostics.' }
+  ])
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatSlug, setNewCatSlug] = useState('')
+  const [newCatDesc, setNewCatDesc] = useState('')
+  const [newCatCover, setNewCatCover] = useState('')
+  const [categorySearch, setCategorySearch] = useState('')
 
   // Form Temp States
   const [newIpAddress, setNewIpAddress] = useState('')
@@ -366,6 +396,126 @@ export default function AdminDashboard() {
     setNewPasswordInput('')
     setShowProfileModal(false)
     showToast('Profile updated successfully!', 'success')
+  }
+
+  // Rafvex Article Editor Handlers (Screenshots 3, 4, 5)
+  const openNewArticle = () => {
+    setEditingArticle(null)
+    setEditorTitle('')
+    setEditorSlug('')
+    setEditorExcerpt('')
+    setEditorContent('')
+    setEditorCategory(blogCategories[0]?.name || 'Jobsite Productivity')
+    setEditorAuthor(currentUser?.name || 'Happy Machinery')
+    setEditorStatus('Draft')
+    setEditorCoverImage('/images/why-choose-v900-jobsite.png')
+    setEditorCoverAlt('')
+    setEditorVideoUrl('')
+    setEditorSeoTitle('')
+    setEditorSeoDesc('')
+    setArticlesSubView('editor')
+  }
+
+  const openEditArticle = (post: BlogPost) => {
+    setEditingArticle(post)
+    setEditorTitle(post.title)
+    setEditorSlug(post.slug || '')
+    setEditorExcerpt(post.excerpt)
+    setEditorContent(Array.isArray(post.content) ? post.content.join('\n\n') : (post.content || ''))
+    setEditorCategory(post.category)
+    setEditorAuthor(post.author || 'Happy Machinery')
+    setEditorStatus('Published')
+    setEditorCoverImage(post.image)
+    setEditorCoverAlt('')
+    setEditorVideoUrl('')
+    setEditorSeoTitle(post.title)
+    setEditorSeoDesc(post.excerpt)
+    setArticlesSubView('editor')
+  }
+
+  const handleInsertToolbar = (syntax: string) => {
+    setEditorContent((prev) => (prev ? `${prev}\n\n${syntax}` : syntax))
+    showToast('Formatting snippet inserted.', 'success')
+  }
+
+  const handleSaveArticle = async (status: 'Published' | 'Draft' | 'Scheduled') => {
+    if (!editorTitle.trim()) {
+      showToast('Article title is required.', 'error')
+      return
+    }
+
+    const contentParagraphs = editorContent
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+
+    const finalSlug = editorSlug.trim() || editorTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+    if (editingArticle) {
+      const updated = posts.map((p) =>
+        p.id === editingArticle.id
+          ? {
+              ...p,
+              title: editorTitle,
+              slug: finalSlug,
+              excerpt: editorExcerpt || editorTitle,
+              content: contentParagraphs.length > 0 ? contentParagraphs : [editorExcerpt || editorTitle],
+              category: editorCategory,
+              author: editorAuthor || currentUser?.name || 'Happy Machinery',
+              image: editorCoverImage || p.image
+            }
+          : p
+      )
+      setPosts(updated)
+      await writeSharedContent('blog-posts', updated)
+      await logSecurityEvent('CONTENT_PUBLISHED', `Article "${editorTitle}" updated (${status}).`, 'info', currentUser?.username)
+      showToast(`Article "${editorTitle}" saved as ${status}!`, 'success')
+    } else {
+      const newPost: BlogPost = {
+        id: Date.now(),
+        title: editorTitle,
+        slug: finalSlug,
+        category: editorCategory || 'Jobsite Productivity',
+        excerpt: editorExcerpt || editorTitle,
+        content: contentParagraphs.length > 0 ? contentParagraphs : [editorExcerpt || editorTitle],
+        keyTakeaways: ['Maintenance standards', 'Safe operation', 'Field inspection guidelines'],
+        image: editorCoverImage || '/images/why-choose-v900-jobsite.png',
+        date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        readTime: `${Math.max(2, Math.ceil((editorContent || '').split(/\s+/).length / 180))} min read`,
+        author: editorAuthor || currentUser?.name || 'Happy Machinery'
+      }
+      const updated = [newPost, ...posts]
+      setPosts(updated)
+      await writeSharedContent('blog-posts', updated)
+      await logSecurityEvent('CONTENT_PUBLISHED', `New article "${newPost.title}" created as ${status}.`, 'info', currentUser?.username)
+      showToast(`Article "${editorTitle}" published successfully!`, 'success')
+    }
+    setArticlesSubView('list')
+  }
+
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCatName.trim()) return
+    const slug = newCatSlug.trim() || newCatName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const newCat = {
+      name: newCatName.trim(),
+      slug,
+      desc: newCatDesc.trim(),
+      cover: newCatCover.trim() || '/images/why-choose-v900-jobsite.png'
+    }
+    const updated = [...blogCategories, newCat]
+    setBlogCategories(updated)
+    setNewCatName('')
+    setNewCatSlug('')
+    setNewCatDesc('')
+    setNewCatCover('')
+    showToast(`Category "${newCat.name}" added successfully!`, 'success')
+  }
+
+  const handleDeleteCategory = (catName: string) => {
+    const remaining = blogCategories.filter((c) => c.name !== catName)
+    setBlogCategories(remaining)
+    showToast(`Category "${catName}" removed.`, 'warning')
   }
 
   // 1-Click Cache Purge
@@ -762,7 +912,7 @@ export default function AdminDashboard() {
                   <p>Real-time analytics, equipment catalog overview, and server performance metrics.</p>
                 </div>
                 <div className="cms-view-actions">
-                  <button className="cms-btn cms-btn-gold" onClick={() => setShowNewArticleModal(true)}>
+                  <button className="cms-btn cms-btn-gold" onClick={() => { setActiveTab('articles'); openNewArticle() }}>
                     + New Article
                   </button>
                   <button className="cms-btn cms-btn-secondary" onClick={handlePurgeCache}>
@@ -908,65 +1058,494 @@ export default function AdminDashboard() {
             </>
           )}
 
-          {/* TAB 2: ARTICLES & BLOG */}
+          {/* TAB 2: ARTICLES & BLOG (RAFVEX EDITORIAL SYSTEM - SCREENSHOTS 3, 4, 5) */}
           {activeTab === 'articles' && (
             <>
-              <div className="cms-view-header">
-                <div className="cms-view-title-group">
-                  <h1>Articles & Content Management</h1>
-                  <p>Create, edit, and optimize machine maintenance articles, jobsite guides, and equipment blogs.</p>
-                </div>
-                <div className="cms-view-actions">
-                  <button className="cms-btn cms-btn-primary" onClick={() => setShowNewArticleModal(true)}>
-                    + Create Article
-                  </button>
-                </div>
-              </div>
+              {/* SUBVIEW A: NEW / EDIT ARTICLE (SCREENSHOTS 3 & 4) */}
+              {articlesSubView === 'editor' && (
+                <div className="cms-rafvex-editor-container">
+                  {/* Top Header Row with Back Button and Actions */}
+                  <div className="cms-rafvex-editor-header">
+                    <div className="cms-editor-header-left">
+                      <button
+                        type="button"
+                        className="cms-btn-back-link"
+                        onClick={() => setArticlesSubView('list')}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="15 18 9 12 15 6" />
+                        </svg>
+                        <span>{editingArticle ? 'Edit Article' : 'New Article'}</span>
+                      </button>
+                      <p className="cms-editor-subtitle">Write and publish an editorial post</p>
+                    </div>
 
-              <div className="cms-card">
-                <div className="cms-table-wrapper">
-                  <table className="cms-table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Category</th>
-                        <th>Author</th>
-                        <th>Slug</th>
-                        <th>Date</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {posts
-                        .filter((p) => p.title.toLowerCase().includes(globalSearch.toLowerCase()) || p.category.toLowerCase().includes(globalSearch.toLowerCase()))
-                        .map((post) => (
-                          <tr key={post.id}>
-                            <td style={{ fontWeight: 650, maxWidth: '280px' }}>{post.title}</td>
-                            <td>
-                              <span className="cms-badge neutral">{post.category}</span>
-                            </td>
-                            <td>{post.author || 'Happy Machinery'}</td>
-                            <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
-                              {post.slug || `post-${post.id}`}
-                            </td>
-                            <td>{post.date}</td>
-                            <td style={{ textAlign: 'right' }}>
-                              <button
-                                className="cms-btn cms-btn-secondary cms-btn-sm"
-                                onClick={() => {
-                                  setEditingArticle(post)
-                                  setShowNewArticleModal(true)
-                                }}
-                              >
-                                Edit
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+                    <div className="cms-editor-header-actions">
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-secondary"
+                        onClick={() => handleSaveArticle('Draft')}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                          <polyline points="17 21 17 13 7 13 7 21" />
+                          <polyline points="7 3 7 8 15 8" />
+                        </svg>
+                        Save as Draft
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-red"
+                        onClick={() => handleSaveArticle('Published')}
+                      >
+                        Publish Article
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2-Column Editor Grid */}
+                  <div className="cms-rafvex-editor-grid">
+                    {/* Left Main Column */}
+                    <div className="cms-editor-main-col">
+                      {/* Section 1: Title & Slug */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">ARTICLE TITLE</label>
+                        <input
+                          type="text"
+                          className="cms-editor-title-input"
+                          placeholder="Give your article a descriptive, captivating title..."
+                          value={editorTitle}
+                          onChange={(e) => {
+                            setEditorTitle(e.target.value)
+                            if (!editingArticle) {
+                              setEditorSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+                            }
+                          }}
+                          required
+                        />
+                        <div className="cms-editor-slug-row">
+                          <span className="cms-slug-prefix">happymachinery.com/blog/</span>
+                          <input
+                            type="text"
+                            className="cms-editor-slug-input"
+                            placeholder="custom-article-slug"
+                            value={editorSlug}
+                            onChange={(e) => setEditorSlug(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Section 2: Summary / Excerpt */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-header-row">
+                          <label className="cms-editor-eyebrow">ARTICLE SUMMARY / EXCERPT</label>
+                          <span className="cms-char-counter">{editorExcerpt.length}/300 chars</span>
+                        </div>
+                        <textarea
+                          rows={3}
+                          maxLength={300}
+                          className="cms-editor-textarea"
+                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
+                          value={editorExcerpt}
+                          onChange={(e) => setEditorExcerpt(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Section 3: Article Content with WYSIWYG Toolbar */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-header-row">
+                          <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
+                          <span className="cms-tag-muted">Rich WYSIWYG & Media</span>
+                        </div>
+
+                        {/* Formatting Toolbar */}
+                        <div className="cms-editor-toolbar">
+                          <button type="button" title="Bold" onClick={() => handleInsertToolbar('**Bold text**')}><b>B</b></button>
+                          <button type="button" title="Italic" onClick={() => handleInsertToolbar('*Italic text*')}><i>I</i></button>
+                          <button type="button" title="Underline" onClick={() => handleInsertToolbar('<u>Underlined text</u>')}><u>U</u></button>
+                          <button type="button" title="Strikethrough" onClick={() => handleInsertToolbar('~~Strikethrough~~')}><s>S</s></button>
+                          <button type="button" title="Code snippet" onClick={() => handleInsertToolbar('`code`')}>&lt;&gt;</button>
+                          <span className="cms-tb-sep" />
+                          <button type="button" title="Heading 1" onClick={() => handleInsertToolbar('# Major Heading')}>H1</button>
+                          <button type="button" title="Heading 2" onClick={() => handleInsertToolbar('## Section Heading')}>H2</button>
+                          <button type="button" title="Heading 3" onClick={() => handleInsertToolbar('### Subsection Heading')}>H3</button>
+                          <span className="cms-tb-sep" />
+                          <button type="button" title="Bullet List" onClick={() => handleInsertToolbar('- First point\n- Second point\n- Third point')}>&bull; List</button>
+                          <button type="button" title="Quote" onClick={() => handleInsertToolbar('> Essential jobsite maintenance advice')}>&ldquo; Quote</button>
+                          <button type="button" title="Link" onClick={() => handleInsertToolbar('[Link description](https://happymachinery.com/store)')}>🔗 Link</button>
+                          <button type="button" title="Image" onClick={() => handleInsertToolbar('![Machine inspection](/images/why-choose-v900-jobsite.png)')}>🖼 Image</button>
+                          <button type="button" className="cms-tb-pill-btn dark" title="Terminal" onClick={() => handleInsertToolbar('```terminal\n$ machinery test --v900\n```')}>&gt;_ Terminal</button>
+                          <button type="button" className="cms-tb-pill-btn red" title="YouTube" onClick={() => handleInsertToolbar('[Watch Video Walkthrough](https://www.youtube.com/watch?v=...)')}>▶ YouTube</button>
+                          <button type="button" title="Table" onClick={() => handleInsertToolbar('| Spec | Value |\n|---|---|\n| Operating Weight | 2,100 lbs |\n| Auxiliary Flow | 12.7 GPM |')}>⊞ Table</button>
+                        </div>
+
+                        <textarea
+                          rows={16}
+                          className="cms-editor-textarea content-area"
+                          placeholder="Write your article content here in Markdown or formatted text. You can add sections, headings, bullet lists, equipment specs, and images..."
+                          value={editorContent}
+                          onChange={(e) => setEditorContent(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Inspector Column */}
+                    <div className="cms-editor-sidebar-col">
+                      {/* Card 1: Status */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">Publishing Status</label>
+                        <select
+                          className="cms-editor-select"
+                          value={editorStatus}
+                          onChange={(e) => setEditorStatus(e.target.value as any)}
+                        >
+                          <option value="Draft">Draft</option>
+                          <option value="Published">Published</option>
+                          <option value="Scheduled">Scheduled</option>
+                        </select>
+                      </div>
+
+                      {/* Card 2: Author */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">Article Author</label>
+                        <select
+                          className="cms-editor-select"
+                          value={editorAuthor}
+                          onChange={(e) => setEditorAuthor(e.target.value)}
+                        >
+                          <option value={currentUser.name}>{currentUser.name} ({currentUser.role})</option>
+                          <option value="Happy Machinery Editorial">Happy Machinery Editorial</option>
+                          <option value="Lead Equipment Specialist">Lead Equipment Specialist</option>
+                          <option value="Field Support Engineer">Field Support Engineer</option>
+                        </select>
+                      </div>
+
+                      {/* Card 3: Classification & Category */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">Classification & Category</label>
+                        <select
+                          className="cms-editor-select"
+                          value={editorCategory}
+                          onChange={(e) => setEditorCategory(e.target.value)}
+                        >
+                          {blogCategories.map((c) => (
+                            <option key={c.name} value={c.name}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Card 4: Cover Image */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">Featured Cover Image</label>
+                        <input
+                          type="text"
+                          className="cms-editor-input-sm"
+                          placeholder="Image URL (/images/... or https://...)"
+                          value={editorCoverImage}
+                          onChange={(e) => setEditorCoverImage(e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          className="cms-editor-input-sm"
+                          style={{ marginTop: '8px' }}
+                          placeholder="Image Alt Description (e.g. V900 loader on jobsite)"
+                          value={editorCoverAlt}
+                          onChange={(e) => setEditorCoverAlt(e.target.value)}
+                        />
+                        {editorCoverImage && (
+                          <div className="cms-editor-thumb-preview">
+                            <img src={editorCoverImage} alt="Cover preview" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card 5: Attached Video */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">Attached Video (Optional)</label>
+                        <input
+                          type="text"
+                          className="cms-editor-input-sm"
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          value={editorVideoUrl}
+                          onChange={(e) => setEditorVideoUrl(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Card 6: SEO & Social Meta */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">SEO & Social Meta</label>
+                        <input
+                          type="text"
+                          className="cms-editor-input-sm"
+                          placeholder="Page meta title..."
+                          value={editorSeoTitle}
+                          onChange={(e) => setEditorSeoTitle(e.target.value)}
+                        />
+                        <textarea
+                          rows={2}
+                          className="cms-editor-textarea"
+                          style={{ marginTop: '8px' }}
+                          placeholder="Search engine snippet (recommended 150-160 characters)..."
+                          value={editorSeoDesc}
+                          onChange={(e) => setEditorSeoDesc(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* SUBVIEW B: CATEGORIES & SLUGS (SCREENSHOT 5) */}
+              {articlesSubView === 'categories' && (
+                <div className="cms-categories-view-wrapper">
+                  <div className="cms-view-header">
+                    <div className="cms-view-title-group">
+                      <span className="cms-eyebrow-red">EDITORIAL TAXONOMY</span>
+                      <h1>Categories & Slugs</h1>
+                      <p>Organize your publication into distinct channels, URL slugs, and featured topics.</p>
+                    </div>
+                    <div className="cms-taxonomy-counters">
+                      <div className="cms-tax-pill">
+                        <span>CATEGORIES</span>
+                        <strong>{blogCategories.length}</strong>
+                      </div>
+                      <div className="cms-tax-pill red">
+                        <span>ASSIGNED BLOGS</span>
+                        <strong>{posts.length}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subnav row */}
+                  <div className="cms-articles-subnav">
+                    <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('list')}>All Articles</button>
+                    <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>+ New Article</button>
+                    <button type="button" className="cms-subnav-btn active">Categories & Slugs</button>
+                  </div>
+
+                  <div className="cms-categories-grid">
+                    {/* Left: Add New Category */}
+                    <div className="cms-card">
+                      <div className="cms-card-header">
+                        <div className="cms-card-title">
+                          <span style={{ color: '#dc2626', fontSize: '1.1rem' }}>+</span>
+                          <h3>Add New Category</h3>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                          Create a channel for your stories
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleAddCategory} className="cms-category-form">
+                        <div className="cms-form-field">
+                          <label>CATEGORY NAME *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Skid Steer Hydraulics"
+                            value={newCatName}
+                            onChange={(e) => {
+                              setNewCatName(e.target.value)
+                              setNewCatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+                            }}
+                          />
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>URL SLUG *</label>
+                          <div className="cms-slug-input-wrapper">
+                            <span>/category/</span>
+                            <input
+                              type="text"
+                              required
+                              placeholder="skid-steer-hydraulics"
+                              value={newCatSlug}
+                              onChange={(e) => setNewCatSlug(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>PARENT CATEGORY</label>
+                          <select className="cms-editor-select">
+                            <option value="">None (Top Level Root)</option>
+                            {blogCategories.map((c) => (
+                              <option key={c.name} value={c.name}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>COVER IMAGE URL</label>
+                          <input
+                            type="text"
+                            placeholder="https://... or /images/..."
+                            value={newCatCover}
+                            onChange={(e) => setNewCatCover(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>DESCRIPTION</label>
+                          <textarea
+                            rows={3}
+                            placeholder="Short editorial summary for readers and search engines..."
+                            value={newCatDesc}
+                            onChange={(e) => setNewCatDesc(e.target.value)}
+                          />
+                        </div>
+
+                        <button type="submit" className="cms-btn cms-btn-red" style={{ width: '100%', marginTop: '10px' }}>
+                          + Add Category
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Right: Publication Structure & Associated Blogs */}
+                    <div className="cms-card">
+                      <div className="cms-card-header">
+                        <div className="cms-card-title">
+                          <span style={{ color: '#dc2626' }}>📑</span>
+                          <h3>Publication Structure & Associated Blogs</h3>
+                        </div>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                          {blogCategories.length} items total
+                        </span>
+                      </div>
+
+                      <div className="cms-tax-search-box">
+                        <input
+                          type="text"
+                          placeholder="Search categories or slugs..."
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="cms-category-structure-list">
+                        {blogCategories
+                          .filter((c) => c.name.toLowerCase().includes(categorySearch.toLowerCase()) || c.slug.toLowerCase().includes(categorySearch.toLowerCase()))
+                          .map((cat) => {
+                            const count = posts.filter((p) => p.category === cat.name).length
+                            return (
+                              <div key={cat.slug} className="cms-category-structure-item">
+                                <div className="cms-cat-item-left">
+                                  <span className="cms-cat-icon">📁</span>
+                                  <div className="cms-cat-info">
+                                    <strong>{cat.name}</strong>
+                                    <span className="cms-cat-slug">/category/{cat.slug} ↗</span>
+                                  </div>
+                                  <span className="cms-cat-blog-count">{count} blogs</span>
+                                </div>
+                                <div className="cms-cat-item-actions">
+                                  <button
+                                    type="button"
+                                    className="cms-btn cms-btn-secondary cms-btn-sm"
+                                    onClick={() => {
+                                      setGlobalSearch(cat.name)
+                                      setArticlesSubView('list')
+                                    }}
+                                  >
+                                    View Blogs
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-btn cms-btn-sm danger-text"
+                                    onClick={() => handleDeleteCategory(cat.name)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBVIEW C: ALL ARTICLES TABLE */}
+              {articlesSubView === 'list' && (
+                <>
+                  <div className="cms-view-header">
+                    <div className="cms-view-title-group">
+                      <h1>Articles & Content Management</h1>
+                      <p>Create, edit, and optimize machine maintenance articles, jobsite guides, and equipment blogs.</p>
+                    </div>
+                    <div className="cms-view-actions">
+                      <button className="cms-btn cms-btn-red" onClick={openNewArticle}>
+                        + New Article
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Subnav row */}
+                  <div className="cms-articles-subnav">
+                    <button type="button" className="cms-subnav-btn active">All Articles ({posts.length})</button>
+                    <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>+ New Article</button>
+                    <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('categories')}>Categories & Slugs</button>
+                  </div>
+
+                  <div className="cms-card">
+                    <div className="cms-table-wrapper">
+                      <table className="cms-table">
+                        <thead>
+                          <tr>
+                            <th>Title</th>
+                            <th>Category</th>
+                            <th>Author</th>
+                            <th>Slug</th>
+                            <th>Date</th>
+                            <th style={{ textAlign: 'right' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {posts
+                            .filter((p) => p.title.toLowerCase().includes(globalSearch.toLowerCase()) || p.category.toLowerCase().includes(globalSearch.toLowerCase()))
+                            .map((post) => (
+                              <tr key={post.id}>
+                                <td style={{ fontWeight: 650, maxWidth: '280px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <img src={post.image} alt="" style={{ width: '38px', height: '32px', borderRadius: '6px', objectFit: 'cover' }} />
+                                    <span>{post.title}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className="cms-badge neutral">{post.category}</span>
+                                </td>
+                                <td>{post.author || 'Happy Machinery'}</td>
+                                <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                                  {post.slug || `post-${post.id}`}
+                                </td>
+                                <td>{post.date}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                                    <a
+                                      href={getBlogPostPath(post)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="cms-btn cms-btn-secondary cms-btn-sm"
+                                      title="View Live Guide"
+                                    >
+                                      View ↗
+                                    </a>
+                                    <button
+                                      className="cms-btn cms-btn-primary cms-btn-sm"
+                                      onClick={() => openEditArticle(post)}
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -1950,111 +2529,6 @@ export default function AdminDashboard() {
                 </button>
                 <button type="submit" className="cms-modal-btn primary" style={{ background: 'var(--cms-danger)' }}>
                   Confirm IP Ban
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* New/Edit Article Modal */}
-      {showNewArticleModal && (
-        <div className="cms-modal-backdrop" onClick={() => setShowNewArticleModal(false)}>
-          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
-            <h3>{editingArticle ? 'Edit Article' : 'Create New Article'}</h3>
-            <p>Publish technical machinery articles, customer guides, or field updates.</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                const form = e.target as any
-                const title = form.artTitle.value
-                const category = form.artCategory.value
-                const excerpt = form.artExcerpt.value
-                const slug = form.artSlug.value
-
-                if (editingArticle) {
-                  const updated = posts.map((p) => p.id === editingArticle.id ? { ...p, title, category, excerpt, slug } : p)
-                  setPosts(updated)
-                  void writeSharedContent('blog-posts', updated)
-                  showToast('Article updated successfully.', 'success')
-                } else {
-                  const newPost: BlogPost = {
-                    id: Date.now(),
-                    title,
-                    category,
-                    excerpt,
-                    slug: slug || `article-${Date.now()}`,
-                    content: [excerpt],
-                    keyTakeaways: ['Maintenance standards', 'Safe operation'],
-                    image: '/images/why-choose-v900-jobsite.png',
-                    date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-                    readTime: '4 min read',
-                    author: currentUser.name
-                  }
-                  const updated = [newPost, ...posts]
-                  setPosts(updated)
-                  void writeSharedContent('blog-posts', updated)
-                  showToast('Article published successfully.', 'success')
-                }
-                setShowNewArticleModal(false)
-                setEditingArticle(null)
-              }}
-              style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
-            >
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Article Title</label>
-                <input
-                  name="artTitle"
-                  type="text"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  defaultValue={editingArticle?.title || ''}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Category</label>
-                <input
-                  name="artCategory"
-                  type="text"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  defaultValue={editingArticle?.category || 'Jobsite Productivity'}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>URL Slug</label>
-                <input
-                  name="artSlug"
-                  type="text"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  defaultValue={editingArticle?.slug || ''}
-                  placeholder="e.g. mini-skid-steer-maintenance"
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Excerpt & Summary</label>
-                <textarea
-                  name="artExcerpt"
-                  rows={3}
-                  className="cms-header-search-input"
-                  style={{ width: '100%', height: 'auto', padding: '10px 14px', borderRadius: '10px' }}
-                  defaultValue={editingArticle?.excerpt || ''}
-                  required
-                />
-              </div>
-
-              <div className="cms-modal-actions" style={{ marginTop: '10px' }}>
-                <button type="button" className="cms-modal-btn secondary" onClick={() => { setShowNewArticleModal(false); setEditingArticle(null) }}>
-                  Cancel
-                </button>
-                <button type="submit" className="cms-modal-btn primary">
-                  {editingArticle ? 'Save Article' : 'Publish Article'}
                 </button>
               </div>
             </form>
