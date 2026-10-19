@@ -62,6 +62,175 @@ type SecuritySubTab =
 
 type CmsTheme = 'dark' | 'light' | 'neon'
 
+export type ArticleSectionType = 'heading' | 'text' | 'image' | 'video' | 'table'
+
+export interface ArticleSection {
+  id: string
+  type: ArticleSectionType
+  level?: 2 | 3 | 4
+  heading?: string
+  content?: string
+  imageUrl?: string
+  imageCaption?: string
+  videoUrl?: string
+  headers?: string[]
+  rows?: string[][]
+}
+
+export function parseContentToSections(raw: string[] | string): ArticleSection[] {
+  const paragraphs = Array.isArray(raw)
+    ? raw
+    : (raw || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+
+  const sections: ArticleSection[] = []
+  let idCounter = 1
+
+  for (const p of paragraphs) {
+    const trimmed = p.trim()
+    if (!trimmed) continue
+
+    // 1. Heading (#, ##, ###, #### or <h1>, <h2>, <h3>)
+    const htmlHead = trimmed.match(/^<h([1-4])>(.*?)<\/h\1>$/i)
+    if (htmlHead) {
+      sections.push({
+        id: `sec_${idCounter++}_${Date.now()}`,
+        type: 'heading',
+        level: Number(htmlHead[1]) as any,
+        heading: htmlHead[2].trim()
+      })
+      continue
+    }
+
+    const mdHead = trimmed.match(/^(#{1,4})\s+(.+)$/)
+    if (mdHead) {
+      sections.push({
+        id: `sec_${idCounter++}_${Date.now()}`,
+        type: 'heading',
+        level: mdHead[1].length as any,
+        heading: mdHead[2].trim()
+      })
+      continue
+    }
+
+    // 2. Image: ![alt](url)
+    const imgMatch = trimmed.match(/^!\[(.*?)\]\((.*?)\)$/)
+    if (imgMatch) {
+      sections.push({
+        id: `sec_${idCounter++}_${Date.now()}`,
+        type: 'image',
+        imageUrl: imgMatch[2].trim(),
+        imageCaption: imgMatch[1].trim()
+      })
+      continue
+    }
+
+    // Raw image URL
+    if (/^(https?:\/\/|\/images\/)[^\s]+$/i.test(trimmed) && /\.(png|jpg|jpeg|webp|gif|svg)/i.test(trimmed)) {
+      sections.push({
+        id: `sec_${idCounter++}_${Date.now()}`,
+        type: 'image',
+        imageUrl: trimmed,
+        imageCaption: ''
+      })
+      continue
+    }
+
+    // 3. Video: [Watch Video...](url) or direct youtube/vimeo link
+    const vidLinkMatch = trimmed.match(/^\[(.*?)\]\((https?:\/\/[^\s]+)\)$/)
+    if (vidLinkMatch && /(youtube|youtu\.be|vimeo)/i.test(vidLinkMatch[2])) {
+      sections.push({
+        id: `sec_${idCounter++}_${Date.now()}`,
+        type: 'video',
+        videoUrl: vidLinkMatch[2].trim()
+      })
+      continue
+    }
+    if (/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\/[^\s]+$/i.test(trimmed)) {
+      sections.push({
+        id: `sec_${idCounter++}_${Date.now()}`,
+        type: 'video',
+        videoUrl: trimmed
+      })
+      continue
+    }
+
+    // 4. Markdown Table: | Col1 | Col2 |
+    if (trimmed.startsWith('|') && trimmed.includes('\n')) {
+      const lines = trimmed.split('\n').map((l) => l.trim()).filter(Boolean)
+      if (lines.length >= 2) {
+        const parseRow = (line: string) =>
+          line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+        const headers = parseRow(lines[0])
+        const rows = lines.slice(2).map(parseRow)
+        sections.push({
+          id: `sec_${idCounter++}_${Date.now()}`,
+          type: 'table',
+          headers,
+          rows
+        })
+        continue
+      }
+    }
+
+    // 5. Default: Clean Text Section
+    sections.push({
+      id: `sec_${idCounter++}_${Date.now()}`,
+      type: 'text',
+      content: trimmed
+    })
+  }
+
+  return sections
+}
+
+export function serializeSectionsToContent(sections: ArticleSection[]): string[] {
+  return sections
+    .map((sec) => {
+      switch (sec.type) {
+        case 'heading': {
+          const level = sec.level || 2
+          const hashes = '#'.repeat(level)
+          return `${hashes} ${sec.heading || 'Section Heading'}`
+        }
+        case 'image': {
+          const caption = sec.imageCaption || 'Jobsite Equipment'
+          return `![${caption}](${sec.imageUrl || '/images/why-choose-v900-jobsite.png'})`
+        }
+        case 'video': {
+          return `[Watch Video Walkthrough](${sec.videoUrl || ''})`
+        }
+        case 'table': {
+          const headers = sec.headers && sec.headers.length > 0 ? sec.headers : ['Feature', 'Specification']
+          const headerLine = `| ${headers.join(' | ')} |`
+          const sepLine = `| ${headers.map(() => '---').join(' | ')} |`
+          const rowLines = (sec.rows || []).map((row) => `| ${row.join(' | ')} |`).join('\n')
+          return `${headerLine}\n${sepLine}${rowLines ? '\n' + rowLines : ''}`
+        }
+        case 'text':
+        default: {
+          return sec.content || ''
+        }
+      }
+    })
+    .filter((s) => s.trim().length > 0)
+}
+
+export function getEmbedVideoUrl(url?: string): string | null {
+  if (!url) return null
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/)
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}`
+  }
+  const vimeoMatch = url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)/)
+  if (vimeoMatch && vimeoMatch[1]) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`
+  }
+  if (/\.(mp4|webm|ogg)$/i.test(url)) {
+    return url
+  }
+  return null
+}
+
 export default function AdminDashboard() {
 
   // Authentication State
@@ -155,12 +324,20 @@ export default function AdminDashboard() {
   const [commentsData, setCommentsData] = useState<BlogComment[]>(() => DEFAULT_COMMENTS)
   const [commentFilter, setCommentFilter] = useState<'all' | 'Pending' | 'Approved' | 'Spam'>('all')
 
-  // Articles Sub-view & Rafvex Editor States (Screenshots 3, 4, 5)
+  // Articles Sub-view & Visual Section Editor States
   const [articlesSubView, setArticlesSubView] = useState<'list' | 'editor' | 'categories'>('list')
   const [editorTitle, setEditorTitle] = useState('')
   const [editorSlug, setEditorSlug] = useState('')
   const [editorExcerpt, setEditorExcerpt] = useState('')
   const [editorContent, setEditorContent] = useState('')
+  const [articleSections, setArticleSections] = useState<ArticleSection[]>([])
+  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual')
+  const [linkModalOpen, setLinkModalOpen] = useState(false)
+  const [linkModalTargetSecId, setLinkModalTargetSecId] = useState<string | null>(null)
+  const [linkModalType, setLinkModalType] = useState<'internal' | 'external'>('internal')
+  const [linkModalInternalUrl, setLinkModalInternalUrl] = useState('/store')
+  const [linkModalExternalUrl, setLinkModalExternalUrl] = useState('https://')
+  const [linkModalText, setLinkModalText] = useState('')
   const [editorCategory, setEditorCategory] = useState('Jobsite Productivity')
   const [editorAuthor, setEditorAuthor] = useState('Happy Machinery')
   const [editorStatus, setEditorStatus] = useState<'Published' | 'Draft' | 'Scheduled'>('Draft')
@@ -428,7 +605,7 @@ export default function AdminDashboard() {
     showToast('Profile updated successfully!', 'success')
   }
 
-  // Rafvex Article Editor Handlers (Screenshots 3, 4, 5)
+  // Visual Section Article Editor Handlers
   const openNewArticle = () => {
     setEditingArticle(null)
     setEditorTitle('')
@@ -443,6 +620,47 @@ export default function AdminDashboard() {
     setEditorVideoUrl('')
     setEditorSeoTitle('')
     setEditorSeoDesc('')
+    setArticleSections([
+      {
+        id: `sec_${Date.now()}_1`,
+        type: 'heading',
+        level: 2,
+        heading: '1. Overview & Applications'
+      },
+      {
+        id: `sec_${Date.now()}_2`,
+        type: 'text',
+        content: 'Operating compact skid steers on residential job sites requires balancing high performance with strict noise, space, and turf protection requirements.'
+      },
+      {
+        id: `sec_${Date.now()}_3`,
+        type: 'image',
+        imageUrl: '/images/why-choose-v900-jobsite.png',
+        imageCaption: 'V900 Compact Mini Track Loader on residential jobsite'
+      },
+      {
+        id: `sec_${Date.now()}_4`,
+        type: 'heading',
+        level: 2,
+        heading: '2. Equipment Specifications'
+      },
+      {
+        id: `sec_${Date.now()}_5`,
+        type: 'table',
+        headers: ['Specification', 'Value', 'Application'],
+        rows: [
+          ['Rated Operating Capacity', '900 lbs (408 kg)', 'Handles pallets, sod & gravel'],
+          ['Hydraulic Flow', '12.7 GPM @ 2,321 psi', 'Runs heavy augers & trenchers'],
+          ['Machine Width', '35.5 in (900 mm)', 'Passes through 36-inch gates']
+        ]
+      },
+      {
+        id: `sec_${Date.now()}_6`,
+        type: 'video',
+        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+      }
+    ])
+    setEditorMode('visual')
     setArticlesSubView('editor')
   }
 
@@ -451,7 +669,8 @@ export default function AdminDashboard() {
     setEditorTitle(post.title)
     setEditorSlug(post.slug || '')
     setEditorExcerpt(post.excerpt)
-    setEditorContent(Array.isArray(post.content) ? post.content.join('\n\n') : (post.content || ''))
+    const rawParagraphs = Array.isArray(post.content) ? post.content : [post.content || '']
+    setEditorContent(rawParagraphs.join('\n\n'))
     setEditorCategory(post.category)
     setEditorAuthor(post.author || 'Happy Machinery')
     setEditorStatus('Published')
@@ -460,12 +679,179 @@ export default function AdminDashboard() {
     setEditorVideoUrl('')
     setEditorSeoTitle(post.title)
     setEditorSeoDesc(post.excerpt)
+
+    const parsed = parseContentToSections(rawParagraphs)
+    if (parsed.length === 0) {
+      setArticleSections([
+        { id: `sec_${Date.now()}`, type: 'text', content: post.excerpt || '' }
+      ])
+    } else {
+      setArticleSections(parsed)
+    }
+    setEditorMode('visual')
     setArticlesSubView('editor')
   }
 
-  const handleInsertToolbar = (syntax: string) => {
-    setEditorContent((prev) => (prev ? `${prev}\n\n${syntax}` : syntax))
-    showToast('Formatting snippet inserted.', 'success')
+  // Section manipulation handlers
+  const handleMoveSection = (index: number, direction: 'up' | 'down') => {
+    setArticleSections((prev) => {
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev
+      const copy = [...prev]
+      const [item] = copy.splice(index, 1)
+      copy.splice(targetIndex, 0, item)
+      return copy
+    })
+  }
+
+  const handleDeleteSection = (id: string) => {
+    setArticleSections((prev) => {
+      if (prev.length <= 1) {
+        showToast('Article must contain at least one section block.', 'warning')
+        return prev
+      }
+      return prev.filter((s) => s.id !== id)
+    })
+  }
+
+  const handleDuplicateSection = (index: number) => {
+    setArticleSections((prev) => {
+      const target = prev[index]
+      const duplicate: ArticleSection = {
+        ...target,
+        id: `sec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        rows: target.rows ? target.rows.map((r) => [...r]) : undefined,
+        headers: target.headers ? [...target.headers] : undefined
+      }
+      const copy = [...prev]
+      copy.splice(index + 1, 0, duplicate)
+      return copy
+    })
+    showToast('Section duplicated.', 'success')
+  }
+
+  const handleAddSection = (type: ArticleSectionType, insertIndex?: number) => {
+    const newSection: ArticleSection = {
+      id: `sec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      type
+    }
+    if (type === 'heading') {
+      newSection.level = 2
+      newSection.heading = ''
+    } else if (type === 'text') {
+      newSection.content = ''
+    } else if (type === 'image') {
+      newSection.imageUrl = '/images/why-choose-v900-jobsite.png'
+      newSection.imageCaption = 'Jobsite loader operations'
+    } else if (type === 'video') {
+      newSection.videoUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    } else if (type === 'table') {
+      newSection.headers = ['Equipment Feature', 'Specifications']
+      newSection.rows = [
+        ['Operating Capacity', '900 lbs (408 kg)'],
+        ['Hydraulic Flow', '12.7 GPM @ 2,321 psi']
+      ]
+    }
+
+    setArticleSections((prev) => {
+      const copy = [...prev]
+      if (typeof insertIndex === 'number' && insertIndex >= 0 && insertIndex <= copy.length) {
+        copy.splice(insertIndex, 0, newSection)
+      } else {
+        copy.push(newSection)
+      }
+      return copy
+    })
+    showToast(`Added ${type} section block.`, 'success')
+  }
+
+  const handleUpdateSection = (id: string, patch: Partial<ArticleSection>) => {
+    setArticleSections((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s))
+    )
+  }
+
+  // Interactive Table Helpers
+  const handleAddTableRow = (sectionId: string) => {
+    setArticleSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId || s.type !== 'table') return s
+        const colCount = s.headers?.length || 2
+        return { ...s, rows: [...(s.rows || []), new Array(colCount).fill('')] }
+      })
+    )
+  }
+
+  const handleAddTableCol = (sectionId: string) => {
+    setArticleSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId || s.type !== 'table') return s
+        const headers = [...(s.headers || ['Col 1', 'Col 2']), `Col ${(s.headers?.length || 2) + 1}`]
+        const rows = (s.rows || []).map((r) => [...r, ''])
+        return { ...s, headers, rows }
+      })
+    )
+  }
+
+  const handleDeleteTableRow = (sectionId: string, rowIndex: number) => {
+    setArticleSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId || s.type !== 'table') return s
+        return { ...s, rows: (s.rows || []).filter((_, i) => i !== rowIndex) }
+      })
+    )
+  }
+
+  const handleUpdateTableHeader = (sectionId: string, colIndex: number, val: string) => {
+    setArticleSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId || s.type !== 'table') return s
+        const headers = [...(s.headers || [])]
+        headers[colIndex] = val
+        return { ...s, headers }
+      })
+    )
+  }
+
+  const handleUpdateTableCell = (sectionId: string, rowIndex: number, colIndex: number, val: string) => {
+    setArticleSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId || s.type !== 'table') return s
+        const rows = (s.rows || []).map((row, rIdx) => {
+          if (rIdx !== rowIndex) return row
+          const newRow = [...row]
+          newRow[colIndex] = val
+          return newRow
+        })
+        return { ...s, rows }
+      })
+    )
+  }
+
+  // Link Inserter Modal Helpers
+  const handleOpenLinkModal = (sectionId: string) => {
+    setLinkModalTargetSecId(sectionId)
+    setLinkModalText('')
+    setLinkModalInternalUrl('/store')
+    setLinkModalExternalUrl('https://')
+    setLinkModalOpen(true)
+  }
+
+  const handleInsertLinkIntoSection = () => {
+    if (!linkModalTargetSecId) return
+    const url = linkModalType === 'internal' ? linkModalInternalUrl : linkModalExternalUrl
+    const text = linkModalText.trim() || (linkModalType === 'internal' ? linkModalInternalUrl : 'Link')
+    const mdSnippet = `[${text}](${url})`
+    setArticleSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== linkModalTargetSecId || s.type !== 'text') return s
+        const currentContent = s.content || ''
+        const newContent = currentContent ? `${currentContent} ${mdSnippet}` : mdSnippet
+        return { ...s, content: newContent }
+      })
+    )
+    setLinkModalOpen(false)
+    showToast('Link inserted into section.', 'success')
   }
 
   const handleSaveArticle = async (status: 'Published' | 'Draft' | 'Scheduled') => {
@@ -474,10 +860,26 @@ export default function AdminDashboard() {
       return
     }
 
-    const contentParagraphs = editorContent
-      .split(/\n\s*\n/)
-      .map((p) => p.trim())
-      .filter(Boolean)
+    let contentParagraphs: string[] = []
+    if (editorMode === 'visual') {
+      contentParagraphs = serializeSectionsToContent(articleSections)
+    } else {
+      contentParagraphs = editorContent
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+    }
+
+    if (contentParagraphs.length === 0) {
+      showToast('Article must contain content.', 'error')
+      return
+    }
+
+    // Auto-generate excerpt since summary/excerpt card was removed
+    const firstTextSection = articleSections.find((s) => s.type === 'text')
+    const finalExcerpt =
+      editorExcerpt.trim() ||
+      (firstTextSection?.content ? firstTextSection.content.slice(0, 220).trim() + '...' : editorTitle)
 
     const finalSlug = editorSlug.trim() || editorTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -488,8 +890,8 @@ export default function AdminDashboard() {
               ...p,
               title: editorTitle,
               slug: finalSlug,
-              excerpt: editorExcerpt || editorTitle,
-              content: contentParagraphs.length > 0 ? contentParagraphs : [editorExcerpt || editorTitle],
+              excerpt: finalExcerpt,
+              content: contentParagraphs,
               category: editorCategory,
               author: editorAuthor || currentUser?.name || 'Happy Machinery',
               image: editorCoverImage || p.image
@@ -506,12 +908,12 @@ export default function AdminDashboard() {
         title: editorTitle,
         slug: finalSlug,
         category: editorCategory || 'Jobsite Productivity',
-        excerpt: editorExcerpt || editorTitle,
-        content: contentParagraphs.length > 0 ? contentParagraphs : [editorExcerpt || editorTitle],
+        excerpt: finalExcerpt,
+        content: contentParagraphs,
         keyTakeaways: ['Maintenance standards', 'Safe operation', 'Field inspection guidelines'],
         image: editorCoverImage || '/images/why-choose-v900-jobsite.png',
         date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-        readTime: `${Math.max(2, Math.ceil((editorContent || '').split(/\s+/).length / 180))} min read`,
+        readTime: `${Math.max(2, Math.ceil(contentParagraphs.join(' ').split(/\s+/).length / 180))} min read`,
         author: editorAuthor || currentUser?.name || 'Happy Machinery'
       }
       const updated = [newPost, ...posts]
@@ -1812,9 +2214,10 @@ export default function AdminDashboard() {
           {activeTab === 'articles' && (
             <>
               {/* SUBVIEW A: NEW / EDIT ARTICLE (SCREENSHOTS 3 & 4) */}
+              {/* SUBVIEW A: NEW / EDIT ARTICLE (VISUAL SECTION & BLOCK BUILDER) */}
               {articlesSubView === 'editor' && (
                 <div className="cms-rafvex-editor-container">
-                  {/* Top Header Row with Back Button and Actions */}
+                  {/* Top Header Row with Back Button, View Mode Toggle, and Actions */}
                   <div className="cms-rafvex-editor-header">
                     <div className="cms-editor-header-left">
                       <button
@@ -1827,10 +2230,38 @@ export default function AdminDashboard() {
                         </svg>
                         <span>{editingArticle ? 'Edit Article' : 'New Article'}</span>
                       </button>
-                      <p className="cms-editor-subtitle">Write and publish an editorial post</p>
+                      <p className="cms-editor-subtitle">Write, design and publish an editorial post with live media blocks</p>
                     </div>
 
                     <div className="cms-editor-header-actions">
+                      {/* View Mode Toggle */}
+                      <div className="cms-view-mode-toggle">
+                        <button
+                          type="button"
+                          className={`cms-view-toggle-btn ${editorMode === 'visual' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (editorMode === 'code') {
+                              setArticleSections(parseContentToSections(editorContent))
+                            }
+                            setEditorMode('visual')
+                          }}
+                        >
+                          👁️ Visual Blocks
+                        </button>
+                        <button
+                          type="button"
+                          className={`cms-view-toggle-btn ${editorMode === 'code' ? 'active' : ''}`}
+                          onClick={() => {
+                            if (editorMode === 'visual') {
+                              setEditorContent(serializeSectionsToContent(articleSections).join('\n\n'))
+                            }
+                            setEditorMode('code')
+                          }}
+                        >
+                          &lt; / &gt; Raw Code
+                        </button>
+                      </div>
+
                       <button
                         type="button"
                         className="cms-btn cms-btn-secondary"
@@ -1857,7 +2288,7 @@ export default function AdminDashboard() {
                   <div className="cms-rafvex-editor-grid">
                     {/* Left Main Column */}
                     <div className="cms-editor-main-col">
-                      {/* Section 1: Title & Slug */}
+                      {/* Section 1: Title & Slug (Always on Top) */}
                       <div className="cms-editor-card">
                         <label className="cms-editor-eyebrow">ARTICLE TITLE</label>
                         <input
@@ -1885,58 +2316,481 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* Section 2: Summary / Excerpt */}
-                      <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row">
-                          <label className="cms-editor-eyebrow">ARTICLE SUMMARY / EXCERPT</label>
-                          <span className="cms-char-counter">{editorExcerpt.length}/300 chars</span>
-                        </div>
-                        <textarea
-                          rows={3}
-                          maxLength={300}
-                          className="cms-editor-textarea"
-                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
-                          value={editorExcerpt}
-                          onChange={(e) => setEditorExcerpt(e.target.value)}
-                        />
-                      </div>
+                      {/* MODE 1: VISUAL SECTION & BLOCK BUILDER (DEFAULT) */}
+                      {editorMode === 'visual' && (
+                        <div className="cms-sections-builder-container">
+                          {/* Top Status & Quick Add Bar */}
+                          <div className="cms-builder-top-bar">
+                            <div className="cms-builder-stats">
+                              <span className="cms-builder-badge">{articleSections.length} Content Blocks</span>
+                              <span>Build your article section by section without markdown code</span>
+                            </div>
+                            <div className="cms-builder-quick-actions">
+                              <button
+                                type="button"
+                                className="cms-quick-add-btn"
+                                onClick={() => handleAddSection('text')}
+                              >
+                                <span>+ Text</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="cms-quick-add-btn"
+                                onClick={() => handleAddSection('heading')}
+                              >
+                                <span>+ Heading</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="cms-quick-add-btn"
+                                onClick={() => handleAddSection('image')}
+                              >
+                                <span>+ Image</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="cms-quick-add-btn"
+                                onClick={() => handleAddSection('video')}
+                              >
+                                <span>+ Video</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="cms-quick-add-btn"
+                                onClick={() => handleAddSection('table')}
+                              >
+                                <span>+ Table</span>
+                              </button>
+                            </div>
+                          </div>
 
-                      {/* Section 3: Article Content with WYSIWYG Toolbar */}
-                      <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row">
-                          <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
-                          <span className="cms-tag-muted">Rich WYSIWYG & Media</span>
-                        </div>
+                          {/* Loop through each section card */}
+                          {articleSections.map((sec, idx) => (
+                            <React.Fragment key={sec.id}>
+                              <div className="cms-section-card">
+                                {/* Section Header Row with Drag/Index, Type, and Actions */}
+                                <div className="cms-section-card-header">
+                                  <div className="cms-section-header-left">
+                                    <span className="cms-section-index-pill">#{idx + 1}</span>
+                                    <span className="cms-section-type-pill">
+                                      {sec.type === 'heading' && '🔤 Section Heading'}
+                                      {sec.type === 'text' && '📝 Text Paragraph'}
+                                      {sec.type === 'image' && '🖼️ Image with Live Preview'}
+                                      {sec.type === 'video' && '🎬 Video Player Preview'}
+                                      {sec.type === 'table' && '⊞ Specifications Table'}
+                                    </span>
+                                  </div>
 
-                        {/* Formatting Toolbar */}
-                        <div className="cms-editor-toolbar">
-                          <button type="button" title="Bold" onClick={() => handleInsertToolbar('**Bold text**')}><b>B</b></button>
-                          <button type="button" title="Italic" onClick={() => handleInsertToolbar('*Italic text*')}><i>I</i></button>
-                          <button type="button" title="Underline" onClick={() => handleInsertToolbar('<u>Underlined text</u>')}><u>U</u></button>
-                          <button type="button" title="Strikethrough" onClick={() => handleInsertToolbar('~~Strikethrough~~')}><s>S</s></button>
-                          <button type="button" title="Code snippet" onClick={() => handleInsertToolbar('`code`')}>&lt;&gt;</button>
-                          <span className="cms-tb-sep" />
-                          <button type="button" title="Heading 1" onClick={() => handleInsertToolbar('# Major Heading')}>H1</button>
-                          <button type="button" title="Heading 2" onClick={() => handleInsertToolbar('## Section Heading')}>H2</button>
-                          <button type="button" title="Heading 3" onClick={() => handleInsertToolbar('### Subsection Heading')}>H3</button>
-                          <span className="cms-tb-sep" />
-                          <button type="button" title="Bullet List" onClick={() => handleInsertToolbar('- First point\n- Second point\n- Third point')}>&bull; List</button>
-                          <button type="button" title="Quote" onClick={() => handleInsertToolbar('> Essential jobsite maintenance advice')}>&ldquo; Quote</button>
-                          <button type="button" title="Link" onClick={() => handleInsertToolbar('[Link description](https://happymachinery.com/store)')}>🔗 Link</button>
-                          <button type="button" title="Image" onClick={() => handleInsertToolbar('![Machine inspection](/images/why-choose-v900-jobsite.png)')}>🖼 Image</button>
-                          <button type="button" className="cms-tb-pill-btn dark" title="Terminal" onClick={() => handleInsertToolbar('```terminal\n$ machinery test --v900\n```')}>&gt;_ Terminal</button>
-                          <button type="button" className="cms-tb-pill-btn red" title="YouTube" onClick={() => handleInsertToolbar('[Watch Video Walkthrough](https://www.youtube.com/watch?v=...)')}>▶ YouTube</button>
-                          <button type="button" title="Table" onClick={() => handleInsertToolbar('| Spec | Value |\n|---|---|\n| Operating Weight | 2,100 lbs |\n| Auxiliary Flow | 12.7 GPM |')}>⊞ Table</button>
-                        </div>
+                                  <div className="cms-section-actions-row">
+                                    <button
+                                      type="button"
+                                      className="cms-sec-action-btn"
+                                      title="Move Up"
+                                      disabled={idx === 0}
+                                      onClick={() => handleMoveSection(idx, 'up')}
+                                    >
+                                      ▲ Up
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cms-sec-action-btn"
+                                      title="Move Down"
+                                      disabled={idx === articleSections.length - 1}
+                                      onClick={() => handleMoveSection(idx, 'down')}
+                                    >
+                                      ▼ Down
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cms-sec-action-btn"
+                                      title="Duplicate Section"
+                                      onClick={() => handleDuplicateSection(idx)}
+                                    >
+                                      📑 Duplicate
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cms-sec-action-btn delete"
+                                      title="Delete Section"
+                                      disabled={articleSections.length <= 1}
+                                      onClick={() => handleDeleteSection(sec.id)}
+                                    >
+                                      🗑️ Delete
+                                    </button>
+                                  </div>
+                                </div>
 
-                        <textarea
-                          rows={16}
-                          className="cms-editor-textarea content-area"
-                          placeholder="Write your article content here in Markdown or formatted text. You can add sections, headings, bullet lists, equipment specs, and images..."
-                          value={editorContent}
-                          onChange={(e) => setEditorContent(e.target.value)}
-                        />
-                      </div>
+                                {/* BLOCK 1: HEADING */}
+                                {sec.type === 'heading' && (
+                                  <div className="cms-heading-block-body">
+                                    <div className="cms-level-selector">
+                                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--cms-text-muted)' }}>Heading Level:</span>
+                                      <button
+                                        type="button"
+                                        className={`cms-level-btn ${(sec.level || 2) === 2 ? 'active' : ''}`}
+                                        onClick={() => handleUpdateSection(sec.id, { level: 2 })}
+                                      >
+                                        H2 Section
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`cms-level-btn ${sec.level === 3 ? 'active' : ''}`}
+                                        onClick={() => handleUpdateSection(sec.id, { level: 3 })}
+                                      >
+                                        H3 Subsection
+                                      </button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      className="cms-heading-input"
+                                      placeholder="e.g. 1. Navigating Tight Access Points on Jobsites"
+                                      value={sec.heading || ''}
+                                      onChange={(e) => handleUpdateSection(sec.id, { heading: e.target.value })}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* BLOCK 2: TEXT */}
+                                {sec.type === 'text' && (
+                                  <div className="cms-text-block-body">
+                                    <div className="cms-text-format-bar">
+                                      <button
+                                        type="button"
+                                        className="cms-inline-fmt-btn"
+                                        title="Add Bold snippet"
+                                        onClick={() => {
+                                          const prev = sec.content || ''
+                                          handleUpdateSection(sec.id, { content: prev ? `${prev} **bold text**` : '**bold text**' })
+                                        }}
+                                      >
+                                        <b>B</b> Bold
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="cms-inline-fmt-btn"
+                                        title="Add Italic snippet"
+                                        onClick={() => {
+                                          const prev = sec.content || ''
+                                          handleUpdateSection(sec.id, { content: prev ? `${prev} *italic text*` : '*italic text*' })
+                                        }}
+                                      >
+                                        <i>I</i> Italic
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="cms-inline-fmt-btn"
+                                        title="Add bullet item"
+                                        onClick={() => {
+                                          const prev = sec.content || ''
+                                          handleUpdateSection(sec.id, { content: prev ? `${prev}\n- Key jobsite point` : '- Key jobsite point' })
+                                        }}
+                                      >
+                                        &bull; Bullet List
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="cms-inline-fmt-btn"
+                                        title="Insert Internal or External Link"
+                                        onClick={() => handleOpenLinkModal(sec.id)}
+                                      >
+                                        🔗 Insert Link
+                                      </button>
+                                    </div>
+                                    <textarea
+                                      rows={6}
+                                      className="cms-section-textarea"
+                                      placeholder="Write your section content here in clean text. You can describe equipment techniques, jobsite tips, or machinery operations..."
+                                      value={sec.content || ''}
+                                      onChange={(e) => handleUpdateSection(sec.id, { content: e.target.value })}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* BLOCK 3: IMAGE WITH LIVE PREVIEW */}
+                                {sec.type === 'image' && (
+                                  <div className="cms-image-block-body">
+                                    <div className="cms-image-inputs-grid">
+                                      <div>
+                                        <label className="cms-editor-eyebrow">Image URL or Local Path</label>
+                                        <input
+                                          type="text"
+                                          className="cms-editor-input-sm"
+                                          placeholder="/images/... or https://..."
+                                          value={sec.imageUrl || ''}
+                                          onChange={(e) => handleUpdateSection(sec.id, { imageUrl: e.target.value })}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="cms-editor-eyebrow">Image Caption / Alt Description</label>
+                                        <input
+                                          type="text"
+                                          className="cms-editor-input-sm"
+                                          placeholder="e.g. TYPHON V900 loader operating in narrow residential gate"
+                                          value={sec.imageCaption || ''}
+                                          onChange={(e) => handleUpdateSection(sec.id, { imageCaption: e.target.value })}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Preset Media Quick Select */}
+                                    <div className="cms-preset-chips-row">
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)', fontWeight: 700 }}>Quick Preset:</span>
+                                      <button
+                                        type="button"
+                                        className="cms-preset-chip"
+                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/why-choose-v900-jobsite.png', imageCaption: 'V900 Jobsite Operations' })}
+                                      >
+                                        Jobsite Action
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="cms-preset-chip"
+                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/loader-yellow.jpg', imageCaption: 'Industrial Yellow Skid Steer' })}
+                                      >
+                                        Yellow Loader
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="cms-preset-chip"
+                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/loader-blue.jpg', imageCaption: 'Cobalt Blue Mini Skid Steer' })}
+                                      >
+                                        Blue Loader
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="cms-preset-chip"
+                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/loader-red.png', imageCaption: 'Crimson Red Compact Track Loader' })}
+                                      >
+                                        Red Loader
+                                      </button>
+                                    </div>
+
+                                    {/* LIVE IMAGE PREVIEW FRAME */}
+                                    {sec.imageUrl && (
+                                      <div className="cms-image-preview-frame">
+                                        <img
+                                          src={sec.imageUrl}
+                                          alt={sec.imageCaption || 'Preview'}
+                                          onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
+                                        />
+                                        {sec.imageCaption && (
+                                          <div className="cms-image-preview-caption-bar">
+                                            <span>📷</span>
+                                            <span>{sec.imageCaption}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* BLOCK 4: VIDEO WITH LIVE PLAYER PREVIEW */}
+                                {sec.type === 'video' && (
+                                  <div className="cms-video-block-body">
+                                    <div>
+                                      <label className="cms-editor-eyebrow">Video URL (YouTube, Vimeo, or MP4)</label>
+                                      <input
+                                        type="text"
+                                        className="cms-editor-input-sm"
+                                        placeholder="https://www.youtube.com/watch?v=..."
+                                        value={sec.videoUrl || ''}
+                                        onChange={(e) => handleUpdateSection(sec.id, { videoUrl: e.target.value })}
+                                      />
+                                    </div>
+
+                                    <div className="cms-preset-chips-row">
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)', fontWeight: 700 }}>Quick Demo Video:</span>
+                                      <button
+                                        type="button"
+                                        className="cms-preset-chip"
+                                        onClick={() => handleUpdateSection(sec.id, { videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })}
+                                      >
+                                        YouTube Demo
+                                      </button>
+                                    </div>
+
+                                    {/* LIVE VIDEO PLAYER PREVIEW */}
+                                    {getEmbedVideoUrl(sec.videoUrl) ? (
+                                      <div className="cms-video-preview-frame">
+                                        <iframe
+                                          src={getEmbedVideoUrl(sec.videoUrl)!}
+                                          title="Video Preview"
+                                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                          allowFullScreen
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="cms-video-helper-tag">
+                                        <span>ℹ️</span>
+                                        <span>Enter a valid YouTube, Vimeo, or MP4 URL above to see the live player preview here.</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* BLOCK 5: INTERACTIVE TABLE WITH LIVE PREVIEW */}
+                                {sec.type === 'table' && (
+                                  <div className="cms-table-block-body">
+                                    <div className="cms-table-tools-header">
+                                      <div className="cms-table-tools-left">
+                                        <button
+                                          type="button"
+                                          className="cms-quick-add-btn"
+                                          onClick={() => handleAddTableCol(sec.id)}
+                                        >
+                                          + Add Column
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-quick-add-btn"
+                                          onClick={() => handleAddTableRow(sec.id)}
+                                        >
+                                          + Add Row
+                                        </button>
+                                      </div>
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--cms-text-muted)' }}>
+                                        Interactive spreadsheet editor with live website preview
+                                      </span>
+                                    </div>
+
+                                    {/* Editable Table Grid */}
+                                    <div className="cms-table-editor-scroll">
+                                      <table className="cms-interactive-table">
+                                        <thead>
+                                          <tr>
+                                            {(sec.headers || ['Feature', 'Specification']).map((h, colIdx) => (
+                                              <th key={colIdx}>
+                                                <input
+                                                  type="text"
+                                                  className="cms-tbl-input-header"
+                                                  value={h}
+                                                  placeholder={`Column ${colIdx + 1}`}
+                                                  onChange={(e) => handleUpdateTableHeader(sec.id, colIdx, e.target.value)}
+                                                />
+                                              </th>
+                                            ))}
+                                            <th style={{ width: '40px', textAlign: 'center' }}></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {(sec.rows || []).map((row, rowIdx) => (
+                                            <tr key={rowIdx}>
+                                              {row.map((cell, colIdx) => (
+                                                <td key={colIdx}>
+                                                  <input
+                                                    type="text"
+                                                    className="cms-tbl-input-cell"
+                                                    value={cell}
+                                                    placeholder="Enter value..."
+                                                    onChange={(e) => handleUpdateTableCell(sec.id, rowIdx, colIdx, e.target.value)}
+                                                  />
+                                                </td>
+                                              ))}
+                                              <td style={{ textAlign: 'center' }}>
+                                                <button
+                                                  type="button"
+                                                  className="cms-tbl-del-row-btn"
+                                                  title="Delete Row"
+                                                  onClick={() => handleDeleteTableRow(sec.id, rowIdx)}
+                                                >
+                                                  ✕
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+
+                                    {/* LIVE STYLED TABLE PREVIEW */}
+                                    <div className="cms-table-preview-card">
+                                      <div className="cms-table-preview-title">
+                                        <span>👁️</span>
+                                        <span>Live Visitor Table Preview</span>
+                                      </div>
+                                      <table className="cms-live-styled-table">
+                                        <thead>
+                                          <tr>
+                                            {(sec.headers || ['Feature', 'Specification']).map((h, hIdx) => (
+                                              <th key={hIdx}>{h || `Col ${hIdx + 1}`}</th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {(sec.rows || []).map((r, rIdx) => (
+                                            <tr key={rIdx}>
+                                              {r.map((c, cIdx) => (
+                                                <td key={cIdx}>{c || '—'}</td>
+                                              ))}
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* In-Between Add Section Bar */}
+                              <div className="cms-add-block-bar">
+                                <button
+                                  type="button"
+                                  className="cms-add-block-bar-btn"
+                                  onClick={() => handleAddSection('text', idx + 1)}
+                                >
+                                  + Text
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-add-block-bar-btn"
+                                  onClick={() => handleAddSection('heading', idx + 1)}
+                                >
+                                  + Heading
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-add-block-bar-btn"
+                                  onClick={() => handleAddSection('image', idx + 1)}
+                                >
+                                  + Image
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-add-block-bar-btn"
+                                  onClick={() => handleAddSection('video', idx + 1)}
+                                >
+                                  + Video
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-add-block-bar-btn"
+                                  onClick={() => handleAddSection('table', idx + 1)}
+                                >
+                                  + Table
+                                </button>
+                              </div>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* MODE 2: RAW CODE VIEW (FOR ADVANCED USERS) */}
+                      {editorMode === 'code' && (
+                        <div className="cms-editor-card">
+                          <div className="cms-editor-card-header-row">
+                            <label className="cms-editor-eyebrow">RAW MARKDOWN CONTENT</label>
+                            <span className="cms-tag-muted">Advanced Direct Code Mode</span>
+                          </div>
+
+                          <textarea
+                            rows={24}
+                            className="cms-editor-textarea content-area"
+                            placeholder="Write your article content in Markdown format..."
+                            value={editorContent}
+                            onChange={(e) => setEditorContent(e.target.value)}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Right Inspector Column */}
@@ -2042,6 +2896,106 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Internal / External Link Picker Modal */}
+                  {linkModalOpen && (
+                    <div className="cms-link-picker-modal-backdrop" onClick={() => setLinkModalOpen(false)}>
+                      <div className="cms-link-picker-card" onClick={(e) => e.stopPropagation()}>
+                        <div className="cms-link-picker-header">
+                          <h3>Insert Link into Section</h3>
+                          <button
+                            type="button"
+                            className="cms-modal-close-btn"
+                            onClick={() => setLinkModalOpen(false)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="cms-link-type-tabs">
+                          <button
+                            type="button"
+                            className={`cms-link-type-tab ${linkModalType === 'internal' ? 'active' : ''}`}
+                            onClick={() => setLinkModalType('internal')}
+                          >
+                            🏢 Internal Site Link
+                          </button>
+                          <button
+                            type="button"
+                            className={`cms-link-type-tab ${linkModalType === 'external' ? 'active' : ''}`}
+                            onClick={() => setLinkModalType('external')}
+                          >
+                            🌐 External Website URL
+                          </button>
+                        </div>
+
+                        {linkModalType === 'internal' ? (
+                          <div>
+                            <label className="cms-editor-eyebrow">Select Website Destination</label>
+                            <select
+                              className="cms-editor-select"
+                              value={linkModalInternalUrl}
+                              onChange={(e) => setLinkModalInternalUrl(e.target.value)}
+                            >
+                              <optgroup label="Main Pages">
+                                <option value="/store">Store Catalog (/store)</option>
+                                <option value="/blog">Jobsite Articles Hub (/blog)</option>
+                                <option value="/contact">Quote Request & Contact (/contact)</option>
+                                <option value="/about">About Happy Machinery (/about)</option>
+                                <option value="/cart">Shopping Cart & Checkout (/cart)</option>
+                              </optgroup>
+                              <optgroup label="Featured Machinery">
+                                {products.slice(0, 10).map((p) => (
+                                  <option key={p.id} value={`/store#prod-${p.id}`}>
+                                    {p.name} (${p.price.toLocaleString()})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="cms-editor-eyebrow">External Destination URL</label>
+                            <input
+                              type="url"
+                              className="cms-editor-input-sm"
+                              placeholder="https://example.com/industry-standard"
+                              value={linkModalExternalUrl}
+                              onChange={(e) => setLinkModalExternalUrl(e.target.value)}
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="cms-editor-eyebrow">Display Anchor Text</label>
+                          <input
+                            type="text"
+                            className="cms-editor-input-sm"
+                            placeholder="e.g. Explore V900 compact loader specifications"
+                            value={linkModalText}
+                            onChange={(e) => setLinkModalText(e.target.value)}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-secondary"
+                            onClick={() => setLinkModalOpen(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-red"
+                            onClick={handleInsertLinkIntoSection}
+                          >
+                            Insert Link
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

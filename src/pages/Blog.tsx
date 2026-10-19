@@ -54,6 +54,82 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     return <h5 key={key} className="blog-body-h5">{line.slice(5)}</h5>
   }
 
+  // 5. Video detection: [Watch Video...](url) or direct YouTube/Vimeo
+  const vidLinkMatch = line.match(/^\[(.*?)\]\((https?:\/\/[^\s]+)\)$/)
+  const testUrl = vidLinkMatch ? vidLinkMatch[2] : line
+  if (/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/)|vimeo\.com)/i.test(testUrl)) {
+    let embedUrl = ''
+    const ytMatch = testUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/)
+    if (ytMatch && ytMatch[1]) {
+      embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}`
+    } else {
+      const vimeoMatch = testUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)/)
+      if (vimeoMatch && vimeoMatch[1]) {
+        embedUrl = `https://player.vimeo.com/video/${vimeoMatch[1]}`
+      }
+    }
+    if (embedUrl) {
+      return (
+        <div key={key} className="blog-body-video-container">
+          <iframe
+            src={embedUrl}
+            title="Jobsite Equipment Video"
+            className="blog-body-video-iframe"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )
+    }
+  }
+
+  // 6. Markdown Table: | Col1 | Col2 |
+  if (line.startsWith('|') && line.includes('\n')) {
+    const tableLines = line.split('\n').map((l) => l.trim()).filter(Boolean)
+    if (tableLines.length >= 2) {
+      const parseRow = (rowStr: string) =>
+        rowStr.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+      const headers = parseRow(tableLines[0])
+      const rows = tableLines.slice(2).map(parseRow)
+      return (
+        <div key={key} className="blog-body-table-wrapper">
+          <table className="blog-body-table">
+            <thead>
+              <tr>
+                {headers.map((h, hIdx) => (
+                  <th key={hIdx}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  }
+
+  // 7. Bullet Lists: - item or • item
+  if (/^[-•*]\s+/m.test(line)) {
+    const listItems = line.split('\n').map((l) => l.trim()).filter(Boolean)
+    return (
+      <ul key={key} className="blog-body-ul">
+        {listItems.map((item, iIdx) => (
+          <li key={iIdx} className="blog-body-li">
+            {item.replace(/^[-•*]\s+/, '')}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
   // Raw Image URL Auto-detection
   if (/^(https?:\/\/|\/images\/)[^\s]+$/i.test(line) && /\.(png|jpg|jpeg|webp|gif|svg)/i.test(line)) {
     return (
