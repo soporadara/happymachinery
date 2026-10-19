@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import CmsLogin from './CmsLogin'
 import { getStoredSession, clearStoredSession, logSecurityEvent } from '../data/cmsAuth'
@@ -367,16 +367,13 @@ export default function AdminDashboard() {
   const [commentsData, setCommentsData] = useState<BlogComment[]>(() => DEFAULT_COMMENTS)
   const [commentFilter, setCommentFilter] = useState<'all' | 'Pending' | 'Approved' | 'Spam'>('all')
 
-  // Articles Sub-view & Visual Section Editor States
+  // Articles Sub-view & Editorial States
   const [articlesSubView, setArticlesSubView] = useState<'list' | 'editor' | 'categories'>('list')
   const [editorTitle, setEditorTitle] = useState('')
   const [editorSlug, setEditorSlug] = useState('')
   const [editorExcerpt, setEditorExcerpt] = useState('')
   const [editorContent, setEditorContent] = useState('')
-  const [articleSections, setArticleSections] = useState<ArticleSection[]>([])
-  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual')
   const [linkModalOpen, setLinkModalOpen] = useState(false)
-  const [linkModalTargetSecId, setLinkModalTargetSecId] = useState<string | null>(null)
   const [linkModalType, setLinkModalType] = useState<'internal' | 'external'>('internal')
   const [linkModalInternalUrl, setLinkModalInternalUrl] = useState('/store')
   const [linkModalExternalUrl, setLinkModalExternalUrl] = useState('https://')
@@ -389,6 +386,14 @@ export default function AdminDashboard() {
   const [editorVideoUrl, setEditorVideoUrl] = useState('')
   const [editorSeoTitle, setEditorSeoTitle] = useState('')
   const [editorSeoDesc, setEditorSeoDesc] = useState('')
+
+  // Rich WYSIWYG & Media Editor States (Matches Image 2)
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const [contentHistory, setContentHistory] = useState<string[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [showStylesMenu, setShowStylesMenu] = useState(false)
+  const [showTableMenu, setShowTableMenu] = useState(false)
+  const [assignedSeries, setAssignedSeries] = useState('None (Standalone Article)')
 
   // Categories Taxonomy State (Screenshot 5)
   const [blogCategories, setBlogCategories] = useState<{ name: string; slug: string; desc?: string; cover?: string }[]>([
@@ -686,13 +691,16 @@ export default function AdminDashboard() {
     showToast('Profile updated successfully!', 'success')
   }
 
-  // Visual Section Article Editor Handlers
+  // Editorial Article Handlers
   const openNewArticle = () => {
     setEditingArticle(null)
     setEditorTitle('')
     setEditorSlug('')
     setEditorExcerpt('')
-    setEditorContent('')
+    const starterTemplate = '# 1. Overview & Applications\n\nOperating compact skid steers on residential job sites requires balancing high performance with strict noise, space, and turf protection requirements.\n\n## Key Operating Metrics\n\n- Rated Operating Capacity: 900 lbs (408 kg)\n- Auxiliary Hydraulic Flow: 12.7 GPM @ 2,321 psi\n- Machine Width: 35.5 in (900 mm)\n\n> [!TIP]\n> Always inspect quick-disconnect auxiliary hydraulic couplers for dust or debris before attaching high-flow augers or trenchers.\n\n| Equipment Specification | V900 Standard | Pro Series |\n|---|---|---|\n| Operating Weight | 2,050 lbs | 2,250 lbs |\n| Engine Horsepower | Briggs & Stratton 23 HP | 25 HP EFI |\n| Track Width | 7.1 in (180mm) | 7.9 in (200mm) |\n'
+    setEditorContent(starterTemplate)
+    setContentHistory([starterTemplate])
+    setHistoryIndex(0)
     setEditorCategory(blogCategories[0]?.name || 'Jobsite Productivity')
     setEditorAuthor(currentUser?.name || 'Happy Machinery')
     setEditorStatus('Draft')
@@ -701,47 +709,6 @@ export default function AdminDashboard() {
     setEditorVideoUrl('')
     setEditorSeoTitle('')
     setEditorSeoDesc('')
-    setArticleSections([
-      {
-        id: `sec_${Date.now()}_1`,
-        type: 'heading',
-        level: 2,
-        heading: '1. Overview & Applications'
-      },
-      {
-        id: `sec_${Date.now()}_2`,
-        type: 'text',
-        content: 'Operating compact skid steers on residential job sites requires balancing high performance with strict noise, space, and turf protection requirements.'
-      },
-      {
-        id: `sec_${Date.now()}_3`,
-        type: 'image',
-        imageUrl: '/images/why-choose-v900-jobsite.png',
-        imageCaption: 'V900 Compact Mini Track Loader on residential jobsite'
-      },
-      {
-        id: `sec_${Date.now()}_4`,
-        type: 'heading',
-        level: 2,
-        heading: '2. Equipment Specifications'
-      },
-      {
-        id: `sec_${Date.now()}_5`,
-        type: 'table',
-        headers: ['Specification', 'Value', 'Application'],
-        rows: [
-          ['Rated Operating Capacity', '900 lbs (408 kg)', 'Handles pallets, sod & gravel'],
-          ['Hydraulic Flow', '12.7 GPM @ 2,321 psi', 'Runs heavy augers & trenchers'],
-          ['Machine Width', '35.5 in (900 mm)', 'Passes through 36-inch gates']
-        ]
-      },
-      {
-        id: `sec_${Date.now()}_6`,
-        type: 'video',
-        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-      }
-    ])
-    setEditorMode('visual')
     setArticlesSubView('editor')
   }
 
@@ -751,7 +718,10 @@ export default function AdminDashboard() {
     setEditorSlug(post.slug || '')
     setEditorExcerpt(post.excerpt)
     const rawParagraphs = Array.isArray(post.content) ? post.content : [post.content || '']
-    setEditorContent(rawParagraphs.join('\n\n'))
+    const contentText = rawParagraphs.join('\n\n')
+    setEditorContent(contentText)
+    setContentHistory([contentText])
+    setHistoryIndex(0)
     setEditorCategory(post.category)
     setEditorAuthor(post.author || 'Happy Machinery')
     setEditorStatus('Published')
@@ -760,179 +730,59 @@ export default function AdminDashboard() {
     setEditorVideoUrl('')
     setEditorSeoTitle(post.title)
     setEditorSeoDesc(post.excerpt)
-
-    const parsed = parseContentToSections(rawParagraphs)
-    if (parsed.length === 0) {
-      setArticleSections([
-        { id: `sec_${Date.now()}`, type: 'text', content: post.excerpt || '' }
-      ])
-    } else {
-      setArticleSections(parsed)
-    }
-    setEditorMode('visual')
     setArticlesSubView('editor')
   }
 
-  // Section manipulation handlers
-  const handleMoveSection = (index: number, direction: 'up' | 'down') => {
-    setArticleSections((prev) => {
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev
-      const copy = [...prev]
-      const [item] = copy.splice(index, 1)
-      copy.splice(targetIndex, 0, item)
-      return copy
-    })
-  }
-
-  const handleDeleteSection = (id: string) => {
-    setArticleSections((prev) => {
-      if (prev.length <= 1) {
-        showToast('Article must contain at least one section block.', 'warning')
-        return prev
-      }
-      return prev.filter((s) => s.id !== id)
-    })
-  }
-
-  const handleDuplicateSection = (index: number) => {
-    setArticleSections((prev) => {
-      const target = prev[index]
-      const duplicate: ArticleSection = {
-        ...target,
-        id: `sec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        rows: target.rows ? target.rows.map((r) => [...r]) : undefined,
-        headers: target.headers ? [...target.headers] : undefined
-      }
-      const copy = [...prev]
-      copy.splice(index + 1, 0, duplicate)
-      return copy
-    })
-    showToast('Section duplicated.', 'success')
-  }
-
-  const handleAddSection = (type: ArticleSectionType, insertIndex?: number) => {
-    const newSection: ArticleSection = {
-      id: `sec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      type
-    }
-    if (type === 'heading') {
-      newSection.level = 2
-      newSection.heading = ''
-    } else if (type === 'text') {
-      newSection.content = ''
-    } else if (type === 'image') {
-      newSection.imageUrl = '/images/why-choose-v900-jobsite.png'
-      newSection.imageCaption = 'Jobsite loader operations'
-    } else if (type === 'video') {
-      newSection.videoUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-    } else if (type === 'table') {
-      newSection.headers = ['Equipment Feature', 'Specifications']
-      newSection.rows = [
-        ['Operating Capacity', '900 lbs (408 kg)'],
-        ['Hydraulic Flow', '12.7 GPM @ 2,321 psi']
-      ]
-    }
-
-    setArticleSections((prev) => {
-      const copy = [...prev]
-      if (typeof insertIndex === 'number' && insertIndex >= 0 && insertIndex <= copy.length) {
-        copy.splice(insertIndex, 0, newSection)
-      } else {
-        copy.push(newSection)
-      }
-      return copy
-    })
-    showToast(`Added ${type} section block.`, 'success')
-  }
-
-  const handleUpdateSection = (id: string, patch: Partial<ArticleSection>) => {
-    setArticleSections((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...patch } : s))
-    )
-  }
-
-  // Interactive Table Helpers
-  const handleAddTableRow = (sectionId: string) => {
-    setArticleSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId || s.type !== 'table') return s
-        const colCount = s.headers?.length || 2
-        return { ...s, rows: [...(s.rows || []), new Array(colCount).fill('')] }
-      })
-    )
-  }
-
-  const handleAddTableCol = (sectionId: string) => {
-    setArticleSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId || s.type !== 'table') return s
-        const headers = [...(s.headers || ['Col 1', 'Col 2']), `Col ${(s.headers?.length || 2) + 1}`]
-        const rows = (s.rows || []).map((r) => [...r, ''])
-        return { ...s, headers, rows }
-      })
-    )
-  }
-
-  const handleDeleteTableRow = (sectionId: string, rowIndex: number) => {
-    setArticleSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId || s.type !== 'table') return s
-        return { ...s, rows: (s.rows || []).filter((_, i) => i !== rowIndex) }
-      })
-    )
-  }
-
-  const handleUpdateTableHeader = (sectionId: string, colIndex: number, val: string) => {
-    setArticleSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId || s.type !== 'table') return s
-        const headers = [...(s.headers || [])]
-        headers[colIndex] = val
-        return { ...s, headers }
-      })
-    )
-  }
-
-  const handleUpdateTableCell = (sectionId: string, rowIndex: number, colIndex: number, val: string) => {
-    setArticleSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId || s.type !== 'table') return s
-        const rows = (s.rows || []).map((row, rIdx) => {
-          if (rIdx !== rowIndex) return row
-          const newRow = [...row]
-          newRow[colIndex] = val
-          return newRow
-        })
-        return { ...s, rows }
-      })
-    )
-  }
-
-  // Link Inserter Modal Helpers
-  const handleOpenLinkModal = (sectionId: string) => {
-    setLinkModalTargetSecId(sectionId)
-    setLinkModalText('')
-    setLinkModalInternalUrl('/store')
-    setLinkModalExternalUrl('https://')
-    setLinkModalOpen(true)
-  }
-
   const handleInsertLinkIntoSection = () => {
-    if (!linkModalTargetSecId) return
     const url = linkModalType === 'internal' ? linkModalInternalUrl : linkModalExternalUrl
     const text = linkModalText.trim() || (linkModalType === 'internal' ? linkModalInternalUrl : 'Link')
     const mdSnippet = `[${text}](${url})`
-    setArticleSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== linkModalTargetSecId || s.type !== 'text') return s
-        const currentContent = s.content || ''
-        const newContent = currentContent ? `${currentContent} ${mdSnippet}` : mdSnippet
-        return { ...s, content: newContent }
-      })
-    )
+    insertTextAtCursor(mdSnippet, '', '')
     setLinkModalOpen(false)
-    showToast('Link inserted into section.', 'success')
+    showToast('Link inserted into article.', 'success')
+  }
+
+
+  const pushContentHistory = (newVal: string) => {
+    setContentHistory((prev) => [...prev.slice(0, historyIndex + 1), newVal])
+    setHistoryIndex((prev) => prev + 1)
+  }
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevVal = contentHistory[historyIndex - 1]
+      setHistoryIndex((prev) => prev - 1)
+      setEditorContent(prevVal)
+    }
+  }
+
+  const handleRedo = () => {
+    if (historyIndex < contentHistory.length - 1) {
+      const nextVal = contentHistory[historyIndex + 1]
+      setHistoryIndex((prev) => prev + 1)
+      setEditorContent(nextVal)
+    }
+  }
+
+  const insertTextAtCursor = (prefix: string, suffix: string = '', defaultText: string = '') => {
+    const textarea = contentTextareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selected = editorContent.substring(start, end)
+    const textToInsert = selected || defaultText
+    const replacement = `${prefix}${textToInsert}${suffix}`
+
+    const newContent = editorContent.substring(0, start) + replacement + editorContent.substring(end)
+    setEditorContent(newContent)
+    pushContentHistory(newContent)
+
+    setTimeout(() => {
+      textarea.focus()
+      const newCursor = start + prefix.length + textToInsert.length + suffix.length
+      textarea.setSelectionRange(newCursor, newCursor)
+    }, 0)
   }
 
   const handleSaveArticle = async (status: 'Published' | 'Draft' | 'Scheduled') => {
@@ -942,9 +792,7 @@ export default function AdminDashboard() {
     }
 
     let contentParagraphs: string[] = []
-    if (editorMode === 'visual') {
-      contentParagraphs = serializeSectionsToContent(articleSections)
-    } else {
+    if (editorContent.trim()) {
       contentParagraphs = editorContent
         .split(/\n\s*\n/)
         .map((p) => p.trim())
@@ -956,11 +804,9 @@ export default function AdminDashboard() {
       return
     }
 
-    // Auto-generate excerpt since summary/excerpt card was removed
-    const firstTextSection = articleSections.find((s) => s.type === 'text')
     const finalExcerpt =
       editorExcerpt.trim() ||
-      (firstTextSection?.content ? firstTextSection.content.slice(0, 220).trim() + '...' : editorTitle)
+      (contentParagraphs[0] ? contentParagraphs[0].slice(0, 220).trim() + '...' : editorTitle)
 
     const finalSlug = editorSlug.trim() || editorTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -2441,7 +2287,7 @@ export default function AdminDashboard() {
               {/* SUBVIEW A: NEW / EDIT ARTICLE (VISUAL SECTION & BLOCK BUILDER) */}
               {articlesSubView === 'editor' && (
                 <div className="cms-rafvex-editor-container">
-                  {/* Top Header Row with Back Button, View Mode Toggle, and Actions */}
+                  {/* Top Header Row with Back Button and Actions (Matching Image 2) */}
                   <div className="cms-rafvex-editor-header">
                     <div className="cms-editor-header-left">
                       <button
@@ -2449,52 +2295,19 @@ export default function AdminDashboard() {
                         className="cms-btn-back-link"
                         onClick={() => setArticlesSubView('list')}
                       >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="15 18 9 12 15 6" />
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="19" y1="12" x2="5" y2="12" />
+                          <polyline points="12 19 5 12 12 5" />
                         </svg>
                         <span>{editingArticle ? 'Edit Article' : 'New Article'}</span>
                       </button>
-                      <p className="cms-editor-subtitle">Write, design and publish an editorial post with live media blocks</p>
+                      <p className="cms-editor-subtitle">Write and publish an editorial post</p>
                     </div>
 
                     <div className="cms-editor-header-actions">
-                      {/* View Mode Toggle */}
-                      <div className="cms-view-mode-toggle">
-                        <button
-                          type="button"
-                          className={`cms-view-toggle-btn ${editorMode === 'visual' ? 'active' : ''}`}
-                          onClick={() => {
-                            if (editorMode === 'code') {
-                              setArticleSections(parseContentToSections(editorContent))
-                            }
-                            setEditorMode('visual')
-                          }}
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="7" height="7" />
-                            <rect x="14" y="3" width="7" height="7" />
-                            <rect x="14" y="14" width="7" height="7" />
-                            <rect x="3" y="14" width="7" height="7" />
-                          </svg>
-                          <span>Visual Blocks</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`cms-view-toggle-btn ${editorMode === 'code' ? 'active' : ''}`}
-                          onClick={() => {
-                            if (editorMode === 'visual') {
-                              setEditorContent(serializeSectionsToContent(articleSections).join('\n\n'))
-                            }
-                            setEditorMode('code')
-                          }}
-                        >
-                          &lt; / &gt; Raw Code
-                        </button>
-                      </div>
-
                       <button
                         type="button"
-                        className="cms-btn cms-btn-secondary"
+                        className="cms-btn cms-btn-secondary cms-btn-outline-white"
                         onClick={() => handleSaveArticle('Draft')}
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2506,9 +2319,14 @@ export default function AdminDashboard() {
                       </button>
                       <button
                         type="button"
-                        className="cms-btn cms-btn-primary"
+                        className="cms-btn cms-btn-publish-red"
                         onClick={() => handleSaveArticle('Published')}
                       >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
                         Publish Article
                       </button>
                     </div>
@@ -2518,7 +2336,7 @@ export default function AdminDashboard() {
                   <div className="cms-rafvex-editor-grid">
                     {/* Left Main Column */}
                     <div className="cms-editor-main-col">
-                      {/* Section 1: Title & Slug (Always on Top) */}
+                      {/* Card 1: Article Title & Slug (Matching Image 2) */}
                       <div className="cms-editor-card">
                         <label className="cms-editor-eyebrow">ARTICLE TITLE</label>
                         <input
@@ -2535,6 +2353,13 @@ export default function AdminDashboard() {
                           required
                         />
                         <div className="cms-editor-slug-row">
+                          <span className="cms-slug-globe-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                          </span>
                           <span className="cms-slug-prefix">happymachinery.com/blog/</span>
                           <input
                             type="text"
@@ -2546,576 +2371,372 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* MODE 1: VISUAL SECTION & BLOCK BUILDER (DEFAULT) */}
-                      {editorMode === 'visual' && (
-                        <div className="cms-sections-builder-container">
-                          {/* Top Status & Quick Add Bar */}
-                          <div className="cms-builder-top-bar">
-                            <div className="cms-builder-stats">
-                              <span className="cms-builder-badge">{articleSections.length} Content Blocks</span>
-                              <span>Build your article section by section without markdown code</span>
-                            </div>
-                            <div className="cms-builder-quick-actions">
+                      {/* Card 2: Article Summary / Excerpt (Matching Image 2) */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-header-row">
+                          <label className="cms-editor-eyebrow">ARTICLE SUMMARY / EXCERPT</label>
+                          <span className="cms-char-counter">{editorExcerpt.length}/300 chars</span>
+                        </div>
+                        <textarea
+                          rows={3}
+                          className="cms-editor-textarea cms-excerpt-textarea"
+                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
+                          value={editorExcerpt}
+                          maxLength={300}
+                          onChange={(e) => setEditorExcerpt(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Card 3: Article Content (Unified Rich WYSIWYG & Media - Image 2) */}
+                      <div className="cms-editor-card cms-article-content-card">
+                        <div className="cms-editor-card-header-row">
+                          <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
+                          <span className="cms-wysiwyg-badge">Rich WYSIWYG & Media</span>
+                        </div>
+
+                        {/* Rich WYSIWYG Toolbar */}
+                        <div className="cms-wysiwyg-toolbar">
+                          {/* Formatting Group */}
+                          <div className="cms-tb-group">
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Bold (**text**)"
+                              onClick={() => insertTextAtCursor("**", "**", "bold text")}
+                            >
+                              <strong>B</strong>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Italic (*text*)"
+                              onClick={() => insertTextAtCursor("*", "*", "italic text")}
+                            >
+                              <em>I</em>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Underline (<u>text</u>)"
+                              onClick={() => insertTextAtCursor("<u>", "</u>", "underlined text")}
+                            >
+                              <span style={{ textDecoration: "underline" }}>U</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Strikethrough (~~text~~)"
+                              onClick={() => insertTextAtCursor("~~", "~~", "strikethrough text")}
+                            >
+                              <span style={{ textDecoration: "line-through" }}>S</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Inline Code (`code`)"
+                              onClick={() => insertTextAtCursor("`", "`", "code")}
+                            >
+                              &lt;&gt;
+                            </button>
+                          </div>
+
+                          <div className="cms-tb-sep" />
+
+                          {/* Headings */}
+                          <div className="cms-tb-group">
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Heading 1"
+                              onClick={() => insertTextAtCursor("\n# ", "\n", "Main Section Title")}
+                            >
+                              H1
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Heading 2"
+                              onClick={() => insertTextAtCursor("\n## ", "\n", "Sub Section Title")}
+                            >
+                              H2
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Heading 3"
+                              onClick={() => insertTextAtCursor("\n### ", "\n", "Topic Subsection")}
+                            >
+                              H3
+                            </button>
+                          </div>
+
+                          <div className="cms-tb-sep" />
+
+                          {/* Lists & Block formatting */}
+                          <div className="cms-tb-group">
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Bullet List"
+                              onClick={() => insertTextAtCursor("\n- ", "\n", "Key technical specification")}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="8" y1="6" x2="21" y2="6" />
+                                <line x1="8" y1="12" x2="21" y2="12" />
+                                <line x1="8" y1="18" x2="21" y2="18" />
+                                <circle cx="3" cy="6" r="1.5" fill="currentColor" />
+                                <circle cx="3" cy="12" r="1.5" fill="currentColor" />
+                                <circle cx="3" cy="18" r="1.5" fill="currentColor" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Numbered List"
+                              onClick={() => insertTextAtCursor("\n1. ", "\n", "First operational step")}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="10" y1="6" x2="21" y2="6" />
+                                <line x1="10" y1="12" x2="21" y2="12" />
+                                <line x1="10" y1="18" x2="21" y2="18" />
+                                <path d="M4 6h1v4M4 10h2M3 14h3l-3 4h3" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Blockquote"
+                              onClick={() => insertTextAtCursor("\n> ", "\n", "Editorial quote or equipment recommendation...")}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                                <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Horizontal Divider"
+                              onClick={() => insertTextAtCursor("\n\n---\n\n", "", "")}
+                            >
+                              —
+                            </button>
+                          </div>
+
+                          <div className="cms-tb-sep" />
+
+                          {/* Media & Embeds */}
+                          <div className="cms-tb-group">
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Insert Link"
+                              onClick={() => {
+                                setLinkModalText('')
+                                setLinkModalOpen(true)
+                              }}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Insert Image"
+                              onClick={() => insertTextAtCursor("\n![Image Alt Description](", ")\n", "/images/v900-walkaround.png")}
+                            >
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                              </svg>
+                            </button>
+
+                            {/* Terminal Pill Button */}
+                            <button
+                              type="button"
+                              className="cms-tb-btn-terminal"
+                              title="Insert Terminal / Code Block"
+                              onClick={() => insertTextAtCursor("\n```bash\n# CLI / Diagnostics Command\n", "\n```\n", "curl -s https://api.happymachinery.com/specs")}
+                            >
+                              <span className="cms-terminal-dots">
+                                <span className="dot red" />
+                                <span className="dot yellow" />
+                                <span className="dot green" />
+                              </span>
+                              <span>&gt;_ Terminal</span>
+                            </button>
+
+                            {/* YouTube Pill Button */}
+                            <button
+                              type="button"
+                              className="cms-tb-btn-youtube"
+                              title="Insert YouTube Video Embed"
+                              onClick={() => insertTextAtCursor("\n<div className=\"cms-video-embed\">\n  <iframe src=\"", "\" title=\"YouTube video player\" allowFullScreen></iframe>\n</div>\n", "https://www.youtube.com/embed/dQw4w9WgXcQ")}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                              </svg>
+                              <span>YouTube</span>
+                            </button>
+
+                            {/* Table Dropdown */}
+                            <div className="cms-tb-dropdown-rel">
                               <button
                                 type="button"
-                                className="cms-quick-add-btn"
-                                onClick={() => handleAddSection('text')}
+                                className="cms-tb-btn-pill"
+                                onClick={() => setShowTableMenu(!showTableMenu)}
                               >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <line x1="12" y1="5" x2="12" y2="19" />
-                                  <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                <span>Text</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="cms-quick-add-btn"
-                                onClick={() => handleAddSection('heading')}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <line x1="12" y1="5" x2="12" y2="19" />
-                                  <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                <span>Heading</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="cms-quick-add-btn"
-                                onClick={() => handleAddSection('image')}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <line x1="12" y1="5" x2="12" y2="19" />
-                                  <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                <span>Image</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="cms-quick-add-btn"
-                                onClick={() => handleAddSection('video')}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <line x1="12" y1="5" x2="12" y2="19" />
-                                  <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                <span>Video</span>
-                              </button>
-                              <button
-                                type="button"
-                                className="cms-quick-add-btn"
-                                onClick={() => handleAddSection('table')}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <line x1="12" y1="5" x2="12" y2="19" />
-                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                                  <line x1="3" y1="9" x2="21" y2="9" />
+                                  <line x1="3" y1="15" x2="21" y2="15" />
+                                  <line x1="9" y1="3" x2="9" y2="21" />
+                                  <line x1="15" y1="3" x2="15" y2="21" />
                                 </svg>
                                 <span>Table</span>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
                               </button>
+
+                              {showTableMenu && (
+                                <div className="cms-tb-dropdown-menu">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      insertTextAtCursor(
+                                        "\n| Specification | Details |\n|---|---|\n| Operating Weight | 2,050 lbs |\n| Engine | Briggs & Stratton 23HP |\n| Rated Operating Capacity | 880 lbs |\n\n"
+                                      )
+                                      setShowTableMenu(false)
+                                    }}
+                                  >
+                                    Standard 2-Column Specs Table
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      insertTextAtCursor(
+                                        "\n| Feature | Standard V900 | EPA Pro Series |\n|---|---|---|\n| Horsepower | 23 HP | 25 HP EFI |\n| Auxiliary Hydraulics | 11.2 GPM | 13.5 GPM High-Flow |\n| Track Width | 7.1 in (180mm) | 7.9 in (200mm) |\n\n"
+                                      )
+                                      setShowTableMenu(false)
+                                    }}
+                                  >
+                                    3-Column Comparison Table
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
 
-                          {/* Loop through each section card */}
-                          {articleSections.map((sec, idx) => (
-                            <React.Fragment key={sec.id}>
-                              <div className="cms-section-card">
-                                {/* Section Header Row with Drag/Index, Type, and Actions */}
-                                <div className="cms-section-card-header">
-                                  <div className="cms-section-header-left">
-                                    <span className="cms-section-index-pill">#{idx + 1}</span>
-                                    <span className="cms-section-type-pill">
-                                      {sec.type === 'heading' && (
-                                        <span className="cms-sec-type-flex">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16" /></svg>
-                                          <span>Section Heading</span>
-                                        </span>
-                                      )}
-                                      {sec.type === 'text' && (
-                                        <span className="cms-sec-type-flex">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" /></svg>
-                                          <span>Text Paragraph</span>
-                                        </span>
-                                      )}
-                                      {sec.type === 'image' && (
-                                        <span className="cms-sec-type-flex">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-                                          <span>Image with Live Preview</span>
-                                        </span>
-                                      )}
-                                      {sec.type === 'video' && (
-                                        <span className="cms-sec-type-flex">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
-                                          <span>Video Player Preview</span>
-                                        </span>
-                                      )}
-                                      {sec.type === 'table' && (
-                                        <span className="cms-sec-type-flex">
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>
-                                          <span>Specifications Table</span>
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
+                          <div className="cms-tb-sep" />
 
-                                  <div className="cms-section-actions-row">
-                                    <button
-                                      type="button"
-                                      className="cms-sec-action-btn"
-                                      title="Move Up"
-                                      disabled={idx === 0}
-                                      onClick={() => handleMoveSection(idx, 'up')}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
-                                      <span>Up</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="cms-sec-action-btn"
-                                      title="Move Down"
-                                      disabled={idx === articleSections.length - 1}
-                                      onClick={() => handleMoveSection(idx, 'down')}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
-                                      <span>Down</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="cms-sec-action-btn"
-                                      title="Duplicate Section"
-                                      onClick={() => handleDuplicateSection(idx)}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                                      <span>Duplicate</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="cms-sec-action-btn delete"
-                                      title="Delete Section"
-                                      disabled={articleSections.length <= 1}
-                                      onClick={() => handleDeleteSection(sec.id)}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                                      <span>Delete</span>
-                                    </button>
-                                  </div>
-                                </div>
+                          {/* Styles Dropdown */}
+                          <div className="cms-tb-dropdown-rel">
+                            <button
+                              type="button"
+                              className="cms-tb-btn-pill"
+                              onClick={() => setShowStylesMenu(!showStylesMenu)}
+                            >
+                              <span>✨ Styles</span>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
 
-                                {/* BLOCK 1: HEADING */}
-                                {sec.type === 'heading' && (
-                                  <div className="cms-heading-block-body">
-                                    <div className="cms-level-selector">
-                                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--cms-text-muted)' }}>Heading Level:</span>
-                                      <button
-                                        type="button"
-                                        className={`cms-level-btn ${(sec.level || 2) === 2 ? 'active' : ''}`}
-                                        onClick={() => handleUpdateSection(sec.id, { level: 2 })}
-                                      >
-                                        H2 Section
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={`cms-level-btn ${sec.level === 3 ? 'active' : ''}`}
-                                        onClick={() => handleUpdateSection(sec.id, { level: 3 })}
-                                      >
-                                        H3 Subsection
-                                      </button>
-                                    </div>
-                                    <input
-                                      type="text"
-                                      className="cms-heading-input"
-                                      placeholder="e.g. 1. Navigating Tight Access Points on Jobsites"
-                                      value={sec.heading || ''}
-                                      onChange={(e) => handleUpdateSection(sec.id, { heading: e.target.value })}
-                                    />
-                                  </div>
-                                )}
-
-                                {/* BLOCK 2: TEXT */}
-                                {sec.type === 'text' && (
-                                  <div className="cms-text-block-body">
-                                    <div className="cms-text-format-bar">
-                                      <button
-                                        type="button"
-                                        className="cms-inline-fmt-btn"
-                                        title="Add Bold snippet"
-                                        onClick={() => {
-                                          const prev = sec.content || ''
-                                          handleUpdateSection(sec.id, { content: prev ? `${prev} **bold text**` : '**bold text**' })
-                                        }}
-                                      >
-                                        <b>B</b> Bold
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="cms-inline-fmt-btn"
-                                        title="Add Italic snippet"
-                                        onClick={() => {
-                                          const prev = sec.content || ''
-                                          handleUpdateSection(sec.id, { content: prev ? `${prev} *italic text*` : '*italic text*' })
-                                        }}
-                                      >
-                                        <i>I</i> Italic
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="cms-inline-fmt-btn"
-                                        title="Add bullet item"
-                                        onClick={() => {
-                                          const prev = sec.content || ''
-                                          handleUpdateSection(sec.id, { content: prev ? `${prev}\n- Key jobsite point` : '- Key jobsite point' })
-                                        }}
-                                      >
-                                        &bull; Bullet List
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="cms-inline-fmt-btn"
-                                        title="Insert Internal or External Link"
-                                        onClick={() => handleOpenLinkModal(sec.id)}
-                                      >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                                        </svg>
-                                        <span>Insert Link</span>
-                                      </button>
-                                    </div>
-                                    <textarea
-                                      rows={6}
-                                      className="cms-section-textarea"
-                                      placeholder="Write your section content here in clean text. You can describe equipment techniques, jobsite tips, or machinery operations..."
-                                      value={sec.content || ''}
-                                      onChange={(e) => handleUpdateSection(sec.id, { content: e.target.value })}
-                                    />
-                                  </div>
-                                )}
-
-                                {/* BLOCK 3: IMAGE WITH LIVE PREVIEW */}
-                                {sec.type === 'image' && (
-                                  <div className="cms-image-block-body">
-                                    <div className="cms-image-inputs-grid">
-                                      <div>
-                                        <label className="cms-editor-eyebrow">Image URL or Local Path</label>
-                                        <input
-                                          type="text"
-                                          className="cms-editor-input-sm"
-                                          placeholder="/images/... or https://..."
-                                          value={sec.imageUrl || ''}
-                                          onChange={(e) => handleUpdateSection(sec.id, { imageUrl: e.target.value })}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="cms-editor-eyebrow">Image Caption / Alt Description</label>
-                                        <input
-                                          type="text"
-                                          className="cms-editor-input-sm"
-                                          placeholder="e.g. TYPHON V900 loader operating in narrow residential gate"
-                                          value={sec.imageCaption || ''}
-                                          onChange={(e) => handleUpdateSection(sec.id, { imageCaption: e.target.value })}
-                                        />
-                                      </div>
-                                    </div>
-
-                                    {/* Preset Media Quick Select */}
-                                    <div className="cms-preset-chips-row">
-                                      <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)', fontWeight: 700 }}>Quick Preset:</span>
-                                      <button
-                                        type="button"
-                                        className="cms-preset-chip"
-                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/why-choose-v900-jobsite.png', imageCaption: 'V900 Jobsite Operations' })}
-                                      >
-                                        Jobsite Action
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="cms-preset-chip"
-                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/loader-yellow.jpg', imageCaption: 'Industrial Yellow Skid Steer' })}
-                                      >
-                                        Yellow Loader
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="cms-preset-chip"
-                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/loader-blue.jpg', imageCaption: 'Cobalt Blue Mini Skid Steer' })}
-                                      >
-                                        Blue Loader
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="cms-preset-chip"
-                                        onClick={() => handleUpdateSection(sec.id, { imageUrl: '/images/loader-red.png', imageCaption: 'Crimson Red Compact Track Loader' })}
-                                      >
-                                        Red Loader
-                                      </button>
-                                    </div>
-
-                                    {/* LIVE IMAGE PREVIEW FRAME */}
-                                    {sec.imageUrl && (
-                                      <div className="cms-image-preview-frame">
-                                        <img
-                                          src={sec.imageUrl}
-                                          alt={sec.imageCaption || 'Preview'}
-                                          onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }}
-                                        />
-                                        {sec.imageCaption && (
-                                          <div className="cms-image-preview-caption-bar">
-                                            <span>📷</span>
-                                            <span>{sec.imageCaption}</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* BLOCK 4: VIDEO WITH LIVE PLAYER PREVIEW */}
-                                {sec.type === 'video' && (
-                                  <div className="cms-video-block-body">
-                                    <div>
-                                      <label className="cms-editor-eyebrow">Video URL (YouTube, Vimeo, or MP4)</label>
-                                      <input
-                                        type="text"
-                                        className="cms-editor-input-sm"
-                                        placeholder="https://www.youtube.com/watch?v=..."
-                                        value={sec.videoUrl || ''}
-                                        onChange={(e) => handleUpdateSection(sec.id, { videoUrl: e.target.value })}
-                                      />
-                                    </div>
-
-                                    <div className="cms-preset-chips-row">
-                                      <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)', fontWeight: 700 }}>Quick Demo Video:</span>
-                                      <button
-                                        type="button"
-                                        className="cms-preset-chip"
-                                        onClick={() => handleUpdateSection(sec.id, { videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' })}
-                                      >
-                                        YouTube Demo
-                                      </button>
-                                    </div>
-
-                                    {/* LIVE VIDEO PLAYER PREVIEW */}
-                                    {getEmbedVideoUrl(sec.videoUrl) ? (
-                                      <div className="cms-video-preview-frame">
-                                        <iframe
-                                          src={getEmbedVideoUrl(sec.videoUrl)!}
-                                          title="Video Preview"
-                                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                          allowFullScreen
-                                        />
-                                      </div>
-                                    ) : (
-                                      <div className="cms-video-helper-tag">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <circle cx="12" cy="12" r="10" />
-                                          <line x1="12" y1="16" x2="12" y2="12" />
-                                          <line x1="12" y1="8" x2="12.01" y2="8" />
-                                        </svg>
-                                        <span>Enter a valid YouTube, Vimeo, or MP4 URL above to see the live player preview here.</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* BLOCK 5: INTERACTIVE TABLE WITH LIVE PREVIEW */}
-                                {sec.type === 'table' && (
-                                  <div className="cms-table-block-body">
-                                    <div className="cms-table-tools-header">
-                                      <div className="cms-table-tools-left">
-                                        <button
-                                          type="button"
-                                          className="cms-quick-add-btn"
-                                          onClick={() => handleAddTableCol(sec.id)}
-                                        >
-                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                            <line x1="12" y1="5" x2="12" y2="19" />
-                                            <line x1="5" y1="12" x2="19" y2="12" />
-                                          </svg>
-                                          <span>Add Column</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-quick-add-btn"
-                                          onClick={() => handleAddTableRow(sec.id)}
-                                        >
-                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                            <line x1="12" y1="5" x2="12" y2="19" />
-                                            <line x1="5" y1="12" x2="19" y2="12" />
-                                          </svg>
-                                          <span>Add Row</span>
-                                        </button>
-                                      </div>
-                                      <span style={{ fontSize: '0.75rem', color: 'var(--cms-text-muted)' }}>
-                                        Interactive spreadsheet editor with live website preview
-                                      </span>
-                                    </div>
-
-                                    {/* Editable Table Grid */}
-                                    <div className="cms-table-editor-scroll">
-                                      <table className="cms-interactive-table">
-                                        <thead>
-                                          <tr>
-                                            {(sec.headers || ['Feature', 'Specification']).map((h, colIdx) => (
-                                              <th key={colIdx}>
-                                                <input
-                                                  type="text"
-                                                  className="cms-tbl-input-header"
-                                                  value={h}
-                                                  placeholder={`Column ${colIdx + 1}`}
-                                                  onChange={(e) => handleUpdateTableHeader(sec.id, colIdx, e.target.value)}
-                                                />
-                                              </th>
-                                            ))}
-                                            <th style={{ width: '40px', textAlign: 'center' }}></th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {(sec.rows || []).map((row, rowIdx) => (
-                                            <tr key={rowIdx}>
-                                              {row.map((cell, colIdx) => (
-                                                <td key={colIdx}>
-                                                  <input
-                                                    type="text"
-                                                    className="cms-tbl-input-cell"
-                                                    value={cell}
-                                                    placeholder="Enter value..."
-                                                    onChange={(e) => handleUpdateTableCell(sec.id, rowIdx, colIdx, e.target.value)}
-                                                  />
-                                                </td>
-                                              ))}
-                                              <td style={{ textAlign: 'center' }}>
-                                                <button
-                                                  type="button"
-                                                  className="cms-tbl-del-row-btn"
-                                                  title="Delete Row"
-                                                  onClick={() => handleDeleteTableRow(sec.id, rowIdx)}
-                                                >
-                                                  ✕
-                                                </button>
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-
-                                    {/* LIVE STYLED TABLE PREVIEW */}
-                                    <div className="cms-table-preview-card">
-                                      <div className="cms-table-preview-title">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                          <circle cx="12" cy="12" r="3" />
-                                        </svg>
-                                        <span>Live Visitor Table Preview</span>
-                                      </div>
-                                      <table className="cms-live-styled-table">
-                                        <thead>
-                                          <tr>
-                                            {(sec.headers || ['Feature', 'Specification']).map((h, hIdx) => (
-                                              <th key={hIdx}>{h || `Col ${hIdx + 1}`}</th>
-                                            ))}
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {(sec.rows || []).map((r, rIdx) => (
-                                            <tr key={rIdx}>
-                                              {r.map((c, cIdx) => (
-                                                <td key={cIdx}>{c || '—'}</td>
-                                              ))}
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* In-Between Add Section Bar */}
-                              <div className="cms-add-block-bar">
+                            {showStylesMenu && (
+                              <div className="cms-tb-dropdown-menu">
                                 <button
                                   type="button"
-                                  className="cms-add-block-bar-btn"
-                                  onClick={() => handleAddSection('text', idx + 1)}
+                                  onClick={() => {
+                                    insertTextAtCursor("\n> [!NOTE]\n> ", "\n\n", "Important note or operation detail for equipment owners.")
+                                    setShowStylesMenu(false)
+                                  }}
                                 >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                  </svg>
-                                  <span>Text</span>
+                                  📘 Note Callout
                                 </button>
                                 <button
                                   type="button"
-                                  className="cms-add-block-bar-btn"
-                                  onClick={() => handleAddSection('heading', idx + 1)}
+                                  onClick={() => {
+                                    insertTextAtCursor("\n> [!TIP]\n> ", "\n\n", "Pro tip: Always warm up the hydraulic oil for 5 minutes before heavy digging.")
+                                    setShowStylesMenu(false)
+                                  }}
                                 >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                  </svg>
-                                  <span>Heading</span>
+                                  💡 Pro Tip Callout
                                 </button>
                                 <button
                                   type="button"
-                                  className="cms-add-block-bar-btn"
-                                  onClick={() => handleAddSection('image', idx + 1)}
+                                  onClick={() => {
+                                    insertTextAtCursor("\n> [!WARNING]\n> ", "\n\n", "Safety precaution: Never exceed the rated operating capacity on slopes.")
+                                    setShowStylesMenu(false)
+                                  }}
                                 >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                  </svg>
-                                  <span>Image</span>
+                                  ⚠️ Warning Callout
                                 </button>
                                 <button
                                   type="button"
-                                  className="cms-add-block-bar-btn"
-                                  onClick={() => handleAddSection('video', idx + 1)}
+                                  onClick={() => {
+                                    insertTextAtCursor("\n> [!IMPORTANT]\n> ", "\n\n", "Critical maintenance requirement: Grease all loader arm pins every 10 hours.")
+                                    setShowStylesMenu(false)
+                                  }}
                                 >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                  </svg>
-                                  <span>Video</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cms-add-block-bar-btn"
-                                  onClick={() => handleAddSection('table', idx + 1)}
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                  </svg>
-                                  <span>Table</span>
+                                  🚨 Important Callout
                                 </button>
                               </div>
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* MODE 2: RAW CODE VIEW (FOR ADVANCED USERS) */}
-                      {editorMode === 'code' && (
-                        <div className="cms-editor-card">
-                          <div className="cms-editor-card-header-row">
-                            <label className="cms-editor-eyebrow">RAW MARKDOWN CONTENT</label>
-                            <span className="cms-tag-muted">Advanced Direct Code Mode</span>
+                            )}
                           </div>
 
-                          <textarea
-                            rows={24}
-                            className="cms-editor-textarea content-area"
-                            placeholder="Write your article content in Markdown format..."
-                            value={editorContent}
-                            onChange={(e) => setEditorContent(e.target.value)}
-                          />
+                          {/* Undo / Redo */}
+                          <div className="cms-tb-history-group">
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Undo"
+                              disabled={historyIndex <= 0}
+                              onClick={handleUndo}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 7v6h6" />
+                                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-tb-btn"
+                              title="Redo"
+                              disabled={historyIndex >= contentHistory.length - 1}
+                              onClick={handleRedo}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 7v6h-6" />
+                                <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
-                      )}
+
+                        {/* Textarea Content */}
+                        <textarea
+                          ref={contentTextareaRef}
+                          rows={24}
+                          className="cms-wysiwyg-textarea"
+                          placeholder="Write your editorial article content here... Full support for Markdown, live media embeds, tables, callouts, and code blocks..."
+                          value={editorContent}
+                          onChange={(e) => {
+                            setEditorContent(e.target.value)
+                            pushContentHistory(e.target.value)
+                          }}
+                        />
+                      </div>
                     </div>
 
-                    {/* Right Inspector Column */}
+                    {/* Right Inspector Column (Matching Image 2) */}
                     <div className="cms-editor-sidebar-col">
-                      {/* Card 1: Status */}
+                      {/* Card 1: Publishing Status */}
                       <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">Publishing Status</label>
+                        <div className="cms-editor-card-header-row">
+                          <label className="cms-editor-eyebrow">Publishing Status</label>
+                          <span className="cms-status-pill-badge">{editorStatus}</span>
+                        </div>
+                        <label className="cms-field-label-sm">STATUS</label>
                         <select
                           className="cms-editor-select"
                           value={editorStatus}
@@ -3127,24 +2748,59 @@ export default function AdminDashboard() {
                         </select>
                       </div>
 
-                      {/* Card 2: Author */}
+                      {/* Card 2: Article Author */}
                       <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">Article Author</label>
+                        <div className="cms-editor-card-header-row">
+                          <span className="cms-author-head-title">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2">
+                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                              <circle cx="12" cy="7" r="4" />
+                            </svg>
+                            <span>Article Author</span>
+                          </span>
+                          <button
+                            type="button"
+                            className="cms-link-action-red"
+                            onClick={() => showToast("New Author invitation modal is ready.", "success")}
+                          >
+                            + New Author
+                          </button>
+                        </div>
+                        <label className="cms-field-label-sm">ASSIGN AUTHOR</label>
                         <select
                           className="cms-editor-select"
                           value={editorAuthor}
                           onChange={(e) => setEditorAuthor(e.target.value)}
                         >
-                          <option value={currentUser.name}>{currentUser.name} ({currentUser.role})</option>
-                          <option value="Happy Machinery Editorial">Happy Machinery Editorial</option>
-                          <option value="Lead Equipment Specialist">Lead Equipment Specialist</option>
-                          <option value="Field Support Engineer">Field Support Engineer</option>
+                          <option value="Lead Administrator (Super Administrator)">Lead Administrator (Super Administrator)</option>
+                          <option value="Happy Machinery (Lead Equipment Specialist & Editorial Director)">Happy Machinery (Lead Equipment Specialist & Editorial Director)</option>
+                          <option value="Field Support Engineer (Technical Support)">Field Support Engineer (Technical Support)</option>
                         </select>
+
+                        {/* Author Profile Preview Card */}
+                        <div className="cms-author-preview-card">
+                          <div className="cms-author-avatar-badge">
+                            <img src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp" alt="Author" />
+                          </div>
+                          <div className="cms-author-info">
+                            <strong className="cms-author-name">
+                              {editorAuthor.includes("(") ? editorAuthor.split("(")[0].trim() : editorAuthor}
+                            </strong>
+                            <span className="cms-author-role">
+                              {editorAuthor.includes("(") ? editorAuthor.split("(")[1].replace(")", "").trim() : "Editorial Specialist"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Card 3: Classification & Category */}
+                      {/* Card 3: Classification & Category + Topic Cluster */}
                       <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">Classification & Category</label>
+                        <div className="cms-editor-card-header-row">
+                          <label className="cms-editor-eyebrow">Classification & Category</label>
+                        </div>
+                        <label className="cms-field-label-sm">
+                          CATEGORY <span style={{ color: "#ef4444" }}>*</span>
+                        </label>
                         <select
                           className="cms-editor-select"
                           value={editorCategory}
@@ -3154,6 +2810,43 @@ export default function AdminDashboard() {
                             <option key={c.name} value={c.name}>{c.name}</option>
                           ))}
                         </select>
+
+                        {/* Topic Cluster & Playlist Manager Card (Image 2) */}
+                        <div className="cms-topic-cluster-card">
+                          <div className="cms-topic-cluster-header">
+                            <div className="cms-topic-cluster-icon">
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                                <polyline points="2 17 12 22 22 17" />
+                                <polyline points="2 12 12 17 22 12" />
+                              </svg>
+                            </div>
+                            <div className="cms-topic-cluster-text">
+                              <h4>TOPIC CLUSTER & PLAYLIST MANAGER</h4>
+                              <p>Group articles into Pillar and Sub-Blog series for readers</p>
+                            </div>
+                            <button
+                              type="button"
+                              className="cms-btn-new-series"
+                              onClick={() => showToast("Create Topic Series dialog opened.", "success")}
+                            >
+                              + New Series
+                            </button>
+                          </div>
+                          <div className="cms-topic-cluster-body">
+                            <label className="cms-field-label-sm">Assigned Series / Playlist</label>
+                            <select
+                              className="cms-editor-select"
+                              value={assignedSeries}
+                              onChange={(e) => setAssignedSeries(e.target.value)}
+                            >
+                              <option value="None (Standalone Article)">None (Standalone Article)</option>
+                              <option value="Mini Skid Steer Operations & Safety Guide">Mini Skid Steer Operations & Safety Guide</option>
+                              <option value="Hydraulic System Maintenance & Troubleshooting">Hydraulic System Maintenance & Troubleshooting</option>
+                              <option value="Jobsite Productivity & Attachment Selection">Jobsite Productivity & Attachment Selection</option>
+                            </select>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Card 4: Cover Image */}
