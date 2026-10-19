@@ -2007,7 +2007,7 @@ export default function AdminDashboard() {
 
               {/* 5 Colorful Metric KPI Cards (Screenshot 1) */}
               <div className="cms-kpi-cards-grid">
-                {/* 1. Total Equipment (Royal Blue) */}
+                {/* 1. Total Equipment (Cobalt Blue) */}
                 <div className="cms-kpi-card blue" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('products'); setProductsSubView('list') }}>
                   <div className="cms-kpi-text-col">
                     <span className="cms-kpi-label">Total Equipment</span>
@@ -2023,8 +2023,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 2. Live Published (Emerald Green) */}
-                <div className="cms-kpi-card green" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('products'); setProdStatusFilter('published') }}>
+                {/* 2. Live Published (Industrial Yellow) */}
+                <div className="cms-kpi-card yellow" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('products'); setProdStatusFilter('published') }}>
                   <div className="cms-kpi-text-col">
                     <span className="cms-kpi-label">Live Published</span>
                     <span className="cms-kpi-value">{products.filter((p) => p.status === 'Published').length}</span>
@@ -2038,8 +2038,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 3. Inquiries & Leads (Orange) */}
-                <div className="cms-kpi-card orange" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('inquiries')}>
+                {/* 3. Inquiries & Leads (Crimson Red) */}
+                <div className="cms-kpi-card red" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('inquiries')}>
                   <div className="cms-kpi-text-col">
                     <span className="cms-kpi-label">Inquiries & Leads</span>
                     <span className="cms-kpi-value">{inquiriesList.length}</span>
@@ -2053,8 +2053,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 4. Editorial Guides (Purple) */}
-                <div className="cms-kpi-card purple" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('articles'); setArticlesSubView('list') }}>
+                {/* 4. Articles & Guides (Cobalt Blue) */}
+                <div className="cms-kpi-card blue" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('articles'); setArticlesSubView('list') }}>
                   <div className="cms-kpi-text-col">
                     <span className="cms-kpi-label">Articles & Guides</span>
                     <span className="cms-kpi-value">{posts.length}</span>
@@ -2070,8 +2070,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 5. Cart Orders (Corporate Blue) */}
-                <div className="cms-kpi-card blue" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('cart')}>
+                {/* 5. Store Orders (Crimson Red) */}
+                <div className="cms-kpi-card red" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('cart')}>
                   <div className="cms-kpi-text-col">
                     <span className="cms-kpi-label">Store Orders</span>
                     <span className="cms-kpi-value">{ordersList.length}</span>
