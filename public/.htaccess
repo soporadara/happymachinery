@@ -1,0 +1,26 @@
+# Redirect Facebook/Twitter/LinkedIn/Slack bots to share_preview.php for rich previews
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Intercept crawlers requesting a blog article query param
+  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare) [NC]
+  RewriteCond %{QUERY_STRING} (?:^|&)post=(\d+)
+  RewriteRule ^blog$ share_preview.php?type=blog&id=%1 [L,QSA]
+
+  # Rich previews for readable blog article URLs
+  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare) [NC]
+  RewriteRule ^blog/([a-z0-9-]+)/?$ share_preview.php?type=blog&slug=$1 [L,QSA]
+
+  # Intercept crawlers requesting a product details path
+  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare) [NC]
+  RewriteRule ^product/(\d+)$ share_preview.php?type=product&id=$1 [L,QSA]
+
+  # Serve deployed assets, PHP endpoints, and other real files normally.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Send all other routes to the React application.
+  RewriteRule ^ index.html [L]
+</IfModule>

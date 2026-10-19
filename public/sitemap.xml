@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+  xmlns:video="http://www.google.com/schemas/sitemap-video/1.1"
+>
+  <url>
+    <loc>https://happymachinery.com/</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/hero-v900-three-colors.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/v900-equipment-layout.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/v900-delivery.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-red-jobsite.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-yellow-jobsite.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-blue-jobsite.png</image:loc>
+    </image:image>
+    <video:video>
+      <video:thumbnail_loc>https://happymachinery.com/images/fork-red-jobsite.png</video:thumbnail_loc>
+      <video:title>TYPHON STOMP V900 Lift and Carry Performance</video:title>
+      <video:description>See the TYPHON STOMP V900 mini skid steer lift, carry, and place materials using responsive hydraulics and a stable tracked platform.</video:description>
+      <video:content_loc>https://happymachinery.com/videos/v900-lift-performance.mp4</video:content_loc>
+      <video:publication_date>2026-07-22T14:29:40+07:00</video:publication_date>
+    </video:video>
+    <video:video>
+      <video:thumbnail_loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</video:thumbnail_loc>
+      <video:title>TYPHON STOMP V900 Jobsite Agility Performance</video:title>
+      <video:description>Watch the compact TYPHON STOMP V900 mini skid steer maneuver through confined jobsites and narrow access points.</video:description>
+      <video:content_loc>https://happymachinery.com/videos/v900-jobsite-performance.mp4</video:content_loc>
+      <video:publication_date>2026-07-22T14:29:40+07:00</video:publication_date>
+    </video:video>
+    <video:video>
+      <video:thumbnail_loc>https://happymachinery.com/images/v900-equipment-layout.png</video:thumbnail_loc>
+      <video:title>TYPHON STOMP V900 Tracked Ground Performance</video:title>
+      <video:description>See the TYPHON STOMP V900 compact track loader maintain traction and controlled movement across demanding work surfaces.</video:description>
+      <video:content_loc>https://happymachinery.com/videos/v900-ground-performance.mp4</video:content_loc>
+      <video:publication_date>2026-07-22T14:29:40+07:00</video:publication_date>
+    </video:video>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/store</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/hero-v900-three-colors.png</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-red.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-red.jpg</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-red.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-yellow.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-yellow.jpg</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-yellow.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-blue.png</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-blue.jpg</image:loc>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-blue.jpg</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/about</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/about-team-1.png</image:loc>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/contact</loc>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog</loc>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+    </image:image>
+  </url>
+</urlset>

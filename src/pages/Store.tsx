@@ -1,0 +1,147 @@
+import { useEffect } from 'react'
+import type { Product } from '../components/CartDrawer'
+
+interface StoreProps {
+  onAddToCart: (product: Product) => void
+  searchQuery: string
+}
+
+export default function Store({ searchQuery }: StoreProps) {
+  useEffect(() => {
+    const keepProductUrlClean = () => {
+      const productHash = window.location.hash.match(/^#!\/(.+)\/p\/(\d+)$/)
+      if (!productHash) return
+
+      const [, productSlug, productId] = productHash
+      const cleanProductPath = `/store/${productSlug}-p${productId}`
+      window.history.replaceState(window.history.state, '', cleanProductPath)
+    }
+
+    window.addEventListener('hashchange', keepProductUrlClean)
+    keepProductUrlClean()
+    return () => window.removeEventListener('hashchange', keepProductUrlClean)
+  }, [])
+
+  useEffect(() => {
+    const scriptId = 'ecwid-script';
+    
+    // Parse product ID from pathname if present (e.g. /store/some-product-p12345)
+    const match = window.location.pathname.match(/-p(\d+)\/?$/);
+    const productId = match ? match[1] : null;
+
+    // Set global Ecwid configuration for dynamic loading in Single Page Apps
+    (window as any).ecwid_script_defer = true;
+    (window as any).ecwid_dynamic_widgets = true;
+    (window as any)._xnext_initialization_scripts = (window as any)._xnext_initialization_scripts || [];
+    
+    const args = [
+      "categoriesPerRow=3",
+      "views=grid(20,3) list(60) table(60)",
+      "categoryView=grid",
+      "searchView=list",
+      "id=my-store-80100025"
+    ];
+
+    if (productId) {
+      args.push(`defaultProductId=${productId}`);
+    }
+
+    const initScript = {
+      widgetType: 'ProductBrowser',
+      id: 'my-store-80100025',
+      arg: args
+    };
+    
+    (window as any)._xnext_initialization_scripts.push(initScript);
+
+    const triggerRedirectFallback = () => {
+      if (productId) {
+        const ecwid = (window as any).Ecwid;
+        if (ecwid && typeof ecwid.openPage === 'function') {
+          ecwid.openPage('product', { id: Number(productId) });
+        }
+      }
+    };
+
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = "https://app.ecwid.com/script.js?80100025&data_platform=code&data_date=2026-02-23";
+      script.async = true;
+      script.charset = 'utf-8';
+      script.setAttribute('data-cfasync', 'false');
+      script.onload = () => {
+        triggerRedirectFallback();
+      };
+      document.body.appendChild(script);
+    } else {
+      // If the script is already loaded, initialize the widget directly
+      if (typeof (window as any).xProductBrowser === 'function') {
+        try {
+          (window as any).xProductBrowser(...args);
+          // Trigger fallback redirect in case standard defaultProductId initialization doesn't catch
+          triggerRedirectFallback();
+        } catch (e) {
+          console.error("Error executing Ecwid xProductBrowser:", e);
+        }
+      }
+    }
+
+    return () => {
+      // Clean up the initialization script queue
+      if ((window as any)._xnext_initialization_scripts) {
+        (window as any)._xnext_initialization_scripts = (window as any)._xnext_initialization_scripts.filter(
+          (s: any) => s !== initScript
+        );
+      }
+      // Clean up Ecwid widgets to avoid lingering event listeners and modals in SPA routing
+      const ecwid = (window as any).Ecwid;
+      if (ecwid && typeof ecwid.destroy === 'function') {
+        try {
+          ecwid.destroy();
+        } catch (e) {
+          console.error("Error destroying Ecwid widget:", e);
+        }
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const keyword = searchQuery.trim()
+    if (!keyword) return
+
+    let attempts = 0
+    const openSearch = () => {
+      const ecwid = (window as any).Ecwid
+      if (typeof ecwid?.openPage === 'function') {
+        ecwid.openPage('search', { keyword })
+        return true
+      }
+      return false
+    }
+
+    if (openSearch()) return
+
+    const searchTimer = window.setInterval(() => {
+      attempts += 1
+      if (openSearch() || attempts >= 40) {
+        window.clearInterval(searchTimer)
+      }
+    }, 250)
+
+    return () => window.clearInterval(searchTimer)
+  }, [searchQuery])
+
+  return (
+    <div className="page store-page">
+      <div className="page-hero">
+        <p className="eyebrow">Equipment Catalog</p>
+        <h1>Skid steers and worksite equipment.</h1>
+        <p>Explore TYPHON machinery, attachments, and jobsite-ready equipment selected for dependable daily work.</p>
+      </div>
+
+      {/* Ecwid Store Integration Element */}
+      <div id="my-store-80100025" className="ecwid-store-container"></div>
+    </div>
+  )
+}
