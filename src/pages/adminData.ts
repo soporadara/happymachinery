@@ -78,6 +78,60 @@ export interface BlogComment {
   likes?: number
 }
 
+export interface CartOrder {
+  id: string
+  customer: string
+  email: string
+  phone: string
+  items: string
+  amount: number
+  status: 'Completed' | 'Processing' | 'Pending' | 'Abandoned'
+  date: string
+}
+
+export const DEFAULT_CART_ORDERS: CartOrder[] = [
+  {
+    id: 'HM-9821',
+    customer: 'Jason Miller',
+    email: 'jason@millerbuilt.com',
+    phone: '214-555-0182',
+    items: 'TYPHON V900 Mini Track Loader — Industrial Yellow (1x)',
+    amount: 11999.00,
+    status: 'Processing',
+    date: 'Oct 19, 2026'
+  },
+  {
+    id: 'HM-9820',
+    customer: 'Sarah Jenkins',
+    email: 's.jenkins@epiccontractors.com',
+    phone: '312-555-9831',
+    items: 'TYPH-5005M Heavy-Duty Pallet Fork (2x)',
+    amount: 3528.00,
+    status: 'Completed',
+    date: 'Oct 18, 2026'
+  },
+  {
+    id: 'HM-9819',
+    customer: 'Robert Chen',
+    email: 'rchen@pacificbuilders.org',
+    phone: '650-555-2245',
+    items: 'Budget Style Hydraulic Thumb Clip Attachment (1x)',
+    amount: 315.00,
+    status: 'Pending',
+    date: 'Oct 17, 2026'
+  },
+  {
+    id: 'HM-9818',
+    customer: 'David Vance',
+    email: 'dvance@vanceconcrete.com',
+    phone: '305-555-8812',
+    items: 'Skid Steer V900 — Cobalt Blue (1x)',
+    amount: 11999.00,
+    status: 'Completed',
+    date: 'Oct 15, 2026'
+  }
+]
+
 // Initial Default Posts
 export const DEFAULT_POSTS: BlogPost[] = [
   {

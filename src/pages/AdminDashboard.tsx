@@ -23,10 +23,17 @@ import {
   BlogPost, 
   AdminProduct, 
   MediaItem, 
+  Inquiry,
+  BlogComment,
+  CartOrder,
   DEFAULT_POSTS, 
   DEFAULT_PRODUCTS, 
-  DEFAULT_MEDIA 
+  DEFAULT_MEDIA,
+  DEFAULT_INQUIRIES,
+  DEFAULT_COMMENTS,
+  DEFAULT_CART_ORDERS
 } from './adminData'
+import { IMPORTED_CATEGORY_PATHS } from '../data/importedProducts'
 import { readSharedContent, writeSharedContent } from '../data/sharedContentStorage'
 import { getBlogPostPath } from '../data/blogUrls'
 import './AdminDashboard.css'
@@ -36,6 +43,9 @@ type CmsTab =
   | 'articles' 
   | 'media' 
   | 'products' 
+  | 'cart'
+  | 'inquiries'
+  | 'comments'
   | 'pages' 
   | 'security' 
   | 'admins' 
@@ -97,6 +107,54 @@ export default function AdminDashboard() {
   const [showBanIpModal, setShowBanIpModal] = useState(false)
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null)
 
+  // Products Management States (Screenshots 1, 2, 3)
+  const [isProductsExpanded, setIsProductsExpanded] = useState(true)
+  const [productsSubView, setProductsSubView] = useState<'list' | 'editor' | 'categories' | 'brands'>('list')
+  const [dashboardRecentTab, setDashboardRecentTab] = useState<'products' | 'articles'>('products')
+  const [prodSearch, setProdSearch] = useState('')
+  const [prodStatusFilter, setProdStatusFilter] = useState<'all' | 'published' | 'draft' | 'low-stock'>('all')
+  const [prodCategoryFilter, setProdCategoryFilter] = useState('all')
+  const [prodCurrentPage, setProdCurrentPage] = useState(1)
+  const prodItemsPerPage = 20
+
+  // Product Editor Form States (Screenshots 1 & 3)
+  const [prodEditorId, setProdEditorId] = useState<number | null>(null)
+  const [prodEditorName, setProdEditorName] = useState('')
+  const [prodEditorSlug, setProdEditorSlug] = useState('')
+  const [prodEditorShortDesc, setProdEditorShortDesc] = useState('')
+  const [prodEditorDesc, setProdEditorDesc] = useState('')
+  const [prodEditorSku, setProdEditorSku] = useState('')
+  const [prodEditorCategory, setProdEditorCategory] = useState('Equipment > Skid Steer Loaders')
+  const [prodEditorBrand, setProdEditorBrand] = useState('TYPHON')
+  const [prodEditorPrice, setProdEditorPrice] = useState<number>(11999)
+  const [prodEditorSalePrice, setProdEditorSalePrice] = useState<number | undefined>(undefined)
+  const [prodEditorStock, setProdEditorStock] = useState<number>(4)
+  const [prodEditorStatus, setProdEditorStatus] = useState<'Published' | 'Draft'>('Published')
+  const [prodEditorBuyUrl, setProdEditorBuyUrl] = useState('')
+  const [prodEditorFeatured, setProdEditorFeatured] = useState(false)
+  const [prodEditorAddToCart, setProdEditorAddToCart] = useState(true)
+  const [prodEditorImage, setProdEditorImage] = useState('/images/loader-red.png')
+  const [prodEditorGallery, setProdEditorGallery] = useState('/images/loader-yellow.jpg\n/images/loader-blue.jpg')
+  const [prodEditorSpecs, setProdEditorSpecs] = useState<{ name: string; value: string }[]>([
+    { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine (Tier 4 / Stage V)' },
+    { name: 'Operating Weight', value: '2,150 lbs (975 kg)' },
+    { name: 'Rated Operating Capacity', value: '900 lbs (408 kg)' },
+    { name: 'Hydraulic Flow', value: '12.7 GPM @ 2,321 psi' },
+    { name: 'Width', value: '35.5 in (Fits Standard Backyard Gates)' }
+  ])
+
+  // Inquiries & Leads States
+  const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => DEFAULT_INQUIRIES)
+  const [inquirySearch, setInquirySearch] = useState('')
+  const [inquiryStatusFilter, setInquiryStatusFilter] = useState<string>('all')
+
+  // Cart Orders States
+  const [ordersList, setOrdersList] = useState<CartOrder[]>(() => DEFAULT_CART_ORDERS)
+
+  // Comments Moderation States
+  const [commentsData, setCommentsData] = useState<BlogComment[]>(() => DEFAULT_COMMENTS)
+  const [commentFilter, setCommentFilter] = useState<'all' | 'Pending' | 'Approved' | 'Spam'>('all')
+
   // Articles Sub-view & Rafvex Editor States (Screenshots 3, 4, 5)
   const [articlesSubView, setArticlesSubView] = useState<'list' | 'editor' | 'categories'>('list')
   const [editorTitle, setEditorTitle] = useState('')
@@ -156,36 +214,6 @@ export default function AdminDashboard() {
   const [mediaSearchTerm, setMediaSearchTerm] = useState('')
   const [mediaSortOrder, setMediaSortOrder] = useState<'A-Z' | 'Z-A' | 'Newest'>('A-Z')
 
-  // Comments State (Screenshot 1)
-  const [commentsList] = useState([
-    {
-      id: 'c1',
-      author: 'Rafel Eiffel',
-      time: 'about 15 hours ago',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-      comment: 'Wonderful explanation on skid steer hydraulic attachments and auxiliary flow rates!',
-      articleTitle: 'How to Choose the Right Compact Skid Steer for Tight Job Sites',
-      articleSlug: 'how-to-choose-the-right-compact-skid-steer-for-tight-job-sites'
-    },
-    {
-      id: 'c2',
-      author: 'Marcus Vance',
-      time: 'about 1 day ago',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80',
-      comment: 'In my opinion, rubber tracks are indispensable for preventing lawn turf damage. Thanks for the breakdown!',
-      articleTitle: 'Rubber Tracks vs Wheeled Skid Steers: Ground Damage & Traction Analysis',
-      articleSlug: 'rubber-tracks-vs-wheeled-skid-steers'
-    },
-    {
-      id: 'c3',
-      author: 'Sarah Lin',
-      time: 'about 2 days ago',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
-      comment: 'Daily greasing checklist has saved our crew thousands in premature pin bushing wear.',
-      articleTitle: 'Daily Skid Steer Maintenance: 10 Essential Checks to Prevent Downtime',
-      articleSlug: 'daily-skid-steer-maintenance'
-    }
-  ])
 
   // Navigation Submenu States
   const [isArticlesExpanded, setIsArticlesExpanded] = useState(true)
@@ -520,6 +548,231 @@ export default function AdminDashboard() {
     showToast(`Category "${catName}" removed.`, 'warning')
   }
 
+  // ==============================================================================
+  // Product Catalog Handlers (Screenshots 1, 2, 3)
+  // ==============================================================================
+  const openCreateProduct = () => {
+    setProdEditorId(null)
+    setProdEditorName('')
+    setProdEditorSlug('')
+    setProdEditorShortDesc('')
+    setProdEditorDesc('')
+    setProdEditorSku(`HM-${Math.floor(1000 + Math.random() * 9000)}`)
+    setProdEditorCategory('Equipment > Skid Steer Loaders')
+    setProdEditorBrand('TYPHON')
+    setProdEditorPrice(11999)
+    setProdEditorSalePrice(undefined)
+    setProdEditorStock(4)
+    setProdEditorStatus('Published')
+    setProdEditorBuyUrl('https://happymachinery.com/store')
+    setProdEditorFeatured(false)
+    setProdEditorAddToCart(true)
+    setProdEditorImage('/images/loader-red.png')
+    setProdEditorGallery('/images/loader-yellow.jpg\n/images/loader-blue.jpg')
+    setProdEditorSpecs([
+      { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine (Tier 4 / Stage V)' },
+      { name: 'Operating Weight', value: '2,150 lbs (975 kg)' },
+      { name: 'Rated Operating Capacity', value: '900 lbs (408 kg)' },
+      { name: 'Hydraulic Flow', value: '12.7 GPM @ 2,321 psi' },
+      { name: 'Width', value: '35.5 in (Fits Standard Backyard Gates)' }
+    ])
+    setProductsSubView('editor')
+  }
+
+  const openEditProduct = (prod: AdminProduct) => {
+    setProdEditorId(prod.id)
+    setProdEditorName(prod.name)
+    setProdEditorSlug(prod.slug || prod.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+    setProdEditorShortDesc(prod.shortDescription || prod.description.slice(0, 140))
+    setProdEditorDesc(prod.description)
+    setProdEditorSku(prod.sku)
+    setProdEditorCategory(prod.category || 'Equipment > Skid Steer Loaders')
+    setProdEditorBrand(prod.brand || 'TYPHON')
+    setProdEditorPrice(prod.price)
+    setProdEditorSalePrice(prod.salePrice)
+    setProdEditorStock(prod.stock ?? 0)
+    setProdEditorStatus(prod.status || 'Draft')
+    setProdEditorBuyUrl(prod.buyUrl || '')
+    setProdEditorFeatured(!!prod.featured)
+    setProdEditorAddToCart(prod.addToCartEnabled !== false)
+    setProdEditorImage(prod.image || '/images/loader-red.png')
+    setProdEditorGallery(Array.isArray(prod.galleryImages) ? prod.galleryImages.join('\n') : '')
+    setProdEditorSpecs(prod.specifications && prod.specifications.length > 0 ? prod.specifications : [
+      { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine' },
+      { name: 'Operating Weight', value: '2,150 lbs' },
+      { name: 'Rated Operating Capacity', value: '900 lbs' },
+      { name: 'Hydraulic Flow', value: '12.7 GPM' }
+    ])
+    setProductsSubView('editor')
+  }
+
+  const handleSaveProduct = async (statusOverride?: 'Published' | 'Draft') => {
+    if (!prodEditorName.trim()) {
+      showToast('Product title is required.', 'error')
+      return
+    }
+
+    const finalStatus = statusOverride || prodEditorStatus
+    const gallery = prodEditorGallery
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const validSpecs = prodEditorSpecs.filter((s) => s.name.trim() && s.value.trim())
+    const finalSlug = prodEditorSlug.trim() || prodEditorName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+    if (prodEditorId !== null) {
+      const updated = products.map((p) =>
+        p.id === prodEditorId
+          ? {
+              ...p,
+              name: prodEditorName,
+              slug: finalSlug,
+              shortDescription: prodEditorShortDesc,
+              description: prodEditorDesc,
+              sku: prodEditorSku || p.sku,
+              category: prodEditorCategory,
+              brand: prodEditorBrand,
+              price: Number(prodEditorPrice) || 0,
+              salePrice: prodEditorSalePrice ? Number(prodEditorSalePrice) : undefined,
+              stock: Number(prodEditorStock) || 0,
+              status: finalStatus,
+              buyUrl: prodEditorBuyUrl,
+              featured: prodEditorFeatured,
+              addToCartEnabled: prodEditorAddToCart,
+              image: prodEditorImage || p.image,
+              galleryImages: gallery,
+              specifications: validSpecs,
+              updatedAt: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+            }
+          : p
+      )
+      setProducts(updated)
+      await writeSharedContent('products', updated)
+      await logSecurityEvent('CONTENT_PUBLISHED', `Equipment "${prodEditorName}" updated (${finalStatus}).`, 'info', currentUser?.username)
+      showToast(`Product "${prodEditorName}" saved successfully!`, 'success')
+    } else {
+      const newProduct: AdminProduct = {
+        id: Date.now(),
+        name: prodEditorName,
+        slug: finalSlug,
+        shortDescription: prodEditorShortDesc,
+        description: prodEditorDesc,
+        sku: prodEditorSku || `HM-${Math.floor(1000 + Math.random() * 9000)}`,
+        category: prodEditorCategory,
+        brand: prodEditorBrand,
+        price: Number(prodEditorPrice) || 0,
+        salePrice: prodEditorSalePrice ? Number(prodEditorSalePrice) : undefined,
+        stock: Number(prodEditorStock) || 0,
+        status: finalStatus,
+        buyUrl: prodEditorBuyUrl,
+        featured: prodEditorFeatured,
+        addToCartEnabled: prodEditorAddToCart,
+        image: prodEditorImage || '/images/loader-red.png',
+        galleryImages: gallery,
+        specifications: validSpecs,
+        updatedAt: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      }
+      const updated = [newProduct, ...products]
+      setProducts(updated)
+      await writeSharedContent('products', updated)
+      await logSecurityEvent('CONTENT_PUBLISHED', `New equipment "${newProduct.name}" created as ${finalStatus}.`, 'info', currentUser?.username)
+      showToast(`Product "${prodEditorName}" created successfully!`, 'success')
+    }
+    setProductsSubView('list')
+  }
+
+  const handleDeleteProduct = async (id: number) => {
+    const prod = products.find((p) => p.id === id)
+    const confirmed = window.confirm(`Are you sure you want to delete ${prod?.name || 'this product'}?`)
+    if (!confirmed) return
+    const updated = products.filter((p) => p.id !== id)
+    setProducts(updated)
+    await writeSharedContent('products', updated)
+    await logSecurityEvent('CONTENT_DELETED', `Equipment listing #${id} deleted.`, 'warning', currentUser?.username)
+    showToast('Equipment listing deleted from catalog.', 'success')
+  }
+
+  const handleDuplicateProduct = async (prod: AdminProduct) => {
+    const duplicated: AdminProduct = {
+      ...prod,
+      id: Date.now(),
+      name: `${prod.name} (Copy)`,
+      sku: `${prod.sku}-COPY`,
+      slug: `${prod.slug || 'item'}-copy`,
+      status: 'Draft',
+      updatedAt: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    }
+    const updated = [duplicated, ...products]
+    setProducts(updated)
+    await writeSharedContent('products', updated)
+    showToast(`Duplicated ${prod.sku} as draft!`, 'success')
+  }
+
+  const handleToggleProductStatus = async (id: number) => {
+    const updated = products.map((p) => {
+      if (p.id === id) {
+        const nextStatus: 'Published' | 'Draft' = p.status === 'Published' ? 'Draft' : 'Published'
+        showToast(`${p.sku} is now ${nextStatus}.`, 'success')
+        return { ...p, status: nextStatus, updatedAt: 'Just now' }
+      }
+      return p
+    })
+    setProducts(updated)
+    await writeSharedContent('products', updated)
+  }
+
+  const handleAddSpecRow = () => {
+    setProdEditorSpecs((prev) => [...prev, { name: '', value: '' }])
+  }
+
+  const handleRemoveSpecRow = (index: number) => {
+    setProdEditorSpecs((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleUpdateSpecRow = (index: number, field: 'name' | 'value', val: string) => {
+    setProdEditorSpecs((prev) =>
+      prev.map((s, i) => (i === index ? { ...s, [field]: val } : s))
+    )
+  }
+
+  // Inquiries Handlers
+  const handleUpdateInquiryStatus = async (id: number, status: Inquiry['status']) => {
+    const updated = inquiriesList.map((item) => item.id === id ? { ...item, status } : item)
+    setInquiriesList(updated)
+    await writeSharedContent('inquiries', updated)
+    showToast(`Inquiry status updated to ${status}.`, 'success')
+  }
+
+  const handleDeleteInquiry = async (id: number) => {
+    const updated = inquiriesList.filter((item) => item.id !== id)
+    setInquiriesList(updated)
+    await writeSharedContent('inquiries', updated)
+    showToast('Inquiry removed.', 'success')
+  }
+
+  // Orders Handlers
+  const handleUpdateOrderStatus = async (id: string, status: CartOrder['status']) => {
+    const updated = ordersList.map((item) => item.id === id ? { ...item, status } : item)
+    setOrdersList(updated)
+    await writeSharedContent('orders', updated)
+    showToast(`Order ${id} marked as ${status}.`, 'success')
+  }
+
+  // Comments Handlers
+  const handleUpdateCommentStatus = async (id: number, status: 'Pending' | 'Approved' | 'Spam') => {
+    const updated = commentsData.map((item) => item.id === id ? { ...item, status } : item)
+    setCommentsData(updated)
+    await writeSharedContent('comments', updated)
+    showToast(`Comment marked as ${status}.`, 'success')
+  }
+
+  const handleDeleteComment = async (id: number) => {
+    const updated = commentsData.filter((item) => item.id !== id)
+    setCommentsData(updated)
+    await writeSharedContent('comments', updated)
+    showToast('Comment deleted.', 'success')
+  }
+
   // 1-Click Cache Purge
   const handlePurgeCache = async () => {
     try {
@@ -667,20 +920,97 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* Equipment Catalog Item */}
+          {/* Products & Equipment Expandable Item */}
+          <div className="cms-nav-expandable-group">
+            <button
+              className={`cms-nav-item ${activeTab === 'products' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('products')
+                setIsProductsExpanded(!isProductsExpanded)
+              }}
+            >
+              <span className="cms-nav-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              </span>
+              <span className="cms-nav-label">Products</span>
+              {!isSidebarCollapsed && (
+                <span className="cms-nav-expand-arrow">
+                  {isProductsExpanded ? '−' : '+'}
+                </span>
+              )}
+            </button>
+
+            {/* Products Submenu */}
+            {isProductsExpanded && !isSidebarCollapsed && (
+              <div className="cms-nav-sub-menu">
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'products' && productsSubView === 'list' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('products')
+                    setProductsSubView('list')
+                  }}
+                >
+                  <span className="cms-sub-icon">📦</span>
+                  <span>All Products</span>
+                  <span className="cms-sub-count">{products.length}</span>
+                </button>
+
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'products' && productsSubView === 'editor' && !prodEditorId ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('products')
+                    openCreateProduct()
+                  }}
+                >
+                  <span className="cms-sub-icon">➕</span>
+                  <span>Add new product</span>
+                </button>
+
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'products' && prodCategoryFilter !== 'all' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('products')
+                    setProductsSubView('list')
+                    setProdCategoryFilter('Equipment > Skid Steer Loaders')
+                  }}
+                >
+                  <span className="cms-sub-icon">🏷️</span>
+                  <span>Categories</span>
+                </button>
+
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'products' && prodSearch === 'TYPHON' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('products')
+                    setProductsSubView('list')
+                    setProdSearch('TYPHON')
+                  }}
+                >
+                  <span className="cms-sub-icon">🏢</span>
+                  <span>Brands</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Cart Activity Item */}
           <button
-            className={`cms-nav-item ${activeTab === 'products' ? 'active' : ''}`}
-            onClick={() => setActiveTab('products')}
+            className={`cms-nav-item ${activeTab === 'cart' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cart')}
           >
             <span className="cms-nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                <line x1="12" y1="22.08" x2="12" y2="12" />
+                <circle cx="9" cy="21" r="1" />
+                <circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
               </svg>
             </span>
-            <span className="cms-nav-label">Equipment Catalog</span>
-            <span className="cms-nav-badge">{products.length}</span>
+            <span className="cms-nav-label">Cart Activity</span>
+            <span className="cms-nav-badge warning">{ordersList.length}</span>
           </button>
 
           {/* Media Library Item */}
@@ -695,11 +1025,40 @@ export default function AdminDashboard() {
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </span>
-            <span className="cms-nav-label">Media Library</span>
+            <span className="cms-nav-label">Image Store</span>
             <span className="cms-nav-badge">{mediaList.length}</span>
           </button>
 
-          <span className="cms-nav-group-title">LAYOUT & ADS</span>
+          <span className="cms-nav-group-title">COMMUNITY & INBOX</span>
+
+          <button
+            className={`cms-nav-item ${activeTab === 'inquiries' ? 'active' : ''}`}
+            onClick={() => setActiveTab('inquiries')}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Inquiries & Leads</span>
+            <span className="cms-nav-badge warning">{inquiriesList.filter(i => i.status === 'New').length || inquiriesList.length}</span>
+          </button>
+
+          <button
+            className={`cms-nav-item ${activeTab === 'comments' ? 'active' : ''}`}
+            onClick={() => setActiveTab('comments')}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Comments</span>
+            <span className="cms-nav-badge">{commentsData.length}</span>
+          </button>
+
+          <span className="cms-nav-group-title">LAYOUT & SYSTEM</span>
 
           <button
             className={`cms-nav-item ${activeTab === 'pages' ? 'active' : ''}`}
@@ -727,35 +1086,6 @@ export default function AdminDashboard() {
               </svg>
             </span>
             <span className="cms-nav-label">Pop-up & Banners</span>
-          </button>
-
-          <span className="cms-nav-group-title">COMMUNITY & INBOX</span>
-
-          <button
-            className="cms-nav-item"
-            onClick={() => showToast('4 new quote inquiries from contractors today.', 'info' as any)}
-          >
-            <span className="cms-nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-            </span>
-            <span className="cms-nav-label">Inquiries & Leads</span>
-            <span className="cms-nav-badge warning">4</span>
-          </button>
-
-          <button
-            className="cms-nav-item"
-            onClick={() => showToast('All 3 reader comments are approved and active.', 'info' as any)}
-          >
-            <span className="cms-nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </span>
-            <span className="cms-nav-label">Comments</span>
-            <span className="cms-nav-badge">{commentsList.length}</span>
           </button>
 
           <span className="cms-nav-group-title">SETTINGS & SYSTEM</span>
@@ -1021,7 +1351,7 @@ export default function AdminDashboard() {
         {/* ==============================================================================
             Body Views Container
             ============================================================================== */}
-        <div className="cms-body-container">
+        <div className="cms-main-scrollable-body">
           {/* TAB 1: DASHBOARD & EDITORIAL HUB (SCREENSHOT 1) */}
           {activeTab === 'dashboard' && (
             <div className="cms-dashboard-view-content">
@@ -1029,13 +1359,13 @@ export default function AdminDashboard() {
               <div className="cms-hero-welcome-banner">
                 <div className="cms-hero-banner-left">
                   <div className="cms-hero-badge">
-                    <span>✨ EDITORIAL & EQUIPMENT CMS</span>
+                    <span>✨ HAPPY MACHINERY V900 CMS</span>
                   </div>
                   <h1 className="cms-hero-title">
-                    Welcome back, {currentUser?.name ? currentUser.name.split(' ')[0] : 'Rafvex'}! 👋
+                    Welcome back, {currentUser?.name ? currentUser.name.split(' ')[0] : 'Administrator'}! 👋
                   </h1>
                   <p className="cms-hero-subtitle">
-                    Here's what's happening on your publication today. You have <strong>{posts.length} articles</strong> published across <strong>{blogCategories.length} categories</strong>.
+                    Here's what's happening on your publication today. You have <strong>{products.length} equipment listings</strong> and <strong>{posts.length} articles</strong> published across <strong>{blogCategories.length} categories</strong>.
                   </p>
                 </div>
 
@@ -1044,15 +1374,26 @@ export default function AdminDashboard() {
                     type="button"
                     className="cms-hero-btn-white"
                     onClick={() => {
-                      setActiveTab('articles')
-                      openNewArticle()
+                      setActiveTab('products')
+                      openCreateProduct()
                     }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
-                    <span>Write New Article</span>
+                    <span>+ Add Equipment</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cms-hero-btn-translucent"
+                    onClick={() => {
+                      setActiveTab('articles')
+                      openNewArticle()
+                    }}
+                  >
+                    <span>+ Write Article</span>
                   </button>
 
                   <a
@@ -1069,30 +1410,28 @@ export default function AdminDashboard() {
 
               {/* 5 Colorful Metric KPI Cards (Screenshot 1) */}
               <div className="cms-kpi-cards-grid">
-                {/* 1. Total Articles (Emerald Green) */}
-                <div className="cms-kpi-card green">
+                {/* 1. Total Equipment (Royal Blue) */}
+                <div className="cms-kpi-card blue" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('products'); setProductsSubView('list') }}>
                   <div className="cms-kpi-text-col">
-                    <span className="cms-kpi-label">Total Articles</span>
-                    <span className="cms-kpi-value">{posts.length}</span>
-                    <span className="cms-kpi-subtext">{posts.filter((p) => p.status === 'Published').length || posts.length} published online</span>
+                    <span className="cms-kpi-label">Total Equipment</span>
+                    <span className="cms-kpi-value">{products.length}</span>
+                    <span className="cms-kpi-subtext">Active store catalog</span>
                   </div>
                   <div className="cms-kpi-icon-circle">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                      <polyline points="10 9 9 9 8 9" />
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
                     </svg>
                   </div>
                 </div>
 
-                {/* 2. Equipment Models (Royal Blue) */}
-                <div className="cms-kpi-card blue">
+                {/* 2. Live Published (Emerald Green) */}
+                <div className="cms-kpi-card green" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('products'); setProdStatusFilter('published') }}>
                   <div className="cms-kpi-text-col">
-                    <span className="cms-kpi-label">Equipment Models</span>
-                    <span className="cms-kpi-value">{products.length}</span>
-                    <span className="cms-kpi-subtext">99% active in catalog</span>
+                    <span className="cms-kpi-label">Live Published</span>
+                    <span className="cms-kpi-value">{products.filter((p) => p.status === 'Published').length}</span>
+                    <span className="cms-kpi-subtext">Published machines online</span>
                   </div>
                   <div className="cms-kpi-icon-circle">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1102,40 +1441,12 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 3. Comments (Orange) */}
-                <div className="cms-kpi-card orange">
+                {/* 3. Inquiries & Leads (Orange) */}
+                <div className="cms-kpi-card orange" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('inquiries')}>
                   <div className="cms-kpi-text-col">
-                    <span className="cms-kpi-label">Comments</span>
-                    <span className="cms-kpi-value">{commentsList.length}</span>
-                    <span className="cms-kpi-subtext">All comments active</span>
-                  </div>
-                  <div className="cms-kpi-icon-circle">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* 4. Categories (Purple) */}
-                <div className="cms-kpi-card purple">
-                  <div className="cms-kpi-text-col">
-                    <span className="cms-kpi-label">Categories</span>
-                    <span className="cms-kpi-value">{blogCategories.length}</span>
-                    <span className="cms-kpi-subtext">2 drafts in progress</span>
-                  </div>
-                  <div className="cms-kpi-icon-circle">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                </div>
-
-                {/* 5. Subscribers / Inquiries (Crimson) */}
-                <div className="cms-kpi-card red">
-                  <div className="cms-kpi-text-col">
-                    <span className="cms-kpi-label">Subscribers</span>
-                    <span className="cms-kpi-value">24</span>
-                    <span className="cms-kpi-subtext">Active newsletter readers</span>
+                    <span className="cms-kpi-label">Inquiries & Leads</span>
+                    <span className="cms-kpi-value">{inquiriesList.length}</span>
+                    <span className="cms-kpi-subtext">Contractor quote requests</span>
                   </div>
                   <div className="cms-kpi-icon-circle">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1144,23 +1455,93 @@ export default function AdminDashboard() {
                     </svg>
                   </div>
                 </div>
+
+                {/* 4. Editorial Guides (Purple) */}
+                <div className="cms-kpi-card purple" style={{ cursor: 'pointer' }} onClick={() => { setActiveTab('articles'); setArticlesSubView('list') }}>
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Articles & Guides</span>
+                    <span className="cms-kpi-value">{posts.length}</span>
+                    <span className="cms-kpi-subtext">Published jobsite guides</span>
+                  </div>
+                  <div className="cms-kpi-icon-circle">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 5. Cart Orders (Crimson) */}
+                <div className="cms-kpi-card red" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('cart')}>
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Store Orders</span>
+                    <span className="cms-kpi-value">{ordersList.length}</span>
+                    <span className="cms-kpi-subtext">Active store checkout</span>
+                  </div>
+                  <div className="cms-kpi-icon-circle">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                    </svg>
+                  </div>
+                </div>
               </div>
 
-              {/* 2-Column Section: Recent Articles (Left) + Latest Comments & Quick Actions (Right) */}
+              {/* 2-Column Section: Recent Equipment / Articles (Left) + Latest Comments & Quick Actions (Right) */}
               <div className="cms-dashboard-2col-layout">
-                {/* LEFT COLUMN: Recent Articles Table (Screenshot 1) */}
+                {/* LEFT COLUMN: Recent Items Switcher Table */}
                 <div className="cms-card cms-recent-articles-card">
                   <div className="cms-card-header-row">
-                    <div className="cms-header-title-pill">
-                      <h3>Recent Articles</h3>
-                      <span className="cms-count-pill">{Math.min(6, posts.length)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        style={{
+                          background: dashboardRecentTab === 'products' ? '#1d7ff3' : 'var(--cms-bg-surface)',
+                          color: dashboardRecentTab === 'products' ? '#ffffff' : 'var(--cms-text-primary)',
+                          border: '1px solid var(--cms-border)',
+                          borderRadius: '9999px',
+                          padding: '6px 14px',
+                          fontSize: '0.82rem',
+                          fontWeight: 750,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onClick={() => setDashboardRecentTab('products')}
+                      >
+                        📦 Equipment ({products.length})
+                      </button>
+                      <button
+                        type="button"
+                        style={{
+                          background: dashboardRecentTab === 'articles' ? '#1d7ff3' : 'var(--cms-bg-surface)',
+                          color: dashboardRecentTab === 'articles' ? '#ffffff' : 'var(--cms-text-primary)',
+                          border: '1px solid var(--cms-border)',
+                          borderRadius: '9999px',
+                          padding: '6px 14px',
+                          fontSize: '0.82rem',
+                          fontWeight: 750,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onClick={() => setDashboardRecentTab('articles')}
+                      >
+                        📄 Articles ({posts.length})
+                      </button>
                     </div>
                     <button
                       type="button"
                       className="cms-link-action-btn"
                       onClick={() => {
-                        setActiveTab('articles')
-                        setArticlesSubView('list')
+                        if (dashboardRecentTab === 'products') {
+                          setActiveTab('products')
+                          setProductsSubView('list')
+                        } else {
+                          setActiveTab('articles')
+                          setArticlesSubView('list')
+                        }
                       }}
                     >
                       <span>View all</span>
@@ -1168,56 +1549,57 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  <div className="cms-table-wrapper">
-                    <table className="cms-table cms-articles-table">
-                      <thead>
-                        <tr>
-                          <th>ARTICLE</th>
-                          <th>CATEGORY</th>
-                          <th>STATUS</th>
-                          <th>DATE</th>
-                          <th style={{ textAlign: 'right' }}>ACTION</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {posts.slice(0, 6).map((post) => (
-                          <tr key={post.id}>
-                            <td className="cms-article-title-cell">
-                              <div className="cms-art-preview-flex">
-                                <img
-                                  src={post.image || '/images/why-choose-v900-jobsite.png'}
-                                  alt={post.title}
-                                  className="cms-art-thumb"
-                                />
-                                <div className="cms-art-info">
-                                  <strong className="cms-art-title-text" title={post.title}>
-                                    {post.title}
-                                  </strong>
-                                  <span className="cms-art-slug-link">
-                                    /{getBlogPostPath(post)}
-                                  </span>
+                  {dashboardRecentTab === 'products' ? (
+                    <div className="cms-table-wrapper">
+                      <table className="cms-table cms-articles-table">
+                        <thead>
+                          <tr>
+                            <th>EQUIPMENT MODEL</th>
+                            <th>SKU</th>
+                            <th>PRICE</th>
+                            <th>STATUS</th>
+                            <th style={{ textAlign: 'right' }}>ACTION</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {products.slice(0, 6).map((prod) => (
+                            <tr key={prod.id}>
+                              <td className="cms-article-title-cell">
+                                <div className="cms-art-preview-flex">
+                                  <img
+                                    src={prod.image || '/images/why-choose-v900-jobsite.png'}
+                                    alt={prod.name}
+                                    className="cms-art-thumb"
+                                  />
+                                  <div className="cms-art-info">
+                                    <strong className="cms-art-title-text" title={prod.name}>
+                                      {prod.name}
+                                    </strong>
+                                    <span className="cms-art-slug-link">
+                                      {prod.category}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td>
-                              <span className="cms-category-pill">
-                                {post.category || 'General'}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="cms-status-pill published">
-                                Published
-                              </span>
-                            </td>
-                            <td className="cms-date-cell">
-                              {post.date || 'Oct 15, 2026'}
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <div className="cms-row-actions">
+                              </td>
+                              <td>
+                                <span className="cms-sku-badge">{prod.sku}</span>
+                              </td>
+                              <td style={{ fontWeight: 800, color: 'var(--cms-text-primary)' }}>
+                                ${prod.price.toLocaleString()}
+                              </td>
+                              <td>
+                                <span className={`cms-status-pill ${prod.status === 'Published' ? 'published' : 'draft'}`}>
+                                  {prod.status}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
                                 <button
                                   type="button"
                                   className="cms-action-pill-btn"
-                                  onClick={() => openEditArticle(post)}
+                                  onClick={() => {
+                                    setActiveTab('products')
+                                    openEditProduct(prod)
+                                  }}
                                 >
                                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -1225,26 +1607,91 @@ export default function AdminDashboard() {
                                   </svg>
                                   <span>Edit</span>
                                 </button>
-                                <a
-                                  href={`/${getBlogPostPath(post)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="cms-action-icon-link"
-                                  title="View Live Article"
-                                >
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                    <polyline points="15 3 21 3 21 9" />
-                                    <line x1="10" y1="14" x2="21" y2="3" />
-                                  </svg>
-                                </a>
-                              </div>
-                            </td>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="cms-table-wrapper">
+                      <table className="cms-table cms-articles-table">
+                        <thead>
+                          <tr>
+                            <th>ARTICLE</th>
+                            <th>CATEGORY</th>
+                            <th>STATUS</th>
+                            <th>DATE</th>
+                            <th style={{ textAlign: 'right' }}>ACTION</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {posts.slice(0, 6).map((post) => (
+                            <tr key={post.id}>
+                              <td className="cms-article-title-cell">
+                                <div className="cms-art-preview-flex">
+                                  <img
+                                    src={post.image || '/images/why-choose-v900-jobsite.png'}
+                                    alt={post.title}
+                                    className="cms-art-thumb"
+                                  />
+                                  <div className="cms-art-info">
+                                    <strong className="cms-art-title-text" title={post.title}>
+                                      {post.title}
+                                    </strong>
+                                    <span className="cms-art-slug-link">
+                                      /{getBlogPostPath(post)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <span className="cms-category-pill">
+                                  {post.category || 'General'}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="cms-status-pill published">
+                                  Published
+                                </span>
+                              </td>
+                              <td className="cms-date-cell">
+                                {post.date || 'Oct 15, 2026'}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <div className="cms-row-actions">
+                                  <button
+                                    type="button"
+                                    className="cms-action-pill-btn"
+                                    onClick={() => openEditArticle(post)}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                    <span>Edit</span>
+                                  </button>
+                                  <a
+                                    href={`/${getBlogPostPath(post)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="cms-action-icon-link"
+                                    title="View Live Article"
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                      <polyline points="15 3 21 3 21 9" />
+                                      <line x1="10" y1="14" x2="21" y2="3" />
+                                    </svg>
+                                  </a>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
                 {/* RIGHT COLUMN: Latest Comments & Quick Actions (Screenshot 1) */}
@@ -1259,7 +1706,7 @@ export default function AdminDashboard() {
                       <button
                         type="button"
                         className="cms-link-action-btn"
-                        onClick={() => showToast('All comments are moderated.', 'info' as any)}
+                        onClick={() => setActiveTab('comments')}
                       >
                         <span>Moderate</span>
                         <span>→</span>
@@ -1267,20 +1714,22 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="cms-comments-list">
-                      {commentsList.map((item) => (
+                      {commentsData.slice(0, 3).map((item) => (
                         <div key={item.id} className="cms-comment-item">
                           <div className="cms-comment-user-row">
                             <div className="cms-comment-avatar-wrap">
-                              <img src={item.avatar} alt={item.author} className="cms-comment-avatar" />
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#1d7ff3', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                                {item.author.charAt(0)}
+                              </div>
                             </div>
                             <div className="cms-comment-meta">
                               <span className="cms-comment-author">{item.author}</span>
-                              <span className="cms-comment-time">{item.time}</span>
+                              <span className="cms-comment-time">{item.date}</span>
                             </div>
                           </div>
-                          <p className="cms-comment-text">"{item.comment}"</p>
+                          <p className="cms-comment-text">"{item.text}"</p>
                           <span className="cms-comment-on-link">
-                            on: <span className="cms-comment-target-title">{item.articleTitle}</span>
+                            on: <span className="cms-comment-target-title">{item.postTitle}</span>
                           </span>
                         </div>
                       ))}
@@ -1295,26 +1744,33 @@ export default function AdminDashboard() {
                         type="button"
                         className="cms-quick-action-btn"
                         onClick={() => {
-                          setActiveTab('articles')
-                          openNewArticle()
+                          setActiveTab('products')
+                          openCreateProduct()
                         }}
                       >
-                        <span className="cms-qa-icon" style={{ background: '#fee2e2', color: '#dc2626' }}>✍️</span>
+                        <div className="cms-qa-icon" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                          🚜
+                        </div>
                         <div className="cms-qa-text">
-                          <strong>Write Article</strong>
-                          <small>Create editorial blog</small>
+                          <strong>Add Equipment</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>New machine listing</span>
                         </div>
                       </button>
 
                       <button
                         type="button"
                         className="cms-quick-action-btn"
-                        onClick={() => setActiveTab('products')}
+                        onClick={() => {
+                          setActiveTab('articles')
+                          openNewArticle()
+                        }}
                       >
-                        <span className="cms-qa-icon" style={{ background: '#dbeafe', color: '#2563eb' }}>🚜</span>
+                        <div className="cms-qa-icon" style={{ background: '#fee2e2', color: '#dc2626' }}>
+                          📝
+                        </div>
                         <div className="cms-qa-text">
-                          <strong>Add Equipment</strong>
-                          <small>Manage machine specs</small>
+                          <strong>Write Article</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>Jobsite guide & post</span>
                         </div>
                       </button>
 
@@ -1323,25 +1779,26 @@ export default function AdminDashboard() {
                         className="cms-quick-action-btn"
                         onClick={() => setActiveTab('media')}
                       >
-                        <span className="cms-qa-icon" style={{ background: '#ede9fe', color: '#7c3aed' }}>📁</span>
+                        <div className="cms-qa-icon" style={{ background: '#ede9fe', color: '#7c3aed' }}>
+                          🖼️
+                        </div>
                         <div className="cms-qa-text">
-                          <strong>Media Assets</strong>
-                          <small>Upload images & video</small>
+                          <strong>Upload Media</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>Photos & blueprints</span>
                         </div>
                       </button>
 
                       <button
                         type="button"
                         className="cms-quick-action-btn"
-                        onClick={() => {
-                          setActiveTab('security')
-                          setSecuritySubTab('overview')
-                        }}
+                        onClick={() => setActiveTab('maintenance')}
                       >
-                        <span className="cms-qa-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>🛡️</span>
+                        <div className="cms-qa-icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+                          ⚠️
+                        </div>
                         <div className="cms-qa-text">
-                          <strong>Security Guard</strong>
-                          <small>Threat log & IP bans</small>
+                          <strong>Maintenance</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>System status</span>
                         </div>
                       </button>
                     </div>
@@ -2251,70 +2708,1055 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 4: EQUIPMENT & PRODUCTS */}
+          {/* TAB 4: EQUIPMENT & PRODUCTS (SCREENSHOTS 1, 2, 3) */}
           {activeTab === 'products' && (
             <>
-              <div className="cms-view-header">
-                <div className="cms-view-title-group">
-                  <h1>Equipment & Product Customization</h1>
-                  <p>Manage machines, attachment specifications, pricing, and custom action button destinations.</p>
+              {productsSubView === 'list' && (
+                <div className="cms-catalog-view-container">
+                  {/* Top Breadcrumb Bar */}
+                  <div className="cms-view-breadcrumb-bar">
+                    <span>DASHBOARD PORTAL</span>
+                    <span>/</span>
+                    <span style={{ color: 'var(--cms-accent-blue)' }}>ADMIN/PRODUCTS</span>
+                  </div>
+
+                  {/* Header Title Row */}
+                  <div className="cms-catalog-title-row">
+                    <div>
+                      <span className="cms-catalog-eyebrow">STORE CATALOG</span>
+                      <h1 className="cms-catalog-h1">All Products</h1>
+                      <p className="cms-catalog-subtext">
+                        {products.length} total • {products.filter((p) => p.status === 'Published').length} published • {products.filter((p) => p.status === 'Draft').length} drafts
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="cms-btn-primary-blue"
+                      onClick={() => openCreateProduct()}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      <span>+ Add Product</span>
+                    </button>
+                  </div>
+
+                  {/* 4 Product Metric Cards (Screenshot 2) */}
+                  <div className="cms-prod-metrics-grid">
+                    <div className="cms-prod-metric-card" style={{ cursor: 'pointer' }} onClick={() => { setProdStatusFilter('all'); setProdSearch('') }}>
+                      <span className="cms-pm-label">Total Products</span>
+                      <span className="cms-pm-value">{products.length}</span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Complete store inventory</span>
+                    </div>
+
+                    <div className="cms-prod-metric-card published" style={{ cursor: 'pointer' }} onClick={() => setProdStatusFilter('published')}>
+                      <span className="cms-pm-label">Published</span>
+                      <span className="cms-pm-value">{products.filter((p) => p.status === 'Published').length}</span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Live in catalog & store</span>
+                    </div>
+
+                    <div className="cms-prod-metric-card drafts" style={{ cursor: 'pointer' }} onClick={() => setProdStatusFilter('draft')}>
+                      <span className="cms-pm-label">Drafts</span>
+                      <span className="cms-pm-value">{products.filter((p) => p.status === 'Draft').length}</span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Draft catalog listings</span>
+                    </div>
+
+                    <div className="cms-prod-metric-card lowstock" style={{ cursor: 'pointer' }} onClick={() => setProdStatusFilter('low-stock')}>
+                      <span className="cms-pm-label">Low Stock</span>
+                      <span className="cms-pm-value">{products.filter((p) => (p.stock ?? 0) <= 2).length}</span>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Units with stock ≤ 2</span>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Toolbar */}
+                  <div className="cms-products-filter-toolbar">
+                    <div className="cms-filter-search-box">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Search by product name, SKU, or category..."
+                        value={prodSearch}
+                        onChange={(e) => {
+                          setProdSearch(e.target.value)
+                          setProdCurrentPage(1)
+                        }}
+                      />
+                    </div>
+
+                    <select
+                      className="cms-filter-dropdown-select"
+                      value={prodStatusFilter}
+                      onChange={(e) => {
+                        setProdStatusFilter(e.target.value as any)
+                        setProdCurrentPage(1)
+                      }}
+                    >
+                      <option value="all">All statuses</option>
+                      <option value="published">Published</option>
+                      <option value="draft">Drafts</option>
+                      <option value="low-stock">Low Stock (≤ 2)</option>
+                    </select>
+
+                    <select
+                      className="cms-filter-dropdown-select"
+                      style={{ maxWidth: '240px' }}
+                      value={prodCategoryFilter}
+                      onChange={(e) => {
+                        setProdCategoryFilter(e.target.value)
+                        setProdCurrentPage(1)
+                      }}
+                    >
+                      <option value="all">All Categories</option>
+                      {IMPORTED_CATEGORY_PATHS.map((catPath) => (
+                        <option key={catPath} value={catPath}>
+                          {catPath}
+                        </option>
+                      ))}
+                    </select>
+
+                    {(prodSearch || prodStatusFilter !== 'all' || prodCategoryFilter !== 'all') && (
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          setProdSearch('')
+                          setProdStatusFilter('all')
+                          setProdCategoryFilter('all')
+                          setProdCurrentPage(1)
+                        }}
+                      >
+                        Reset Filters
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Products Table (Screenshot 2) */}
+                  <div className="cms-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="cms-table-wrapper">
+                      {(() => {
+                        const filtered = products.filter((p) => {
+                          const matchesSearch =
+                            !prodSearch ||
+                            p.name.toLowerCase().includes(prodSearch.toLowerCase()) ||
+                            p.sku.toLowerCase().includes(prodSearch.toLowerCase()) ||
+                            p.category.toLowerCase().includes(prodSearch.toLowerCase()) ||
+                            (p.brand && p.brand.toLowerCase().includes(prodSearch.toLowerCase()))
+                          const matchesStatus =
+                            prodStatusFilter === 'all' ||
+                            (prodStatusFilter === 'published' && p.status === 'Published') ||
+                            (prodStatusFilter === 'draft' && p.status === 'Draft') ||
+                            (prodStatusFilter === 'low-stock' && (p.stock ?? 0) <= 2)
+                          const matchesCategory =
+                            prodCategoryFilter === 'all' || p.category === prodCategoryFilter
+                          return matchesSearch && matchesStatus && matchesCategory
+                        })
+
+                        const totalPages = Math.ceil(filtered.length / prodItemsPerPage) || 1
+                        const paginated = filtered.slice(
+                          (prodCurrentPage - 1) * prodItemsPerPage,
+                          prodCurrentPage * prodItemsPerPage
+                        )
+
+                        return (
+                          <>
+                            <table className="cms-prod-table">
+                              <thead>
+                                <tr>
+                                  <th>PRODUCT</th>
+                                  <th>SKU</th>
+                                  <th>CATEGORY</th>
+                                  <th>PRICE</th>
+                                  <th>STOCK</th>
+                                  <th>STATUS</th>
+                                  <th>ADD TO CART</th>
+                                  <th>UPDATED</th>
+                                  <th style={{ textAlign: 'right' }}>ACTIONS</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {paginated.map((prod) => (
+                                  <tr key={prod.id}>
+                                    <td>
+                                      <div className="cms-prod-thumb-cell">
+                                        <div className="cms-prod-img-box">
+                                          <img
+                                            src={prod.image || '/images/why-choose-v900-jobsite.png'}
+                                            alt={prod.name}
+                                          />
+                                        </div>
+                                        <div className="cms-prod-title-group">
+                                          <strong className="cms-prod-name-title" title={prod.name}>
+                                            {prod.name}
+                                          </strong>
+                                          <span className="cms-prod-sub-snippet">
+                                            {prod.shortDescription || prod.description.slice(0, 50)}...
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span className="cms-sku-badge">{prod.sku}</span>
+                                    </td>
+                                    <td>
+                                      <span className="cms-category-pill" style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={prod.category}>
+                                        {prod.category}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div className="cms-price-stack">
+                                        <span className="cms-sale-price-bold">
+                                          ${(prod.salePrice || prod.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                        {prod.salePrice && (
+                                          <span className="cms-regular-price-struck">
+                                            ${prod.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span className={`cms-stock-pill ${(prod.stock ?? 0) > 0 ? 'in-stock' : 'out-stock'}`}>
+                                        {prod.stock ?? 0}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className={`cms-status-btn-pill ${prod.status === 'Published' ? 'published' : 'draft'}`}
+                                        onClick={() => handleToggleProductStatus(prod.id)}
+                                        title="Click to toggle Published / Draft"
+                                      >
+                                        <span>•</span>
+                                        <span>{prod.status}</span>
+                                      </button>
+                                    </td>
+                                    <td>
+                                      <span className={`cms-cart-badge-pill ${prod.addToCartEnabled !== false ? 'enabled' : 'disabled'}`}>
+                                        {prod.addToCartEnabled !== false ? 'Enabled' : 'Disabled'}
+                                      </span>
+                                    </td>
+                                    <td style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)', whiteSpace: 'nowrap' }}>
+                                      {prod.updatedAt || 'July 29, 2026'}
+                                    </td>
+                                    <td style={{ textAlign: 'right' }}>
+                                      <div className="cms-table-action-btns">
+                                        <button
+                                          type="button"
+                                          className="cms-action-btn-outline"
+                                          onClick={() => openEditProduct(prod)}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-action-btn-outline"
+                                          onClick={() => handleDuplicateProduct(prod)}
+                                          title="Duplicate Product"
+                                        >
+                                          Copy
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-action-btn-outline danger"
+                                          onClick={() => handleDeleteProduct(prod.id)}
+                                          title="Delete Product"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+
+                            {/* Pagination */}
+                            <div className="cms-pagination-bar">
+                              <span className="cms-pagination-info">
+                                Showing {filtered.length === 0 ? 0 : (prodCurrentPage - 1) * prodItemsPerPage + 1} to{' '}
+                                {Math.min(prodCurrentPage * prodItemsPerPage, filtered.length)} of {filtered.length} products
+                              </span>
+
+                              <div className="cms-pagination-controls">
+                                <button
+                                  type="button"
+                                  className="cms-page-pill-btn"
+                                  disabled={prodCurrentPage <= 1}
+                                  onClick={() => setProdCurrentPage((prev) => Math.max(1, prev - 1))}
+                                >
+                                  ← Prev
+                                </button>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 700, padding: '0 8px' }}>
+                                  Page {prodCurrentPage} of {totalPages}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="cms-page-pill-btn"
+                                  disabled={prodCurrentPage >= totalPages}
+                                  onClick={() => setProdCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                                >
+                                  Next →
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBVIEW B: 2-COLUMN PRODUCT EDITOR (SCREENSHOTS 1 & 3) */}
+              {productsSubView === 'editor' && (
+                <div className="cms-product-editor-container">
+                  {/* Top Bar Navigation */}
+                  <div className="cms-editor-top-nav">
+                    <button
+                      type="button"
+                      className="cms-back-btn"
+                      onClick={() => setProductsSubView('list')}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="15 18 9 12 15 6" />
+                      </svg>
+                      <span>BACK TO PRODUCTS</span>
+                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span className={`cms-status-btn-pill ${prodEditorStatus === 'Published' ? 'published' : 'draft'}`}>
+                        {prodEditorStatus}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="cms-editor-h1-row">
+                    <h1>{prodEditorId ? `EDIT: ${prodEditorName || 'Product'}` : 'CREATE PRODUCT'}</h1>
+                  </div>
+
+                  {/* 2-Column Responsive Layout */}
+                  <div className="cms-prod-editor-grid">
+                    {/* LEFT COLUMN: Main Product Content */}
+                    <div className="cms-editor-left-column">
+                      {/* Basic Information Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">PRODUCT TITLE</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="e.g. Skid Steer V900 — Crimson Red"
+                            value={prodEditorName}
+                            onChange={(e) => {
+                              setProdEditorName(e.target.value)
+                              if (!prodEditorId) {
+                                setProdEditorSlug(
+                                  e.target.value
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9]+/g, '-')
+                                    .replace(/^-|-$/g, '')
+                                )
+                              }
+                            }}
+                            required
+                          />
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">URL SLUG</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="skid-steer-v900-red"
+                            value={prodEditorSlug}
+                            onChange={(e) => setProdEditorSlug(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">SHORT DESCRIPTION</label>
+                          <textarea
+                            rows={3}
+                            className="cms-textarea"
+                            placeholder="Brief machine summary for catalog card and search snippets..."
+                            value={prodEditorShortDesc}
+                            onChange={(e) => setProdEditorShortDesc(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">FULL DESCRIPTION</label>
+                          <textarea
+                            rows={7}
+                            className="cms-textarea"
+                            placeholder="Detailed product overview, hydraulic performance, operator ergonomics..."
+                            value={prodEditorDesc}
+                            onChange={(e) => setProdEditorDesc(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Specifications Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-title">
+                          <span>SPECIFICATIONS</span>
+                          <button
+                            type="button"
+                            className="cms-action-pill-btn"
+                            onClick={handleAddSpecRow}
+                          >
+                            + ADD SPEC
+                          </button>
+                        </div>
+
+                        {prodEditorSpecs.length === 0 ? (
+                          <div className="cms-no-specs-notice">
+                            <span>NO SPECIFICATIONS ADDED YET.</span>
+                            <button
+                              type="button"
+                              className="cms-btn-primary-blue"
+                              style={{ fontSize: '0.78rem', padding: '6px 14px' }}
+                              onClick={() => {
+                                setProdEditorSpecs([
+                                  { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine (Tier 4 / Stage V)' },
+                                  { name: 'Operating Weight', value: '2,150 lbs (975 kg)' },
+                                  { name: 'Rated Operating Capacity', value: '900 lbs (408 kg)' },
+                                  { name: 'Hydraulic Flow', value: '12.7 GPM @ 2,321 psi' },
+                                  { name: 'Width', value: '35.5 in (Fits Standard Backyard Gates)' }
+                                ])
+                              }}
+                            >
+                              + Load Standard V900 Specs
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="cms-specs-matrix-box">
+                            {prodEditorSpecs.map((spec, index) => (
+                              <div key={index} className="cms-spec-item-row">
+                                <input
+                                  type="text"
+                                  placeholder="Spec Name (e.g. Engine)"
+                                  value={spec.name}
+                                  onChange={(e) => handleUpdateSpecRow(index, 'name', e.target.value)}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Spec Value (e.g. Kubota D1105 Diesel)"
+                                  value={spec.value}
+                                  onChange={(e) => handleUpdateSpecRow(index, 'value', e.target.value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="cms-spec-del-btn"
+                                  onClick={() => handleRemoveSpecRow(index)}
+                                  title="Remove specification"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Pricing & Inventory Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-title">
+                          <span>PRICING & INVENTORY</span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                          <div>
+                            <label className="cms-form-label">REGULAR PRICE ($)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="cms-input-text"
+                              value={prodEditorPrice}
+                              onChange={(e) => setProdEditorPrice(parseFloat(e.target.value) || 0)}
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="cms-form-label">SALE PRICE ($)</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="cms-input-text"
+                              placeholder="Optional discounted price"
+                              value={prodEditorSalePrice ?? ''}
+                              onChange={(e) => setProdEditorSalePrice(e.target.value ? parseFloat(e.target.value) : undefined)}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div>
+                            <label className="cms-form-label">STOCK QUANTITY</label>
+                            <input
+                              type="number"
+                              className="cms-input-text"
+                              value={prodEditorStock}
+                              onChange={(e) => setProdEditorStock(parseInt(e.target.value, 10) || 0)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="cms-form-label">SKU</label>
+                            <input
+                              type="text"
+                              className="cms-input-text"
+                              value={prodEditorSku}
+                              onChange={(e) => setProdEditorSku(e.target.value)}
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: Sidebar Controls */}
+                    <div className="cms-editor-right-column">
+                      {/* Publish Action Card */}
+                      <div className="cms-editor-card">
+                        <button
+                          type="button"
+                          className="cms-btn-primary-blue"
+                          style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.94rem', marginBottom: '12px' }}
+                          onClick={() => handleSaveProduct('Published')}
+                        >
+                          PUBLISH PRODUCT
+                        </button>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">VISIBILITY STATUS</label>
+                          <select
+                            className="cms-input-text"
+                            value={prodEditorStatus}
+                            onChange={(e) => setProdEditorStatus(e.target.value as any)}
+                          >
+                            <option value="Published">Publish immediately (Published)</option>
+                            <option value="Draft">Save as Draft (Hidden)</option>
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="cms-action-btn-outline"
+                          style={{ width: '100%', justifyContent: 'center', padding: '9px' }}
+                          onClick={() => handleSaveProduct('Draft')}
+                        >
+                          Save as Draft
+                        </button>
+                      </div>
+
+                      {/* Organization Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-title">
+                          <span>ORGANIZATION</span>
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">BRAND</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            value={prodEditorBrand}
+                            onChange={(e) => setProdEditorBrand(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">CATEGORY</label>
+                          <select
+                            className="cms-input-text"
+                            value={prodEditorCategory}
+                            onChange={(e) => setProdEditorCategory(e.target.value)}
+                          >
+                            {IMPORTED_CATEGORY_PATHS.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* External Link Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-title">
+                          <span>EXTERNAL LINK</span>
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">BUY ON STORE URL</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="https://..."
+                            value={prodEditorBuyUrl}
+                            onChange={(e) => setProdEditorBuyUrl(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Visibility & Status Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-title">
+                          <span>VISIBILITY & STATUS</span>
+                        </div>
+
+                        <label className="cms-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={prodEditorFeatured}
+                            onChange={(e) => setProdEditorFeatured(e.target.checked)}
+                          />
+                          <span>Feature this product</span>
+                        </label>
+
+                        <label className="cms-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={prodEditorAddToCart}
+                            onChange={(e) => setProdEditorAddToCart(e.target.checked)}
+                          />
+                          <span>Enable Add to Cart for customers</span>
+                        </label>
+                      </div>
+
+                      {/* Media Card */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-title">
+                          <span>MEDIA</span>
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">MAIN IMAGE URL</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="/images/loader-red.png"
+                            value={prodEditorImage}
+                            onChange={(e) => setProdEditorImage(e.target.value)}
+                          />
+
+                          {prodEditorImage && (
+                            <div className="cms-live-media-preview-container">
+                              <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>Main Image Preview:</span>
+                              <div className="cms-main-preview-frame">
+                                <img
+                                  src={prodEditorImage}
+                                  alt="Main Preview"
+                                  onError={(e) => { (e.target as any).src = '/images/why-choose-v900-jobsite.png' }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="cms-form-field-group">
+                          <label className="cms-form-label">GALLERY IMAGES (ONE URL PER LINE)</label>
+                          <textarea
+                            rows={3}
+                            className="cms-textarea"
+                            placeholder="/images/image1.jpg&#10;/images/image2.jpg"
+                            value={prodEditorGallery}
+                            onChange={(e) => setProdEditorGallery(e.target.value)}
+                          />
+
+                          {prodEditorGallery.trim() && (
+                            <div className="cms-live-media-preview-container">
+                              <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>Gallery Preview:</span>
+                              <div className="cms-gallery-thumbnails-strip">
+                                {prodEditorGallery.split('\n').filter(Boolean).map((imgUrl, i) => (
+                                  <div key={i} className="cms-gallery-thumb-chip">
+                                    <img
+                                      src={imgUrl.trim()}
+                                      alt={`Gallery ${i}`}
+                                      onError={(e) => { (e.target as any).src = '/images/why-choose-v900-jobsite.png' }}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* TAB: CART ACTIVITY & ORDERS */}
+          {activeTab === 'cart' && (
+            <div className="cms-orders-view-container">
+              <div className="cms-catalog-title-row">
+                <div>
+                  <span className="cms-catalog-eyebrow">COMMERCE & CHECKOUT</span>
+                  <h1 className="cms-catalog-h1">Orders & Cart Activity</h1>
+                  <p className="cms-catalog-subtext">Track customer checkout sessions, commercial orders, and equipment inquiries.</p>
                 </div>
               </div>
 
-              <div className="cms-card">
+              {/* 4 Orders Metric Cards */}
+              <div className="cms-prod-metrics-grid">
+                <div className="cms-prod-metric-card">
+                  <span className="cms-pm-label">Total Volume</span>
+                  <span className="cms-pm-value" style={{ color: '#10b981' }}>$27,841.00</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Total catalog sales</span>
+                </div>
+
+                <div className="cms-prod-metric-card published">
+                  <span className="cms-pm-label">Completed</span>
+                  <span className="cms-pm-value">{ordersList.filter((o) => o.status === 'Completed').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Fulfilled deliveries</span>
+                </div>
+
+                <div className="cms-prod-metric-card drafts">
+                  <span className="cms-pm-label">Processing</span>
+                  <span className="cms-pm-value">{ordersList.filter((o) => o.status === 'Processing').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Pending fulfillment</span>
+                </div>
+
+                <div className="cms-prod-metric-card lowstock">
+                  <span className="cms-pm-label">Abandoned Carts</span>
+                  <span className="cms-pm-value">{ordersList.filter((o) => o.status === 'Abandoned').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Lead re-engagement</span>
+                </div>
+              </div>
+
+              <div className="cms-card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="cms-table-wrapper">
-                  <table className="cms-table">
+                  <table className="cms-prod-table">
                     <thead>
                       <tr>
-                        <th>Machine / Attachment</th>
-                        <th>SKU</th>
-                        <th>Category</th>
-                        <th>Price</th>
-                        <th>Status</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th>ORDER ID</th>
+                        <th>CUSTOMER</th>
+                        <th>ITEMS</th>
+                        <th>TOTAL AMOUNT</th>
+                        <th>STATUS</th>
+                        <th>DATE</th>
+                        <th style={{ textAlign: 'right' }}>ACTION</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {products
-                        .filter((p) => p.name.toLowerCase().includes(globalSearch.toLowerCase()) || p.sku.toLowerCase().includes(globalSearch.toLowerCase()))
-                        .slice(0, 50)
-                        .map((prod) => (
-                          <tr key={prod.id}>
-                            <td style={{ fontWeight: 650, maxWidth: '240px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <img
-                                  src={prod.image || '/images/why-choose-v900-jobsite.png'}
-                                  alt={prod.name}
-                                  style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }}
-                                />
-                                <span>{prod.name}</span>
-                              </div>
-                            </td>
-                            <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{prod.sku}</td>
-                            <td>
-                              <span className="cms-badge neutral">{prod.category}</span>
-                            </td>
-                            <td style={{ fontWeight: 700 }}>${prod.price.toLocaleString()}</td>
-                            <td>
-                              <span className={`cms-badge ${prod.status === 'Published' ? 'success' : 'neutral'}`}>
-                                {prod.status}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <button
-                                className="cms-btn cms-btn-secondary cms-btn-sm"
-                                onClick={() => setEditingProduct(prod)}
-                              >
-                                Edit Specs & CTA
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                      {ordersList.map((order) => (
+                        <tr key={order.id}>
+                          <td>
+                            <span className="cms-sku-badge">{order.id}</span>
+                          </td>
+                          <td>
+                            <strong style={{ display: 'block', color: 'var(--cms-text-primary)' }}>{order.customer}</strong>
+                            <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>{order.email} • {order.phone}</span>
+                          </td>
+                          <td style={{ maxWidth: '280px' }}>
+                            <span style={{ fontSize: '0.84rem' }}>{order.items}</span>
+                          </td>
+                          <td>
+                            <strong style={{ color: '#10b981', fontSize: '0.94rem' }}>
+                              ${order.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </strong>
+                          </td>
+                          <td>
+                            <span className={`cms-orders-status-pill ${order.status.toLowerCase()}`}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                            {order.date}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <select
+                              className="cms-filter-dropdown-select"
+                              value={order.status}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as any)}
+                            >
+                              <option value="Processing">Processing</option>
+                              <option value="Completed">Completed</option>
+                              <option value="Pending">Pending</option>
+                              <option value="Abandoned">Abandoned</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               </div>
-            </>
+            </div>
+          )}
+
+          {/* TAB: CONTRACTOR QUOTES & INQUIRIES */}
+          {activeTab === 'inquiries' && (
+            <div className="cms-inquiries-view-container">
+              <div className="cms-catalog-title-row">
+                <div>
+                  <span className="cms-catalog-eyebrow">LEAD MANAGEMENT</span>
+                  <h1 className="cms-catalog-h1">Contractor Quotes & Inquiries</h1>
+                  <p className="cms-catalog-subtext">Manage incoming machine requests, customer quote tickets, and fleet purchasing inquiries.</p>
+                </div>
+              </div>
+
+              {/* 4 Inquiries Metric Cards */}
+              <div className="cms-prod-metrics-grid">
+                <div className="cms-prod-metric-card" style={{ cursor: 'pointer' }} onClick={() => setInquiryStatusFilter('all')}>
+                  <span className="cms-pm-label">Total Inquiries</span>
+                  <span className="cms-pm-value">{inquiriesList.length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Incoming leads</span>
+                </div>
+
+                <div className="cms-prod-metric-card drafts" style={{ cursor: 'pointer' }} onClick={() => setInquiryStatusFilter('New')}>
+                  <span className="cms-pm-label">New Leads</span>
+                  <span className="cms-pm-value">{inquiriesList.filter((i) => i.status === 'New').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Requires response</span>
+                </div>
+
+                <div className="cms-prod-metric-card" style={{ cursor: 'pointer' }} onClick={() => setInquiryStatusFilter('In Progress')}>
+                  <span className="cms-pm-label">In Progress</span>
+                  <span className="cms-pm-value">{inquiriesList.filter((i) => i.status === 'In Progress').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Quotation dispatched</span>
+                </div>
+
+                <div className="cms-prod-metric-card published" style={{ cursor: 'pointer' }} onClick={() => setInquiryStatusFilter('Resolved')}>
+                  <span className="cms-pm-label">Resolved</span>
+                  <span className="cms-pm-value">{inquiriesList.filter((i) => i.status === 'Resolved').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Orders finalized</span>
+                </div>
+              </div>
+
+              {/* Filter */}
+              <div className="cms-products-filter-toolbar">
+                <div className="cms-filter-search-box">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search contractor name, company, or message..."
+                    value={inquirySearch}
+                    onChange={(e) => setInquirySearch(e.target.value)}
+                  />
+                </div>
+
+                <select
+                  className="cms-filter-dropdown-select"
+                  value={inquiryStatusFilter}
+                  onChange={(e) => setInquiryStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="New">New</option>
+                  <option value="Contacted">Contacted</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Resolved">Resolved</option>
+                </select>
+              </div>
+
+              {/* Inquiries Cards Grid */}
+              <div className="cms-inquiry-cards-grid">
+                {inquiriesList
+                  .filter((item) => {
+                    const matchSearch =
+                      !inquirySearch ||
+                      item.name.toLowerCase().includes(inquirySearch.toLowerCase()) ||
+                      item.company.toLowerCase().includes(inquirySearch.toLowerCase()) ||
+                      item.message.toLowerCase().includes(inquirySearch.toLowerCase())
+                    const matchStatus = inquiryStatusFilter === 'all' || item.status === inquiryStatusFilter
+                    return matchSearch && matchStatus
+                  })
+                  .map((inq) => (
+                    <div key={inq.id} className="cms-inquiry-card">
+                      <div className="cms-inquiry-header-row">
+                        <div className="cms-inquiry-author-info">
+                          <strong>{inq.name}</strong>
+                          <span className="cms-inquiry-company">{inq.company}</span>
+                        </div>
+                        <span className="cms-inquiry-badge">{inq.productInterest || 'General Inquiry'}</span>
+                      </div>
+
+                      <div className="cms-inquiry-msg-box">
+                        "{inq.message}"
+                      </div>
+
+                      <div className="cms-inquiry-contact-strip">
+                        <span>📧 {inq.email}</span>
+                        <span>📞 {inq.phone}</span>
+                        <span>📅 {inq.date}</span>
+                      </div>
+
+                      <div className="cms-inquiry-footer-row">
+                        <select
+                          className="cms-filter-dropdown-select"
+                          value={inq.status}
+                          onChange={(e) => handleUpdateInquiryStatus(inq.id, e.target.value as any)}
+                        >
+                          <option value="New">New</option>
+                          <option value="Contacted">Contacted</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Resolved">Resolved</option>
+                        </select>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <a
+                            href={`mailto:${inq.email}?subject=Happy Machinery Quote: ${inq.productInterest || 'Equipment'}`}
+                            className="cms-action-btn-outline"
+                            style={{ textDecoration: 'none' }}
+                          >
+                            Reply
+                          </a>
+                          <button
+                            type="button"
+                            className="cms-action-btn-outline danger"
+                            onClick={() => handleDeleteInquiry(inq.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB: COMMENTS & REVIEWS */}
+          {activeTab === 'comments' && (
+            <div className="cms-comments-view-container">
+              <div className="cms-catalog-title-row">
+                <div>
+                  <span className="cms-catalog-eyebrow">COMMUNITY ENGAGEMENT</span>
+                  <h1 className="cms-catalog-h1">Reader Comments & Reviews</h1>
+                  <p className="cms-catalog-subtext">Moderate reader discussions, answer contractor questions, and filter spam.</p>
+                </div>
+              </div>
+
+              {/* 4 Comments Metric Cards */}
+              <div className="cms-prod-metrics-grid">
+                <div className="cms-prod-metric-card" style={{ cursor: 'pointer' }} onClick={() => setCommentFilter('all')}>
+                  <span className="cms-pm-label">Total Comments</span>
+                  <span className="cms-pm-value">{commentsData.length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Reader discussions</span>
+                </div>
+
+                <div className="cms-prod-metric-card published" style={{ cursor: 'pointer' }} onClick={() => setCommentFilter('Approved')}>
+                  <span className="cms-pm-label">Approved</span>
+                  <span className="cms-pm-value">{commentsData.filter((c) => c.status === 'Approved').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Live on website</span>
+                </div>
+
+                <div className="cms-prod-metric-card drafts" style={{ cursor: 'pointer' }} onClick={() => setCommentFilter('Pending')}>
+                  <span className="cms-pm-label">Pending</span>
+                  <span className="cms-pm-value">{commentsData.filter((c) => c.status === 'Pending').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Awaiting review</span>
+                </div>
+
+                <div className="cms-prod-metric-card lowstock" style={{ cursor: 'pointer' }} onClick={() => setCommentFilter('Spam')}>
+                  <span className="cms-pm-label">Spam</span>
+                  <span className="cms-pm-value">{commentsData.filter((c) => c.status === 'Spam').length}</span>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Flagged entries</span>
+                </div>
+              </div>
+
+              <div className="cms-card" style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {commentsData
+                    .filter((c) => commentFilter === 'all' || c.status === commentFilter)
+                    .map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          background: 'var(--cms-bg-surface)',
+                          border: '1px solid var(--cms-border)',
+                          borderRadius: '12px',
+                          padding: '16px 20px',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: '16px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: '14px' }}>
+                          <div
+                            style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '50%',
+                              background: '#1d7ff3',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 'bold',
+                              flexShrink: 0
+                            }}
+                          >
+                            {item.author.charAt(0)}
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                              <strong style={{ fontSize: '0.94rem' }}>{item.author}</strong>
+                              <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>{item.date}</span>
+                              <span className={`cms-status-btn-pill ${item.status === 'Approved' ? 'published' : 'draft'}`}>
+                                {item.status}
+                              </span>
+                            </div>
+                            <p style={{ margin: '4px 0 8px 0', fontSize: '0.88rem', color: 'var(--cms-text-secondary)', lineHeight: 1.5 }}>
+                              "{item.text}"
+                            </p>
+                            <span style={{ fontSize: '0.76rem', color: 'var(--cms-text-muted)' }}>
+                              On: <strong style={{ color: '#1d7ff3' }}>{item.postTitle}</strong>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          {item.status !== 'Approved' && (
+                            <button
+                              type="button"
+                              className="cms-action-btn-outline"
+                              onClick={() => handleUpdateCommentStatus(item.id, 'Approved')}
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {item.status !== 'Spam' && (
+                            <button
+                              type="button"
+                              className="cms-action-btn-outline"
+                              onClick={() => handleUpdateCommentStatus(item.id, 'Spam')}
+                            >
+                              Spam
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="cms-action-btn-outline danger"
+                            onClick={() => handleDeleteComment(item.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* TAB 5: VISUAL PAGE BUILDER */}
