@@ -5,16 +5,36 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 const sharedContentApi = () => {
-  const contentFile = resolve(process.cwd(), '.admin-data/content.json')
+  const contentFile = resolve(process.cwd(), 'happy-machinery-storage/content.json')
   let writeQueue = Promise.resolve()
 
   const readDatabase = async (): Promise<Record<string, unknown>> => {
     try {
       return JSON.parse(await readFile(contentFile, 'utf8')) as Record<string, unknown>
     } catch {
-      return {}
+      try {
+        const fallback = resolve(process.cwd(), '.admin-data/content.json')
+        return JSON.parse(await readFile(fallback, 'utf8')) as Record<string, unknown>
+      } catch {
+        return {}
+      }
     }
   }
+
+  const allowedKeys = [
+    'blog-posts',
+    'media-library',
+    'products',
+    'cart-activity',
+    'admin-users',
+    'security-logs',
+    'banned-ips',
+    'failed-logins',
+    'security-settings',
+    'analytics-events',
+    'site-settings',
+    'site-pages'
+  ]
 
   return {
     name: 'shared-content-api',
@@ -26,9 +46,16 @@ const sharedContentApi = () => {
           return
         }
 
+        if (url.searchParams.get('action') === 'check-ip') {
+          response.setHeader('Content-Type', 'application/json; charset=utf-8')
+          response.end(JSON.stringify({ ip: '127.0.0.1', banned: false }))
+          return
+        }
+
         const key = url.searchParams.get('key') ?? ''
-        if (!['blog-posts', 'media-library', 'products'].includes(key)) {
+        if (!allowedKeys.includes(key)) {
           response.statusCode = 400
+          response.setHeader('Content-Type', 'application/json; charset=utf-8')
           response.end(JSON.stringify({ error: 'Invalid content key.' }))
           return
         }
@@ -48,7 +75,7 @@ const sharedContentApi = () => {
           return
         }
 
-        if (request.method !== 'PUT') {
+        if (request.method !== 'PUT' && request.method !== 'POST') {
           response.statusCode = 405
           response.end(JSON.stringify({ error: 'Method not allowed.' }))
           return
@@ -64,9 +91,22 @@ const sharedContentApi = () => {
         request.on('end', () => {
           writeQueue = writeQueue.then(async () => {
             const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { value?: unknown }
-            if (!Array.isArray(payload.value)) throw new Error('A valid content value is required.')
             const database = await readDatabase()
-            database[key] = payload.value
+
+            if (request.method === 'POST') {
+              const existing = Array.isArray(database[key]) ? (database[key] as unknown[]) : []
+              existing.unshift(payload.value)
+              const limits: Record<string, number> = {
+                'analytics-events': 5000,
+                'security-logs': 1000,
+                'failed-logins': 500,
+                'cart-activity': 500
+              }
+              database[key] = existing.slice(0, limits[key] ?? 1000)
+            } else {
+              database[key] = payload.value
+            }
+
             await mkdir(dirname(contentFile), { recursive: true })
             await writeFile(contentFile, JSON.stringify(database), 'utf8')
           })

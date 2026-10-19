@@ -4,14 +4,20 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
-$allowedKeys = ['blog-posts', 'media-library', 'products', 'cart-activity'];
-$key = $_GET['key'] ?? '';
-
-if (!in_array($key, $allowedKeys, true)) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid content key.']);
-    exit;
-}
+$allowedKeys = [
+    'blog-posts',
+    'media-library',
+    'products',
+    'cart-activity',
+    'admin-users',
+    'security-logs',
+    'banned-ips',
+    'failed-logins',
+    'security-settings',
+    'analytics-events',
+    'site-settings',
+    'site-pages'
+];
 
 $storageDirectory = dirname(__DIR__, 2) . '/happy-machinery-storage';
 $storageFile = $storageDirectory . '/content.json';
@@ -36,8 +42,55 @@ $readDatabase = static function () use ($storageFile): array {
     return is_array($decoded) ? $decoded : [];
 };
 
+$getClientIp = static function (): string {
+    // Only trust REMOTE_ADDR directly or valid reverse proxy
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+        $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
+    }
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '127.0.0.1';
+};
+
+$clientIp = $getClientIp();
+$database = $readDatabase();
+
+// Check if IP is banned
+$bannedIps = $database['banned-ips'] ?? [];
+if (is_array($bannedIps)) {
+    $now = time();
+    foreach ($bannedIps as $ban) {
+        if (!empty($ban['active']) && !empty($ban['ip']) && $ban['ip'] === $clientIp) {
+            // Check expiry
+            if (!empty($ban['expiresAt'])) {
+                $expiresTime = strtotime($ban['expiresAt']);
+                if ($expiresTime && $expiresTime < $now) {
+                    continue; // Ban expired
+                }
+            }
+            http_response_code(403);
+            echo json_encode(['error' => 'Access denied by Happy Machinery Shield security policy.']);
+            exit;
+        }
+    }
+}
+
+$action = $_GET['action'] ?? '';
+
+// Action: check-ip status
+if ($action === 'check-ip') {
+    echo json_encode(['ip' => $clientIp, 'banned' => false]);
+    exit;
+}
+
+$key = $_GET['key'] ?? '';
+
+if (!in_array($key, $allowedKeys, true)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Invalid content key.']);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $database = $readDatabase();
     if (!array_key_exists($key, $database)) {
         http_response_code(404);
         echo json_encode(['error' => 'Content has not been initialized.']);
@@ -57,7 +110,7 @@ if (!in_array($_SERVER['REQUEST_METHOD'], ['PUT', 'POST'], true)) {
 
 $input = file_get_contents('php://input');
 $payload = json_decode($input ?: '', true);
-if (!is_array($payload) || !array_key_exists('value', $payload) || !is_array($payload['value'])) {
+if (!is_array($payload) || !array_key_exists('value', $payload)) {
     http_response_code(422);
     echo json_encode(['error' => 'A valid content value is required.']);
     exit;
@@ -72,13 +125,24 @@ if ($lockHandle === false || !flock($lockHandle, LOCK_EX)) {
 }
 
 $database = $readDatabase();
+
+// Max record limits per key for performance
+$limits = [
+    'analytics-events' => 5000,
+    'security-logs' => 1000,
+    'failed-logins' => 500,
+    'cart-activity' => 500
+];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $existing = isset($database[$key]) && is_array($database[$key]) ? $database[$key] : [];
     array_unshift($existing, $payload['value']);
-    $database[$key] = array_slice($existing, 0, 500);
+    $limit = $limits[$key] ?? 1000;
+    $database[$key] = array_slice($existing, 0, $limit);
 } else {
     $database[$key] = $payload['value'];
 }
+
 $encoded = json_encode($database, JSON_UNESCAPED_SLASHES);
 $saved = $encoded !== false && file_put_contents($storageFile, $encoded, LOCK_EX) !== false;
 

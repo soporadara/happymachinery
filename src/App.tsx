@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Navigation from './components/Navigation'
 import Footer from './components/Footer'
 import CartDrawer from './components/CartDrawer'
@@ -15,10 +15,11 @@ import ProductDetail from './pages/ProductDetail'
 import AdminDashboard from './pages/AdminDashboard'
 import Checkout from './pages/Checkout'
 import { recordCartActivity } from './data/cartActivity'
+import { usePageTracking } from './data/analyticsTracker'
 import './App.css'
 
 type Theme = 'light' | 'dark'
-const ADMIN_PATH = '/hm-ops-7f3a9c2e8b41'
+const ADMIN_PATH = '/ourcmskiuq'
 
 function AppContent({
   theme,
@@ -34,7 +35,8 @@ function AppContent({
   handleCheckout
 }: any) {
   const location = useLocation()
-  const isAdminPage = location.pathname === ADMIN_PATH
+  usePageTracking()
+  const isAdminPage = location.pathname === ADMIN_PATH || location.pathname === '/hm-ops-7f3a9c2e8b41'
   const totalCartCount = cartItems.reduce((acc: number, item: any) => acc + item.quantity, 0)
 
   return (
@@ -63,6 +65,7 @@ function AppContent({
           <Route path="/contact" element={<ContactUs />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/blog/:slug" element={<Blog />} />
+          <Route path="/hm-ops-7f3a9c2e8b41" element={<Navigate to={ADMIN_PATH} replace />} />
           <Route path={ADMIN_PATH} element={<AdminDashboard />} />
         </Routes>
       </main>

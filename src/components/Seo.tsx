@@ -206,9 +206,9 @@ export default function Seo() {
       title = 'Skid Steer Guides & TYPHON Machinery Blog'
       description = 'Read skid steer buying guides, maintenance advice, attachment tips, comparisons, and jobsite information from Happy Machinery.'
       schema = { '@type': 'Blog', name: 'Happy Machinery Blog', url: `${SITE_URL}/blog`, description }
-    } else if (pathname === '/checkout' || pathname === '/hm-ops-7f3a9c2e8b41') {
-      title = pathname === '/checkout' ? 'Secure Checkout | Happy Machinery' : 'Admin | Happy Machinery'
-      description = pathname === '/checkout' ? 'Complete your Happy Machinery equipment purchase securely.' : 'Happy Machinery administration.'
+    } else if (pathname === '/checkout' || pathname === '/ourcmskiuq' || pathname === '/hm-ops-7f3a9c2e8b41') {
+      title = pathname === '/checkout' ? 'Secure Checkout | Happy Machinery' : 'Admin Portal | Happy Machinery'
+      description = pathname === '/checkout' ? 'Complete your Happy Machinery equipment purchase securely.' : 'Happy Machinery administrative access.'
       robots = 'noindex, nofollow'
       canonicalPath = pathname
       schema = { '@type': 'WebPage', name: title, url: `${SITE_URL}${canonicalPath}` }

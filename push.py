@@ -109,12 +109,14 @@ def main():
     else:
         print(f"{Colors.BOLD}[2/3] No new files to commit. Pushing existing local commits...{Colors.RESET}\n")
 
-    # 4. Push to origin main
-    print(f"{Colors.BOLD}[3/3] Pushing to GitHub (origin main)...{Colors.RESET}")
+    # 4. Push to origin (active branch)
+    current_branch = run_cmd(["git", "branch", "--show-current"], capture=True) or "main"
+    print(f"{Colors.BOLD}[3/3] Pushing to GitHub (origin {current_branch})...{Colors.RESET}")
     try:
-        run_cmd(["git", "push", "origin", "main"])
+        run_cmd(["git", "push", "-u", "origin", current_branch])
         print(f"\n{Colors.BOLD}{Colors.GREEN}======================================================{Colors.RESET}")
         print(f"{Colors.BOLD}{Colors.GREEN} ✔ SUCCESSFULLY PUSHED TO GITHUB!                     {Colors.RESET}")
+        print(f"{Colors.CYAN} Branch:     {current_branch}{Colors.RESET}")
         print(f"{Colors.CYAN} Repository: https://github.com/soporadara/happymachinery {Colors.RESET}")
         print(f"{Colors.BOLD}{Colors.GREEN}======================================================{Colors.RESET}\n")
     except Exception as e:
