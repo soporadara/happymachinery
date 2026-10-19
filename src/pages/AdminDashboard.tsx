@@ -371,6 +371,22 @@ export default function AdminDashboard() {
   const [newAdminPassword, setNewAdminPassword] = useState('')
   const [newAdminRole, setNewAdminRole] = useState<AdminRole>('Editor')
 
+  // Dedicated In-App Dialog Modals (Replacing native prompt & confirm)
+  const [showFolderModal, setShowFolderModal] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+
+  const [showUploadMediaModal, setShowUploadMediaModal] = useState(false)
+  const [uploadMediaTitle, setUploadMediaTitle] = useState('')
+  const [uploadMediaUrl, setUploadMediaUrl] = useState('')
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen?: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    onConfirm: () => void | Promise<void>
+  } | null>(null)
+
   // Profile Edit State
   const [profileName, setProfileName] = useState('')
   const [profileEmail, setProfileEmail] = useState('')
@@ -1083,15 +1099,22 @@ export default function AdminDashboard() {
     setProductsSubView('list')
   }
 
-  const handleDeleteProduct = async (id: number) => {
+  const handleDeleteProduct = (id: number) => {
     const prod = products.find((p) => p.id === id)
-    const confirmed = window.confirm(`Are you sure you want to delete ${prod?.name || 'this product'}?`)
-    if (!confirmed) return
-    const updated = products.filter((p) => p.id !== id)
-    setProducts(updated)
-    await writeSharedContent('products', updated)
-    await logSecurityEvent('CONTENT_DELETED', `Equipment listing #${id} deleted.`, 'warning', currentUser?.username)
-    showToast('Equipment listing deleted from catalog.', 'success')
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Equipment Listing',
+      message: `Are you sure you want to delete "${prod?.name || 'this product'}"? This will permanently remove the equipment listing from the catalog.`,
+      confirmLabel: 'Delete Product',
+      onConfirm: async () => {
+        const updated = products.filter((p) => p.id !== id)
+        setProducts(updated)
+        await writeSharedContent('products', updated)
+        await logSecurityEvent('CONTENT_DELETED', `Equipment listing #${id} deleted.`, 'warning', currentUser?.username)
+        showToast('Equipment listing deleted from catalog.', 'success')
+        setConfirmDialog(null)
+      }
+    })
   }
 
   const handleDuplicateProduct = async (prod: AdminProduct) => {
@@ -1276,7 +1299,20 @@ export default function AdminDashboard() {
               <span className="cms-nav-label">Articles</span>
               {!isSidebarCollapsed && (
                 <span className="cms-nav-expand-arrow">
-                  {isArticlesExpanded ? '−' : '+'}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    style={{
+                      transition: 'transform 0.2s ease',
+                      transform: isArticlesExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
                 </span>
               )}
             </button>
@@ -1291,7 +1327,14 @@ export default function AdminDashboard() {
                     setArticlesSubView('list')
                   }}
                 >
-                  <span className="cms-sub-icon">📄</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  </span>
                   <span>All Articles</span>
                   <span className="cms-sub-count">{posts.length}</span>
                 </button>
@@ -1303,7 +1346,13 @@ export default function AdminDashboard() {
                     openNewArticle()
                   }}
                 >
-                  <span className="cms-sub-icon">➕</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="16" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                  </span>
                   <span>New Article</span>
                 </button>
 
@@ -1314,7 +1363,11 @@ export default function AdminDashboard() {
                     setArticlesSubView('categories')
                   }}
                 >
-                  <span className="cms-sub-icon">📁</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </span>
                   <span>Categories</span>
                   <span className="cms-sub-count">{blogCategories.length}</span>
                 </button>
@@ -1341,7 +1394,20 @@ export default function AdminDashboard() {
               <span className="cms-nav-label">Products</span>
               {!isSidebarCollapsed && (
                 <span className="cms-nav-expand-arrow">
-                  {isProductsExpanded ? '−' : '+'}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    style={{
+                      transition: 'transform 0.2s ease',
+                      transform: isProductsExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
                 </span>
               )}
             </button>
@@ -1356,7 +1422,13 @@ export default function AdminDashboard() {
                     setProductsSubView('list')
                   }}
                 >
-                  <span className="cms-sub-icon">📦</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
+                    </svg>
+                  </span>
                   <span>All Products</span>
                   <span className="cms-sub-count">{products.length}</span>
                 </button>
@@ -1368,7 +1440,13 @@ export default function AdminDashboard() {
                     openCreateProduct()
                   }}
                 >
-                  <span className="cms-sub-icon">➕</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="16" />
+                      <line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                  </span>
                   <span>Add new product</span>
                 </button>
 
@@ -1380,7 +1458,12 @@ export default function AdminDashboard() {
                     setProdCategoryFilter('Equipment > Skid Steer Loaders')
                   }}
                 >
-                  <span className="cms-sub-icon">🏷️</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                      <line x1="7" y1="7" x2="7.01" y2="7" />
+                    </svg>
+                  </span>
                   <span>Categories</span>
                 </button>
 
@@ -1392,7 +1475,11 @@ export default function AdminDashboard() {
                     setProdSearch('TYPHON')
                   }}
                 >
-                  <span className="cms-sub-icon">🏢</span>
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 21h18M3 7v14M21 7v14M6 7V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3M9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2" />
+                    </svg>
+                  </span>
                   <span>Brands</span>
                 </button>
               </div>
@@ -1534,7 +1621,7 @@ export default function AdminDashboard() {
               </svg>
             </span>
             <span className="cms-nav-label">Maintenance</span>
-            <span className="cms-nav-active-dot" style={{ background: maintenanceGlobal ? '#ef4444' : '#10b981' }} />
+            <span className="cms-nav-active-dot" style={{ background: maintenanceGlobal ? 'var(--cms-accent-blue)' : '#10b981' }} />
           </button>
         </nav>
 
@@ -1875,8 +1962,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* 5. Cart Orders (Crimson) */}
-                <div className="cms-kpi-card red" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('cart')}>
+                {/* 5. Cart Orders (Corporate Blue) */}
+                <div className="cms-kpi-card blue" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('cart')}>
                   <div className="cms-kpi-text-col">
                     <span className="cms-kpi-label">Store Orders</span>
                     <span className="cms-kpi-value">{ordersList.length}</span>
@@ -1909,11 +1996,17 @@ export default function AdminDashboard() {
                           fontSize: '0.82rem',
                           fontWeight: 750,
                           cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
                           transition: 'all 0.15s ease'
                         }}
                         onClick={() => setDashboardRecentTab('products')}
                       >
-                        📦 Equipment ({products.length})
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        </svg>
+                        <span>Equipment ({products.length})</span>
                       </button>
                       <button
                         type="button"
@@ -1926,11 +2019,19 @@ export default function AdminDashboard() {
                           fontSize: '0.82rem',
                           fontWeight: 750,
                           cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
                           transition: 'all 0.15s ease'
                         }}
                         onClick={() => setDashboardRecentTab('articles')}
                       >
-                        📄 Articles ({posts.length})
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="16" y1="13" x2="8" y2="13" />
+                        </svg>
+                        <span>Articles ({posts.length})</span>
                       </button>
                     </div>
                     <button
@@ -2102,7 +2203,9 @@ export default function AdminDashboard() {
                   <div className="cms-card cms-comments-card">
                     <div className="cms-card-header-row">
                       <div className="cms-header-title-flex">
-                        <span style={{ fontSize: '1.1rem' }}>💬</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#1d7ff3' }}>
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
                         <h3>Latest Comments</h3>
                       </div>
                       <button
@@ -2150,8 +2253,11 @@ export default function AdminDashboard() {
                           openCreateProduct()
                         }}
                       >
-                        <div className="cms-qa-icon" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-                          🚜
+                        <div className="cms-qa-icon" style={{ background: '#eff6ff', color: '#1d7ff3' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                            <line x1="12" y1="22" x2="12" y2="12" />
+                          </svg>
                         </div>
                         <div className="cms-qa-text">
                           <strong>Add Equipment</strong>
@@ -2167,8 +2273,12 @@ export default function AdminDashboard() {
                           openNewArticle()
                         }}
                       >
-                        <div className="cms-qa-icon" style={{ background: '#fee2e2', color: '#dc2626' }}>
-                          📝
+                        <div className="cms-qa-icon" style={{ background: '#eff6ff', color: '#1d7ff3' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                          </svg>
                         </div>
                         <div className="cms-qa-text">
                           <strong>Write Article</strong>
@@ -2181,8 +2291,12 @@ export default function AdminDashboard() {
                         className="cms-quick-action-btn"
                         onClick={() => setActiveTab('media')}
                       >
-                        <div className="cms-qa-icon" style={{ background: '#ede9fe', color: '#7c3aed' }}>
-                          🖼️
+                        <div className="cms-qa-icon" style={{ background: '#eff6ff', color: '#1d7ff3' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
                         </div>
                         <div className="cms-qa-text">
                           <strong>Upload Media</strong>
@@ -2195,8 +2309,10 @@ export default function AdminDashboard() {
                         className="cms-quick-action-btn"
                         onClick={() => setActiveTab('maintenance')}
                       >
-                        <div className="cms-qa-icon" style={{ background: '#fef3c7', color: '#d97706' }}>
-                          ⚠️
+                        <div className="cms-qa-icon" style={{ background: '#f1f5f9', color: '#0c2b5c' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          </svg>
                         </div>
                         <div className="cms-qa-text">
                           <strong>Maintenance</strong>
@@ -2246,7 +2362,13 @@ export default function AdminDashboard() {
                             setEditorMode('visual')
                           }}
                         >
-                          👁️ Visual Blocks
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                          </svg>
+                          <span>Visual Blocks</span>
                         </button>
                         <button
                           type="button"
@@ -2276,7 +2398,7 @@ export default function AdminDashboard() {
                       </button>
                       <button
                         type="button"
-                        className="cms-btn cms-btn-red"
+                        className="cms-btn cms-btn-primary"
                         onClick={() => handleSaveArticle('Published')}
                       >
                         Publish Article
@@ -2373,11 +2495,36 @@ export default function AdminDashboard() {
                                   <div className="cms-section-header-left">
                                     <span className="cms-section-index-pill">#{idx + 1}</span>
                                     <span className="cms-section-type-pill">
-                                      {sec.type === 'heading' && '🔤 Section Heading'}
-                                      {sec.type === 'text' && '📝 Text Paragraph'}
-                                      {sec.type === 'image' && '🖼️ Image with Live Preview'}
-                                      {sec.type === 'video' && '🎬 Video Player Preview'}
-                                      {sec.type === 'table' && '⊞ Specifications Table'}
+                                      {sec.type === 'heading' && (
+                                        <span className="cms-sec-type-flex">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16" /></svg>
+                                          <span>Section Heading</span>
+                                        </span>
+                                      )}
+                                      {sec.type === 'text' && (
+                                        <span className="cms-sec-type-flex">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="17" y1="10" x2="3" y2="10" /><line x1="21" y1="6" x2="3" y2="6" /><line x1="21" y1="14" x2="3" y2="14" /><line x1="17" y1="18" x2="3" y2="18" /></svg>
+                                          <span>Text Paragraph</span>
+                                        </span>
+                                      )}
+                                      {sec.type === 'image' && (
+                                        <span className="cms-sec-type-flex">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                                          <span>Image with Live Preview</span>
+                                        </span>
+                                      )}
+                                      {sec.type === 'video' && (
+                                        <span className="cms-sec-type-flex">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                                          <span>Video Player Preview</span>
+                                        </span>
+                                      )}
+                                      {sec.type === 'table' && (
+                                        <span className="cms-sec-type-flex">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>
+                                          <span>Specifications Table</span>
+                                        </span>
+                                      )}
                                     </span>
                                   </div>
 
@@ -2389,7 +2536,8 @@ export default function AdminDashboard() {
                                       disabled={idx === 0}
                                       onClick={() => handleMoveSection(idx, 'up')}
                                     >
-                                      ▲ Up
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15" /></svg>
+                                      <span>Up</span>
                                     </button>
                                     <button
                                       type="button"
@@ -2398,7 +2546,8 @@ export default function AdminDashboard() {
                                       disabled={idx === articleSections.length - 1}
                                       onClick={() => handleMoveSection(idx, 'down')}
                                     >
-                                      ▼ Down
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+                                      <span>Down</span>
                                     </button>
                                     <button
                                       type="button"
@@ -2406,7 +2555,8 @@ export default function AdminDashboard() {
                                       title="Duplicate Section"
                                       onClick={() => handleDuplicateSection(idx)}
                                     >
-                                      📑 Duplicate
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                      <span>Duplicate</span>
                                     </button>
                                     <button
                                       type="button"
@@ -2415,7 +2565,8 @@ export default function AdminDashboard() {
                                       disabled={articleSections.length <= 1}
                                       onClick={() => handleDeleteSection(sec.id)}
                                     >
-                                      🗑️ Delete
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                      <span>Delete</span>
                                     </button>
                                   </div>
                                 </div>
@@ -2493,7 +2644,11 @@ export default function AdminDashboard() {
                                         title="Insert Internal or External Link"
                                         onClick={() => handleOpenLinkModal(sec.id)}
                                       >
-                                        🔗 Insert Link
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                        </svg>
+                                        <span>Insert Link</span>
                                       </button>
                                     </div>
                                     <textarea
@@ -2621,7 +2776,11 @@ export default function AdminDashboard() {
                                       </div>
                                     ) : (
                                       <div className="cms-video-helper-tag">
-                                        <span>ℹ️</span>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <line x1="12" y1="16" x2="12" y2="12" />
+                                          <line x1="12" y1="8" x2="12.01" y2="8" />
+                                        </svg>
                                         <span>Enter a valid YouTube, Vimeo, or MP4 URL above to see the live player preview here.</span>
                                       </div>
                                     )}
@@ -2705,7 +2864,10 @@ export default function AdminDashboard() {
                                     {/* LIVE STYLED TABLE PREVIEW */}
                                     <div className="cms-table-preview-card">
                                       <div className="cms-table-preview-title">
-                                        <span>👁️</span>
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                          <circle cx="12" cy="12" r="3" />
+                                        </svg>
                                         <span>Live Visitor Table Preview</span>
                                       </div>
                                       <table className="cms-live-styled-table">
@@ -2918,14 +3080,24 @@ export default function AdminDashboard() {
                             className={`cms-link-type-tab ${linkModalType === 'internal' ? 'active' : ''}`}
                             onClick={() => setLinkModalType('internal')}
                           >
-                            🏢 Internal Site Link
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                              <polyline points="2 17 12 22 22 17" />
+                              <polyline points="2 12 12 17 22 12" />
+                            </svg>
+                            <span>Internal Site Link</span>
                           </button>
                           <button
                             type="button"
                             className={`cms-link-type-tab ${linkModalType === 'external' ? 'active' : ''}`}
                             onClick={() => setLinkModalType('external')}
                           >
-                            🌐 External Website URL
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <span>External Website URL</span>
                           </button>
                         </div>
 
@@ -2987,7 +3159,7 @@ export default function AdminDashboard() {
                           </button>
                           <button
                             type="button"
-                            className="cms-btn cms-btn-red"
+                            className="cms-btn cms-btn-primary"
                             onClick={handleInsertLinkIntoSection}
                           >
                             Insert Link
@@ -3004,7 +3176,7 @@ export default function AdminDashboard() {
                 <div className="cms-categories-view-wrapper">
                   <div className="cms-view-header">
                     <div className="cms-view-title-group">
-                      <span className="cms-eyebrow-red">EDITORIAL TAXONOMY</span>
+                      <span className="cms-eyebrow-blue">EDITORIAL TAXONOMY</span>
                       <h1>Categories & Slugs</h1>
                       <p>Organize your publication into distinct channels, URL slugs, and featured topics.</p>
                     </div>
@@ -3013,7 +3185,7 @@ export default function AdminDashboard() {
                         <span>CATEGORIES</span>
                         <strong>{blogCategories.length}</strong>
                       </div>
-                      <div className="cms-tax-pill red">
+                      <div className="cms-tax-pill blue">
                         <span>ASSIGNED BLOGS</span>
                         <strong>{posts.length}</strong>
                       </div>
@@ -3032,7 +3204,7 @@ export default function AdminDashboard() {
                     <div className="cms-card">
                       <div className="cms-card-header">
                         <div className="cms-card-title">
-                          <span style={{ color: '#dc2626', fontSize: '1.1rem' }}>+</span>
+                          <span style={{ color: 'var(--cms-accent-blue)', fontSize: '1.2rem', fontWeight: 700 }}>+</span>
                           <h3>Add New Category</h3>
                         </div>
                         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
@@ -3099,7 +3271,7 @@ export default function AdminDashboard() {
                           />
                         </div>
 
-                        <button type="submit" className="cms-btn cms-btn-red" style={{ width: '100%', marginTop: '10px' }}>
+                        <button type="submit" className="cms-btn cms-btn-primary" style={{ width: '100%', marginTop: '10px' }}>
                           + Add Category
                         </button>
                       </form>
@@ -3109,7 +3281,12 @@ export default function AdminDashboard() {
                     <div className="cms-card">
                       <div className="cms-card-header">
                         <div className="cms-card-title">
-                          <span style={{ color: '#dc2626' }}>📑</span>
+                          <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                            </svg>
+                          </span>
                           <h3>Publication Structure & Associated Blogs</h3>
                         </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
@@ -3134,7 +3311,11 @@ export default function AdminDashboard() {
                             return (
                               <div key={cat.slug} className="cms-category-structure-item">
                                 <div className="cms-cat-item-left">
-                                  <span className="cms-cat-icon">📁</span>
+                                  <span className="cms-cat-icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                    </svg>
+                                  </span>
                                   <div className="cms-cat-info">
                                     <strong>{cat.name}</strong>
                                     <span className="cms-cat-slug">/category/{cat.slug} ↗</span>
@@ -3178,7 +3359,7 @@ export default function AdminDashboard() {
                       <p>Create, edit, and optimize machine maintenance articles, jobsite guides, and equipment blogs.</p>
                     </div>
                     <div className="cms-view-actions">
-                      <button className="cms-btn cms-btn-red" onClick={openNewArticle}>
+                      <button className="cms-btn cms-btn-primary" onClick={openNewArticle}>
                         + New Article
                       </button>
                     </div>
@@ -3259,7 +3440,7 @@ export default function AdminDashboard() {
               {/* Top View Header with Breadcrumb and Actions */}
               <div className="cms-medialib-top-bar">
                 <div className="cms-medialib-badge">
-                  <span className="cms-red-dot" />
+                  <span className="cms-blue-dot" />
                   <span>Media Library</span>
                 </div>
               </div>
@@ -3325,23 +3506,8 @@ export default function AdminDashboard() {
               <div className="cms-medialib-actions-toolbar">
                 <button
                   type="button"
-                  className="cms-tb-btn upload-red"
-                  onClick={() => {
-                    const url = prompt('Enter image/video URL:')
-                    const title = prompt('Enter media title:')
-                    if (url && title) {
-                      const newMedia: MediaItem = {
-                        id: `med-${Date.now()}`,
-                        title,
-                        url,
-                        dateAdded: new Date().toISOString().split('T')[0]
-                      }
-                      const updated = [newMedia, ...mediaList]
-                      setMediaList(updated)
-                      void writeSharedContent('media-library', updated)
-                      showToast('Media item added to library.', 'success')
-                    }
-                  }}
+                  className="cms-tb-btn upload-primary"
+                  onClick={() => setShowUploadMediaModal(true)}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -3354,20 +3520,28 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   className="cms-tb-pill-btn"
-                  onClick={() => {
-                    const fName = prompt('Enter folder name:')
-                    if (fName) showToast(`Folder "${fName}" created.`, 'success')
-                  }}
+                  onClick={() => setShowFolderModal(true)}
                 >
-                  <span>📁 New Folder</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    <line x1="12" y1="11" x2="12" y2="17" />
+                    <line x1="9" y1="14" x2="15" y2="14" />
+                  </svg>
+                  <span>New Folder</span>
                 </button>
 
                 <button
                   type="button"
                   className="cms-tb-pill-btn"
-                  onClick={() => showToast('New file upload initiated.', 'info' as any)}
+                  onClick={() => setShowUploadMediaModal(true)}
                 >
-                  <span>📄 New File</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                  </svg>
+                  <span>New File</span>
                 </button>
 
                 <button
@@ -3379,7 +3553,11 @@ export default function AdminDashboard() {
                     showToast('All image URLs copied to clipboard!', 'success')
                   }}
                 >
-                  <span>🔗 All URLs</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  <span>All URLs</span>
                 </button>
 
                 <button
@@ -3387,7 +3565,10 @@ export default function AdminDashboard() {
                   className="cms-tb-pill-btn"
                   onClick={() => showToast('Select mode activated.', 'info' as any)}
                 >
-                  <span>✅ Select</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>Select</span>
                 </button>
 
                 <button
@@ -3399,14 +3580,23 @@ export default function AdminDashboard() {
                     showToast('Media list exported.', 'success')
                   }}
                 >
-                  <span>⬇️ Download</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>Download</span>
                 </button>
               </div>
 
               {/* Path Breadcrumb (Screenshot 2) */}
               <div className="cms-medialib-path-row">
                 <div className="cms-path-breadcrumb">
-                  <span className="cms-path-part">📁</span>
+                  <span className="cms-path-part" style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </span>
                   <span className="cms-path-sep">/</span>
                   <span className="cms-path-link" onClick={() => setMediaPath('blog')}>blog</span>
                   <span className="cms-path-sep">/</span>
@@ -3427,7 +3617,11 @@ export default function AdminDashboard() {
               <div className="cms-card cms-medialib-files-card">
                 <div className="cms-files-card-header">
                   <div className="cms-files-header-left">
-                    <span style={{ fontSize: '1.1rem' }}>📁</span>
+                    <span style={{ display: 'inline-flex', color: 'var(--cms-accent-blue)' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </span>
                     <h3>Files & Folders</h3>
                   </div>
 
@@ -3503,14 +3697,23 @@ export default function AdminDashboard() {
                                   className="cms-file-action-btn"
                                   title="Download"
                                 >
-                                  ⬇️ Download
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                  </svg>
+                                  <span>Download</span>
                                 </a>
                                 <button
                                   type="button"
                                   className="cms-file-action-btn"
                                   onClick={() => setSelectedMedia(item)}
                                 >
-                                  👁️ Open
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                  </svg>
+                                  <span>Open</span>
                                 </button>
                                 <button
                                   type="button"
@@ -3520,21 +3723,33 @@ export default function AdminDashboard() {
                                     showToast('URL copied to clipboard!', 'success')
                                   }}
                                 >
-                                  📋 Copy
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                  </svg>
+                                  <span>Copy</span>
                                 </button>
                                 <button
                                   type="button"
                                   className="cms-file-action-btn danger"
                                   onClick={() => {
-                                    if (confirm(`Delete media item "${item.title}"?`)) {
-                                      const updated = mediaList.filter((m) => m.id !== item.id)
-                                      setMediaList(updated)
-                                      void writeSharedContent('media-library', updated)
-                                      showToast('Item deleted.', 'warning')
-                                    }
+                                    setConfirmDialog({
+                                      title: 'Delete Media Item',
+                                      message: `Are you sure you want to delete "${item.title}"? This item will be permanently removed.`,
+                                      onConfirm: () => {
+                                        const updated = mediaList.filter((m) => m.id !== item.id)
+                                        setMediaList(updated)
+                                        void writeSharedContent('media-library', updated)
+                                        showToast('Item deleted.', 'warning')
+                                      }
+                                    })
                                   }}
                                 >
-                                  🗑️ Delete
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  </svg>
+                                  <span>Delete</span>
                                 </button>
                               </div>
                             </td>
@@ -3549,7 +3764,12 @@ export default function AdminDashboard() {
               <div className="cms-card cms-image-urls-card">
                 <div className="cms-card-header-row">
                   <div className="cms-header-title-flex">
-                    <span style={{ fontSize: '1.1rem' }}>🔗</span>
+                    <span style={{ display: 'inline-flex', color: 'var(--cms-accent-blue)' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                    </span>
                     <h3>Image URLs</h3>
                   </div>
                   <span className="cms-urls-count-badge">
@@ -3578,7 +3798,11 @@ export default function AdminDashboard() {
                           showToast(`URL for "${item.title}" copied!`, 'success')
                         }}
                       >
-                        📋 Copy
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        <span>Copy</span>
                       </button>
                     </div>
                   ))}
@@ -3587,26 +3811,33 @@ export default function AdminDashboard() {
                 <div className="cms-urls-footer-actions">
                   <button
                     type="button"
-                    className="cms-btn cms-btn-purple"
+                    className="cms-btn cms-btn-primary"
                     onClick={() => {
                       const allUrls = mediaList.map((m) => m.url).join('\n')
                       navigator.clipboard.writeText(allUrls)
                       showToast('All image URLs copied to clipboard!', 'success')
                     }}
                   >
-                    📋 Copy All URLs
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    <span>Copy All URLs</span>
                   </button>
 
                   <button
                     type="button"
-                    className="cms-btn cms-btn-green"
+                    className="cms-btn cms-btn-secondary"
                     onClick={() => {
                       const firstFew = mediaList.slice(0, 3).map((m) => m.url).join('\n')
                       navigator.clipboard.writeText(firstFew)
                       showToast('Selected URLs copied to clipboard!', 'success')
                     }}
                   >
-                    ✅ Copy Selected URLs
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <span>Copy Selected URLs</span>
                   </button>
                 </div>
               </div>
@@ -3615,7 +3846,13 @@ export default function AdminDashboard() {
               <div className="cms-card cms-image-preview-card">
                 <div className="cms-card-header-row">
                   <div className="cms-header-title-flex">
-                    <span style={{ fontSize: '1.1rem' }}>🖼️</span>
+                    <span style={{ display: 'inline-flex', color: 'var(--cms-accent-blue)' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                      </svg>
+                    </span>
                     <h3>Image Preview</h3>
                   </div>
                   <span className="cms-urls-count-badge">
@@ -3651,7 +3888,10 @@ export default function AdminDashboard() {
                               showToast('Image URL copied!', 'success')
                             }}
                           >
-                            📋
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
                           </button>
                         </div>
                       </div>
@@ -3779,7 +4019,7 @@ export default function AdminDashboard() {
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#ef4444',
+                          color: 'var(--cms-accent-blue)',
                           fontWeight: 700,
                           fontSize: '0.8rem',
                           cursor: 'pointer'
@@ -5369,7 +5609,9 @@ export default function AdminDashboard() {
                 <div className="cms-maint-header-left">
                   <span className="cms-maint-tag">SYSTEM AVAILABILITY</span>
                   <div className="cms-maint-title-row">
-                    <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--cms-accent-blue)" strokeWidth="2">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                    </svg>
                     <h1>Maintenance Mode</h1>
                   </div>
                   <p className="cms-maint-description">
@@ -5385,12 +5627,17 @@ export default function AdminDashboard() {
 
                   <button
                     type="button"
-                    className="cms-btn cms-btn-red"
+                    className="cms-btn cms-btn-primary"
                     onClick={() => {
                       showToast('Maintenance settings saved successfully!', 'success')
                     }}
                   >
-                    💾 Save Settings
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    <span>Save Settings</span>
                   </button>
                 </div>
               </div>
@@ -5444,7 +5691,13 @@ export default function AdminDashboard() {
                 <div className="cms-card cms-maint-display-card">
                   <div className="cms-card-header-row">
                     <div className="cms-header-title-flex">
-                      <span style={{ color: '#dc2626' }}>⚠️</span>
+                      <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                          <line x1="12" y1="9" x2="12" y2="13" />
+                          <line x1="12" y1="17" x2="12.01" y2="17" />
+                        </svg>
+                      </span>
                       <h3>MAINTENANCE PAGE DISPLAY CONTENT</h3>
                     </div>
                   </div>
@@ -5471,7 +5724,13 @@ export default function AdminDashboard() {
 
                   <div className="cms-maint-form-group">
                     <label>
-                      <span>⏱️ ESTIMATED COMPLETION TIME (OPTIONAL)</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        <span>ESTIMATED COMPLETION TIME (OPTIONAL)</span>
+                      </span>
                     </label>
                     <input
                       type="datetime-local"
@@ -5526,7 +5785,11 @@ export default function AdminDashboard() {
                   <div className="cms-card cms-maint-routes-card">
                     <div className="cms-card-header-row">
                       <div className="cms-header-title-flex">
-                        <span style={{ color: '#dc2626' }}>⚡</span>
+                        <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                          </svg>
+                        </span>
                         <h3>PER-PAGE TARGET ROUTES</h3>
                       </div>
                     </div>
@@ -5581,7 +5844,7 @@ export default function AdminDashboard() {
                         />
                         <button
                           type="button"
-                          className="cms-btn cms-btn-red"
+                          className="cms-btn cms-btn-primary"
                           onClick={() => {
                             if (newCustomRoute.trim() && !maintenanceRoutes.includes(newCustomRoute.trim())) {
                               setMaintenanceRoutes([...maintenanceRoutes, newCustomRoute.trim()])
@@ -5623,10 +5886,15 @@ export default function AdminDashboard() {
                   <div className="cms-card cms-maint-preview-card">
                     <div className="cms-card-header-row">
                       <div className="cms-header-title-flex">
-                        <span style={{ color: '#dc2626' }}>👁️</span>
+                        <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        </span>
                         <h3>LIVE VISITOR PREVIEW</h3>
                       </div>
-                      <span className="cms-preview-theme-pill">Light Red Theme</span>
+                      <span className="cms-preview-theme-pill">Tech Blue Theme</span>
                     </div>
 
                     <div className="cms-live-visitor-preview-box">
@@ -5644,7 +5912,12 @@ export default function AdminDashboard() {
 
                         <div className="cms-preview-progress-box">
                           <div className="cms-preview-pbar-header">
-                            <span>⚡ Upgrade Progress</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                              </svg>
+                              <span>Upgrade Progress</span>
+                            </span>
                             <strong>{maintenanceProgress}% {maintenanceProgress >= 90 ? 'Final Stage' : ''}</strong>
                           </div>
                           <div className="cms-preview-track">
@@ -5973,6 +6246,198 @@ export default function AdminDashboard() {
                 onClick={() => setSelectedMedia(null)}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Folder In-App Dialog */}
+      {showFolderModal && (
+        <div className="cms-dialog-backdrop" onClick={() => setShowFolderModal(false)}>
+          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()}>
+            <div className="cms-dialog-header">
+              <div className="cms-dialog-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                  <line x1="12" y1="11" x2="12" y2="17" />
+                  <line x1="9" y1="14" x2="15" y2="14" />
+                </svg>
+              </div>
+              <div className="cms-dialog-titles">
+                <h3>Create New Folder</h3>
+                <p>Organize your media assets into a dedicated folder directory.</p>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (newFolderName.trim()) {
+                  showToast(`Folder "${newFolderName.trim()}" created successfully.`, 'success')
+                  setNewFolderName('')
+                  setShowFolderModal(false)
+                }
+              }}
+            >
+              <div className="cms-dialog-body">
+                <label className="cms-dialog-label">Folder Name</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Jobsite Excavator Attachments"
+                  className="cms-dialog-input"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                />
+              </div>
+              <div className="cms-dialog-footer">
+                <button
+                  type="button"
+                  className="cms-dialog-btn secondary"
+                  onClick={() => {
+                    setShowFolderModal(false)
+                    setNewFolderName('')
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="cms-dialog-btn primary">
+                  Create Folder
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Media Asset In-App Modal */}
+      {showUploadMediaModal && (
+        <div className="cms-dialog-backdrop" onClick={() => setShowUploadMediaModal(false)}>
+          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()}>
+            <div className="cms-dialog-header">
+              <div className="cms-dialog-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <div className="cms-dialog-titles">
+                <h3>Add Media Asset</h3>
+                <p>Upload a new image, video preview, or technical diagram to your Media Library.</p>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (uploadMediaUrl.trim() && uploadMediaTitle.trim()) {
+                  const newMedia: MediaItem = {
+                    id: `med-${Date.now()}`,
+                    title: uploadMediaTitle.trim(),
+                    url: uploadMediaUrl.trim(),
+                    dateAdded: new Date().toISOString().split('T')[0]
+                  }
+                  const updated = [newMedia, ...mediaList]
+                  setMediaList(updated)
+                  void writeSharedContent('media-library', updated)
+                  showToast('Media asset added to library.', 'success')
+                  setUploadMediaTitle('')
+                  setUploadMediaUrl('')
+                  setShowUploadMediaModal(false)
+                }
+              }}
+            >
+              <div className="cms-dialog-body">
+                <label className="cms-dialog-label">Asset Title</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="e.g. Caterpillar 320 GC Excavator"
+                  className="cms-dialog-input"
+                  value={uploadMediaTitle}
+                  onChange={(e) => setUploadMediaTitle(e.target.value)}
+                />
+
+                <label className="cms-dialog-label" style={{ marginTop: '12px' }}>Media Asset URL</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="https://... or /images/..."
+                  className="cms-dialog-input"
+                  value={uploadMediaUrl}
+                  onChange={(e) => setUploadMediaUrl(e.target.value)}
+                />
+
+                {uploadMediaUrl && (
+                  <div style={{ marginTop: '12px', borderRadius: '10px', overflow: 'hidden', height: '140px', background: '#050a14', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--cms-border)' }}>
+                    <img
+                      src={uploadMediaUrl}
+                      alt="Preview"
+                      style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                      onError={(e) => {
+                        ;(e.target as HTMLElement).style.display = 'none'
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="cms-dialog-footer">
+                <button
+                  type="button"
+                  className="cms-dialog-btn secondary"
+                  onClick={() => {
+                    setShowUploadMediaModal(false)
+                    setUploadMediaTitle('')
+                    setUploadMediaUrl('')
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="cms-dialog-btn primary">
+                  Save to Media Library
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sleek Custom Confirm Dialog */}
+      {confirmDialog && (
+        <div className="cms-dialog-backdrop" onClick={() => setConfirmDialog(null)}>
+          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="cms-dialog-header">
+              <div className="cms-dialog-icon-wrap warning">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div className="cms-dialog-titles">
+                <h3>{confirmDialog.title}</h3>
+                <p>{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="cms-dialog-footer" style={{ marginTop: '20px' }}>
+              <button
+                type="button"
+                className="cms-dialog-btn secondary"
+                onClick={() => setConfirmDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-dialog-btn primary"
+                onClick={() => {
+                  confirmDialog.onConfirm()
+                  setConfirmDialog(null)
+                }}
+              >
+                Confirm
               </button>
             </div>
           </div>
