@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import CmsLogin from './CmsLogin'
 import { getStoredSession, clearStoredSession, logSecurityEvent } from '../data/cmsAuth'
@@ -40,6 +40,7 @@ type CmsTab =
   | 'security' 
   | 'admins' 
   | 'settings'
+  | 'maintenance'
 
 type SecuritySubTab = 
   | 'overview' 
@@ -50,7 +51,6 @@ type SecuritySubTab =
   | 'settings'
 
 type CmsTheme = 'dark' | 'light' | 'neon'
-type DateFilter = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'all'
 
 export default function AdminDashboard() {
 
@@ -71,7 +71,6 @@ export default function AdminDashboard() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
   const [globalSearch, setGlobalSearch] = useState('')
-  const [dateFilter, setDateFilter] = useState<DateFilter>('30d')
 
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null)
@@ -85,7 +84,7 @@ export default function AdminDashboard() {
   const [bannedIps, setBannedIps] = useState<BannedIp[]>([])
   const [failedLogins, setFailedLogins] = useState<FailedLoginAttempt[]>([])
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>(DEFAULT_SECURITY_SETTINGS)
-  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsViewEvent[]>([])
+  const [, setAnalyticsEvents] = useState<AnalyticsViewEvent[]>([])
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS)
   const [sitePages, setSitePages] = useState<SitePage[]>(DEFAULT_SITE_PAGES)
   const [isLoadingData, setIsLoadingData] = useState(true)
@@ -142,6 +141,54 @@ export default function AdminDashboard() {
   const [profileEmail, setProfileEmail] = useState('')
   const [profileAvatar, setProfileAvatar] = useState('')
   const [newPasswordInput, setNewPasswordInput] = useState('')
+
+  // Maintenance Mode States (Screenshot 5)
+  const [maintenanceGlobal, setMaintenanceGlobal] = useState(false)
+  const [maintenanceTitle, setMaintenanceTitle] = useState("We'll Be Right Back")
+  const [maintenanceMessage, setMaintenanceMessage] = useState("We're performing scheduled maintenance. Please check back soon.")
+  const [maintenanceEta, setMaintenanceEta] = useState('')
+  const [maintenanceProgress, setMaintenanceProgress] = useState(90)
+  const [maintenanceRoutes, setMaintenanceRoutes] = useState<string[]>(['/blog/*', '/equipment/*'])
+  const [newCustomRoute, setNewCustomRoute] = useState('')
+
+  // Media Library Enhanced States (Screenshots 2 & 3)
+  const [mediaPath, setMediaPath] = useState('blog / equipment / attachments')
+  const [mediaSearchTerm, setMediaSearchTerm] = useState('')
+  const [mediaSortOrder, setMediaSortOrder] = useState<'A-Z' | 'Z-A' | 'Newest'>('A-Z')
+
+  // Comments State (Screenshot 1)
+  const [commentsList] = useState([
+    {
+      id: 'c1',
+      author: 'Rafel Eiffel',
+      time: 'about 15 hours ago',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
+      comment: 'Wonderful explanation on skid steer hydraulic attachments and auxiliary flow rates!',
+      articleTitle: 'How to Choose the Right Compact Skid Steer for Tight Job Sites',
+      articleSlug: 'how-to-choose-the-right-compact-skid-steer-for-tight-job-sites'
+    },
+    {
+      id: 'c2',
+      author: 'Marcus Vance',
+      time: 'about 1 day ago',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80',
+      comment: 'In my opinion, rubber tracks are indispensable for preventing lawn turf damage. Thanks for the breakdown!',
+      articleTitle: 'Rubber Tracks vs Wheeled Skid Steers: Ground Damage & Traction Analysis',
+      articleSlug: 'rubber-tracks-vs-wheeled-skid-steers'
+    },
+    {
+      id: 'c3',
+      author: 'Sarah Lin',
+      time: 'about 2 days ago',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
+      comment: 'Daily greasing checklist has saved our crew thousands in premature pin bushing wear.',
+      articleTitle: 'Daily Skid Steer Maintenance: 10 Essential Checks to Prevent Downtime',
+      articleSlug: 'daily-skid-steer-maintenance'
+    }
+  ])
+
+  // Navigation Submenu States
+  const [isArticlesExpanded, setIsArticlesExpanded] = useState(true)
 
   // Toast Helper
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
@@ -235,51 +282,6 @@ export default function AdminDashboard() {
     setIsProfileDropdownOpen(false)
     showToast('Signed out successfully.', 'success')
   }
-
-  // Filtered Analytics Calculations based on date filter
-  const filteredAnalytics = useMemo(() => {
-    if (!analyticsEvents || analyticsEvents.length === 0) return []
-    const now = Date.now()
-    return analyticsEvents.filter((ev) => {
-      const time = new Date(ev.timestamp).getTime()
-      if (dateFilter === 'today') return now - time <= 24 * 60 * 60 * 1000
-      if (dateFilter === 'yesterday') return now - time <= 48 * 60 * 60 * 1000 && now - time > 24 * 60 * 60 * 1000
-      if (dateFilter === '7d') return now - time <= 7 * 24 * 60 * 60 * 1000
-      if (dateFilter === '30d') return now - time <= 30 * 24 * 60 * 60 * 1000
-      if (dateFilter === '90d') return now - time <= 90 * 24 * 60 * 60 * 1000
-      return true
-    })
-  }, [analyticsEvents, dateFilter])
-
-  // Top Viewed Articles
-  const topArticles = useMemo(() => {
-    const counts: Record<string, { title: string; views: number }> = {}
-    filteredAnalytics.forEach((ev) => {
-      if (ev.type === 'article' || ev.path.startsWith('/blog/')) {
-        const key = ev.path
-        if (!counts[key]) counts[key] = { title: ev.title || key, views: 0 }
-        counts[key].views += 1
-      }
-    })
-    return Object.entries(counts)
-      .map(([path, data]) => ({ path, title: data.title, views: data.views }))
-      .sort((a, b) => b.views - a.views)
-      .slice(0, 10)
-  }, [filteredAnalytics])
-
-  // Top Viewed Pages
-  const topPages = useMemo(() => {
-    const counts: Record<string, { title: string; views: number }> = {}
-    filteredAnalytics.forEach((ev) => {
-      const key = ev.path || '/'
-      if (!counts[key]) counts[key] = { title: ev.title || key, views: 0 }
-      counts[key].views += 1
-    })
-    return Object.entries(counts)
-      .map(([path, data]) => ({ path, title: data.title, views: data.views }))
-      .sort((a, b) => b.views - a.views)
-      .slice(0, 10)
-  }, [filteredAnalytics])
 
   // Security Operations
   const handleBanIp = async (e: React.FormEvent) => {
@@ -549,7 +551,7 @@ export default function AdminDashboard() {
       )}
 
       {/* ==============================================================================
-          Collapsible Sidebar Navigation
+          Rafvex-Style Modern Collapsible Sidebar Navigation
           ============================================================================== */}
       <aside className={`cms-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="cms-sidebar-brand">
@@ -563,7 +565,6 @@ export default function AdminDashboard() {
                   alt="Happy Machinery"
                   className="cms-sidebar-logo-img"
                 />
-                <span className="cms-brand-tag">CMS Console</span>
               </div>
             )}
           </Link>
@@ -572,16 +573,17 @@ export default function AdminDashboard() {
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 18l-6-6 6-6" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              {isSidebarCollapsed ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
             </svg>
           </button>
         </div>
 
         {/* Sidebar Navigation Menu */}
         <nav className="cms-sidebar-nav">
-          <span className="cms-nav-group-title">Analytics & Content</span>
+          <span className="cms-nav-group-title">EDITORIAL & CONTENT</span>
 
+          {/* Dashboard Item */}
           <button
             className={`cms-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('dashboard')}
@@ -594,43 +596,78 @@ export default function AdminDashboard() {
                 <rect x="3" y="16" width="7" height="5" rx="1" />
               </svg>
             </span>
-            <span className="cms-nav-label">Dashboard & Traffic</span>
+            <span className="cms-nav-label">Dashboard</span>
+            {activeTab === 'dashboard' && <span className="cms-nav-active-dot" />}
           </button>
 
-          <button
-            className={`cms-nav-item ${activeTab === 'articles' ? 'active' : ''}`}
-            onClick={() => setActiveTab('articles')}
-          >
-            <span className="cms-nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-                <polyline points="10 9 9 9 8 9" />
-              </svg>
-            </span>
-            <span className="cms-nav-label">Articles & Blog</span>
-            <span className="cms-nav-badge">{posts.length}</span>
-          </button>
+          {/* Articles Expandable Item */}
+          <div className="cms-nav-expandable-group">
+            <button
+              className={`cms-nav-item ${activeTab === 'articles' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('articles')
+                setIsArticlesExpanded(!isArticlesExpanded)
+              }}
+            >
+              <span className="cms-nav-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+              </span>
+              <span className="cms-nav-label">Articles</span>
+              {!isSidebarCollapsed && (
+                <span className="cms-nav-expand-arrow">
+                  {isArticlesExpanded ? '−' : '+'}
+                </span>
+              )}
+            </button>
 
-          <button
-            className={`cms-nav-item ${activeTab === 'media' ? 'active' : ''}`}
-            onClick={() => setActiveTab('media')}
-          >
-            <span className="cms-nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </span>
-            <span className="cms-nav-label">Media Library</span>
-            <span className="cms-nav-badge">{mediaList.length}</span>
-          </button>
+            {/* Articles Submenu */}
+            {isArticlesExpanded && !isSidebarCollapsed && (
+              <div className="cms-nav-sub-menu">
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'articles' && articlesSubView === 'list' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('articles')
+                    setArticlesSubView('list')
+                  }}
+                >
+                  <span className="cms-sub-icon">📄</span>
+                  <span>All Articles</span>
+                  <span className="cms-sub-count">{posts.length}</span>
+                </button>
 
-          <span className="cms-nav-group-title">Equipment & Layout</span>
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'articles' && articlesSubView === 'editor' && !editingArticle ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('articles')
+                    openNewArticle()
+                  }}
+                >
+                  <span className="cms-sub-icon">➕</span>
+                  <span>New Article</span>
+                </button>
 
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'articles' && articlesSubView === 'categories' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('articles')
+                    setArticlesSubView('categories')
+                  }}
+                >
+                  <span className="cms-sub-icon">📁</span>
+                  <span>Categories</span>
+                  <span className="cms-sub-count">{blogCategories.length}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Equipment Catalog Item */}
           <button
             className={`cms-nav-item ${activeTab === 'products' ? 'active' : ''}`}
             onClick={() => setActiveTab('products')}
@@ -646,6 +683,24 @@ export default function AdminDashboard() {
             <span className="cms-nav-badge">{products.length}</span>
           </button>
 
+          {/* Media Library Item */}
+          <button
+            className={`cms-nav-item ${activeTab === 'media' ? 'active' : ''}`}
+            onClick={() => setActiveTab('media')}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Media Library</span>
+            <span className="cms-nav-badge">{mediaList.length}</span>
+          </button>
+
+          <span className="cms-nav-group-title">LAYOUT & ADS</span>
+
           <button
             className={`cms-nav-item ${activeTab === 'pages' ? 'active' : ''}`}
             onClick={() => setActiveTab('pages')}
@@ -657,10 +712,53 @@ export default function AdminDashboard() {
                 <polyline points="2 12 12 17 22 12" />
               </svg>
             </span>
-            <span className="cms-nav-label">Visual Page Builder</span>
+            <span className="cms-nav-label">Home Sections</span>
           </button>
 
-          <span className="cms-nav-group-title">Security & System</span>
+          <button
+            className={`cms-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Pop-up & Banners</span>
+          </button>
+
+          <span className="cms-nav-group-title">COMMUNITY & INBOX</span>
+
+          <button
+            className="cms-nav-item"
+            onClick={() => showToast('4 new quote inquiries from contractors today.', 'info' as any)}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Inquiries & Leads</span>
+            <span className="cms-nav-badge warning">4</span>
+          </button>
+
+          <button
+            className="cms-nav-item"
+            onClick={() => showToast('All 3 reader comments are approved and active.', 'info' as any)}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Comments</span>
+            <span className="cms-nav-badge">{commentsList.length}</span>
+          </button>
+
+          <span className="cms-nav-group-title">SETTINGS & SYSTEM</span>
 
           <button
             className={`cms-nav-item ${activeTab === 'security' ? 'active' : ''}`}
@@ -671,7 +769,7 @@ export default function AdminDashboard() {
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
             </span>
-            <span className="cms-nav-label">Security Center</span>
+            <span className="cms-nav-label">Security & Logs</span>
             {bannedIps.length > 0 && <span className="cms-nav-badge danger">{bannedIps.length}</span>}
           </button>
 
@@ -687,34 +785,45 @@ export default function AdminDashboard() {
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </span>
-            <span className="cms-nav-label">Administrators</span>
+            <span className="cms-nav-label">Accounts & Staff</span>
             <span className="cms-nav-badge">{adminUsers.length}</span>
           </button>
 
+          {/* Maintenance Mode Item (Screenshot 5) */}
           <button
-            className={`cms-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
+            className={`cms-nav-item ${activeTab === 'maintenance' ? 'active' : ''}`}
+            onClick={() => setActiveTab('maintenance')}
           >
-            <span className="cms-nav-icon">
+            <span className="cms-nav-icon" style={{ color: maintenanceGlobal ? 'var(--cms-warning)' : 'inherit' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
               </svg>
             </span>
-            <span className="cms-nav-label">Global Settings</span>
+            <span className="cms-nav-label">Maintenance</span>
+            <span className="cms-nav-active-dot" style={{ background: maintenanceGlobal ? '#ef4444' : '#10b981' }} />
           </button>
         </nav>
 
-        {/* Sidebar Footer Link */}
+        {/* Sidebar Footer User Card */}
         <div className="cms-sidebar-footer">
-          <Link to="/" target="_blank" className="cms-quick-site-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-            <span>View Live Website</span>
-          </Link>
+          <div className="cms-sidebar-user-card" onClick={() => setShowProfileModal(true)}>
+            <div className="cms-avatar-badge">
+              <img
+                src={currentUser.avatar || '/images/header-logo.png'}
+                alt={currentUser.name}
+                className="cms-avatar-img"
+              />
+              <span className="cms-avatar-status-dot"></span>
+            </div>
+            {!isSidebarCollapsed && (
+              <div className="cms-sidebar-user-info">
+                <span className="cms-sidebar-username">{currentUser.name || currentUser.username}</span>
+                <span className="cms-sidebar-usertag">Account & Profile</span>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -722,95 +831,97 @@ export default function AdminDashboard() {
           Main Content Layout
           ============================================================================== */}
       <div className="cms-main-layout">
-        {/* Top Header Bar */}
+        {/* Rafvex Top Header Bar */}
         <header className="cms-top-header">
           <div className="cms-header-left">
-            <div className="cms-breadcrumb">
-              <span>CMS</span>
-              <span>/</span>
-              <span className="cms-breadcrumb-active">
-                {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
-              </span>
-              {activeTab === 'security' && (
-                <>
-                  <span>/</span>
-                  <span className="cms-breadcrumb-active">
-                    {securitySubTab.charAt(0).toUpperCase() + securitySubTab.slice(1).replace('-', ' ')}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="cms-header-right">
-            {/* Global Search */}
-            <div className="cms-header-search-wrapper">
+            {/* Pill Search Input */}
+            <div className="cms-header-pill-search">
               <span className="cms-header-search-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </span>
               <input
                 type="text"
-                className="cms-header-search-input"
-                placeholder="Search resources..."
+                className="cms-pill-search-input"
+                placeholder="Search articles, guides, categories..."
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
               />
             </div>
+          </div>
 
-            {/* Date Filter (for analytics) */}
-            <select
-              className="cms-date-filter-select"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-            >
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last 90 Days</option>
-              <option value="all">All Time</option>
-            </select>
-
-            {/* Theme Toggle Button */}
+          <div className="cms-header-right">
+            {/* Theme Toggle Pill Button */}
             <button
-              className="cms-theme-toggle-btn"
+              className="cms-header-pill-btn"
               onClick={() => {
-                const nextTheme: CmsTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'neon' : 'dark'
+                const nextTheme: CmsTheme = theme === 'dark' ? 'light' : 'dark'
                 setTheme(nextTheme)
                 showToast(`Switched to ${nextTheme.toUpperCase()} theme`, 'info' as any)
               }}
-              title={`Current Theme: ${theme.toUpperCase()}. Click to switch.`}
+              title={`Toggle Dark / Light theme. Current: ${theme}`}
             >
               {theme === 'dark' ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-              ) : theme === 'light' ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="5" />
-                  <line x1="12" y1="1" x2="12" y2="3" />
-                  <line x1="12" y1="21" x2="12" y2="23" />
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                  <line x1="1" y1="12" x2="3" y2="12" />
-                  <line x1="21" y1="12" x2="23" y2="12" />
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                </svg>
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                  <span>Dark</span>
+                </>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                </svg>
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="5" />
+                    <line x1="12" y1="1" x2="12" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" />
+                    <line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  </svg>
+                  <span>Light</span>
+                </>
               )}
             </button>
 
-            {/* Profile Dropdown Trigger */}
+            {/* Live Site Pill Button */}
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="cms-header-pill-btn"
+              title="Open public website in a new tab"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              <span>Live Site</span>
+              <span style={{ fontSize: '13px', marginLeft: '2px' }}>↗</span>
+            </a>
+
+            {/* Notification Bell with Badge */}
+            <button
+              className="cms-header-icon-btn"
+              onClick={() => showToast('You have 3 system updates and inquiries ready for review.', 'info' as any)}
+              title="Notifications"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              <span className="cms-notif-badge">3</span>
+            </button>
+
+            {/* User Profile Pill Dropdown Trigger */}
             <div className="cms-profile-menu-container">
               <button
-                className={`cms-profile-trigger-btn ${isProfileDropdownOpen ? 'active' : ''}`}
+                className={`cms-user-profile-pill ${isProfileDropdownOpen ? 'active' : ''}`}
                 onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
               >
                 <div className="cms-avatar-badge">
@@ -821,7 +932,10 @@ export default function AdminDashboard() {
                   />
                   <span className="cms-avatar-status-dot"></span>
                 </div>
-                <span className="cms-profile-name-text">{currentUser.name || currentUser.username}</span>
+                <div className="cms-user-pill-text">
+                  <span className="cms-user-pill-greeting">Hi, {currentUser.name ? currentUser.name.split(' ')[0] : 'Rafvex'}</span>
+                  <span className="cms-user-pill-role">{currentUser.role === 'Super Administrator' ? 'Super Admin' : currentUser.role}</span>
+                </div>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M6 9l6 6 6-6" />
                 </svg>
@@ -908,159 +1022,333 @@ export default function AdminDashboard() {
             Body Views Container
             ============================================================================== */}
         <div className="cms-body-container">
-          {/* TAB 1: DASHBOARD & TRAFFIC */}
+          {/* TAB 1: DASHBOARD & EDITORIAL HUB (SCREENSHOT 1) */}
           {activeTab === 'dashboard' && (
-            <>
-              <div className="cms-view-header">
-                <div className="cms-view-title-group">
-                  <h1>Executive Dashboard</h1>
-                  <p>Real-time analytics, equipment catalog overview, and server performance metrics.</p>
+            <div className="cms-dashboard-view-content">
+              {/* Hero Welcome Banner (Screenshot 1) */}
+              <div className="cms-hero-welcome-banner">
+                <div className="cms-hero-banner-left">
+                  <div className="cms-hero-badge">
+                    <span>✨ EDITORIAL & EQUIPMENT CMS</span>
+                  </div>
+                  <h1 className="cms-hero-title">
+                    Welcome back, {currentUser?.name ? currentUser.name.split(' ')[0] : 'Rafvex'}! 👋
+                  </h1>
+                  <p className="cms-hero-subtitle">
+                    Here's what's happening on your publication today. You have <strong>{posts.length} articles</strong> published across <strong>{blogCategories.length} categories</strong>.
+                  </p>
                 </div>
-                <div className="cms-view-actions">
-                  <button className="cms-btn cms-btn-gold" onClick={() => { setActiveTab('articles'); openNewArticle() }}>
-                    + New Article
+
+                <div className="cms-hero-banner-actions">
+                  <button
+                    type="button"
+                    className="cms-hero-btn-white"
+                    onClick={() => {
+                      setActiveTab('articles')
+                      openNewArticle()
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>Write New Article</span>
                   </button>
-                  <button className="cms-btn cms-btn-secondary" onClick={handlePurgeCache}>
-                    Purge Cache
-                  </button>
+
+                  <a
+                    href="/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cms-hero-btn-translucent"
+                  >
+                    <span>View Site</span>
+                    <span style={{ fontSize: '14px' }}>↗</span>
+                  </a>
                 </div>
               </div>
 
-              {/* Metrics Grid */}
-              <div className="cms-metrics-grid">
-                <div className="cms-metric-card">
-                  <div>
-                    <h4 className="cms-metric-title">Page Views ({dateFilter.toUpperCase()})</h4>
-                    <p className="cms-metric-value">{filteredAnalytics.length.toLocaleString()}</p>
-                    <span className="cms-metric-subtext positive">Real-time visitor count</span>
+              {/* 5 Colorful Metric KPI Cards (Screenshot 1) */}
+              <div className="cms-kpi-cards-grid">
+                {/* 1. Total Articles (Emerald Green) */}
+                <div className="cms-kpi-card green">
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Total Articles</span>
+                    <span className="cms-kpi-value">{posts.length}</span>
+                    <span className="cms-kpi-subtext">{posts.filter((p) => p.status === 'Published').length || posts.length} published online</span>
                   </div>
-                  <div className="cms-metric-icon-box blue">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="cms-metric-card">
-                  <div>
-                    <h4 className="cms-metric-title">Active Equipment</h4>
-                    <p className="cms-metric-value">{products.filter((p) => p.status === 'Published').length}</p>
-                    <span className="cms-metric-subtext">Total Catalog: {products.length}</span>
-                  </div>
-                  <div className="cms-metric-icon-box gold">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="cms-metric-card">
-                  <div>
-                    <h4 className="cms-metric-title">Published Articles</h4>
-                    <p className="cms-metric-value">{posts.length}</p>
-                    <span className="cms-metric-subtext">SEO Articles & Guides</span>
-                  </div>
-                  <div className="cms-metric-icon-box green">
+                  <div className="cms-kpi-icon-circle">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                      <polyline points="10 9 9 9 8 9" />
                     </svg>
                   </div>
                 </div>
 
-                <div className="cms-metric-card">
-                  <div>
-                    <h4 className="cms-metric-title">Security Status</h4>
-                    <p className="cms-metric-value" style={{ color: 'var(--cms-success)' }}>Active</p>
-                    <span className="cms-metric-subtext">Shield Guard Online</span>
+                {/* 2. Equipment Models (Royal Blue) */}
+                <div className="cms-kpi-card blue">
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Equipment Models</span>
+                    <span className="cms-kpi-value">{products.length}</span>
+                    <span className="cms-kpi-subtext">99% active in catalog</span>
                   </div>
-                  <div className="cms-metric-icon-box blue">
+                  <div className="cms-kpi-icon-circle">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 3. Comments (Orange) */}
+                <div className="cms-kpi-card orange">
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Comments</span>
+                    <span className="cms-kpi-value">{commentsList.length}</span>
+                    <span className="cms-kpi-subtext">All comments active</span>
+                  </div>
+                  <div className="cms-kpi-icon-circle">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 4. Categories (Purple) */}
+                <div className="cms-kpi-card purple">
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Categories</span>
+                    <span className="cms-kpi-value">{blogCategories.length}</span>
+                    <span className="cms-kpi-subtext">2 drafts in progress</span>
+                  </div>
+                  <div className="cms-kpi-icon-circle">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 5. Subscribers / Inquiries (Crimson) */}
+                <div className="cms-kpi-card red">
+                  <div className="cms-kpi-text-col">
+                    <span className="cms-kpi-label">Subscribers</span>
+                    <span className="cms-kpi-value">24</span>
+                    <span className="cms-kpi-subtext">Active newsletter readers</span>
+                  </div>
+                  <div className="cms-kpi-icon-circle">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
                     </svg>
                   </div>
                 </div>
               </div>
 
-              {/* Two Column Section: Top Articles & Top Pages */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-                {/* Top 10 Articles */}
-                <div className="cms-card">
-                  <div className="cms-card-header">
-                    <h3 className="cms-card-title">Top 10 Most Viewed Articles</h3>
+              {/* 2-Column Section: Recent Articles (Left) + Latest Comments & Quick Actions (Right) */}
+              <div className="cms-dashboard-2col-layout">
+                {/* LEFT COLUMN: Recent Articles Table (Screenshot 1) */}
+                <div className="cms-card cms-recent-articles-card">
+                  <div className="cms-card-header-row">
+                    <div className="cms-header-title-pill">
+                      <h3>Recent Articles</h3>
+                      <span className="cms-count-pill">{Math.min(6, posts.length)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="cms-link-action-btn"
+                      onClick={() => {
+                        setActiveTab('articles')
+                        setArticlesSubView('list')
+                      }}
+                    >
+                      <span>View all</span>
+                      <span>→</span>
+                    </button>
                   </div>
+
                   <div className="cms-table-wrapper">
-                    <table className="cms-table">
+                    <table className="cms-table cms-articles-table">
                       <thead>
                         <tr>
-                          <th>Rank</th>
-                          <th>Article Title</th>
-                          <th style={{ textAlign: 'right' }}>Views</th>
+                          <th>ARTICLE</th>
+                          <th>CATEGORY</th>
+                          <th>STATUS</th>
+                          <th>DATE</th>
+                          <th style={{ textAlign: 'right' }}>ACTION</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {topArticles.length > 0 ? (
-                          topArticles.map((art, index) => (
-                            <tr key={art.path}>
-                              <td style={{ fontWeight: 700, color: index < 3 ? 'var(--cms-accent-gold)' : 'inherit' }}>
-                                #{index + 1}
-                              </td>
-                              <td style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                <span title={art.title}>{art.title}</span>
-                              </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700 }}>{art.views}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
-                              No article views recorded in this date range. Public visits are automatically tracked.
+                        {posts.slice(0, 6).map((post) => (
+                          <tr key={post.id}>
+                            <td className="cms-article-title-cell">
+                              <div className="cms-art-preview-flex">
+                                <img
+                                  src={post.image || '/images/why-choose-v900-jobsite.png'}
+                                  alt={post.title}
+                                  className="cms-art-thumb"
+                                />
+                                <div className="cms-art-info">
+                                  <strong className="cms-art-title-text" title={post.title}>
+                                    {post.title}
+                                  </strong>
+                                  <span className="cms-art-slug-link">
+                                    /{getBlogPostPath(post)}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className="cms-category-pill">
+                                {post.category || 'General'}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="cms-status-pill published">
+                                Published
+                              </span>
+                            </td>
+                            <td className="cms-date-cell">
+                              {post.date || 'Oct 15, 2026'}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <div className="cms-row-actions">
+                                <button
+                                  type="button"
+                                  className="cms-action-pill-btn"
+                                  onClick={() => openEditArticle(post)}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                  </svg>
+                                  <span>Edit</span>
+                                </button>
+                                <a
+                                  href={`/${getBlogPostPath(post)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="cms-action-icon-link"
+                                  title="View Live Article"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                  </svg>
+                                </a>
+                              </div>
                             </td>
                           </tr>
-                        )}
+                        ))}
                       </tbody>
                     </table>
                   </div>
                 </div>
 
-                {/* Top 10 Pages */}
-                <div className="cms-card">
-                  <div className="cms-card-header">
-                    <h3 className="cms-card-title">Top 10 Most Viewed Pages</h3>
+                {/* RIGHT COLUMN: Latest Comments & Quick Actions (Screenshot 1) */}
+                <div className="cms-dashboard-right-col">
+                  {/* Latest Comments Card */}
+                  <div className="cms-card cms-comments-card">
+                    <div className="cms-card-header-row">
+                      <div className="cms-header-title-flex">
+                        <span style={{ fontSize: '1.1rem' }}>💬</span>
+                        <h3>Latest Comments</h3>
+                      </div>
+                      <button
+                        type="button"
+                        className="cms-link-action-btn"
+                        onClick={() => showToast('All comments are moderated.', 'info' as any)}
+                      >
+                        <span>Moderate</span>
+                        <span>→</span>
+                      </button>
+                    </div>
+
+                    <div className="cms-comments-list">
+                      {commentsList.map((item) => (
+                        <div key={item.id} className="cms-comment-item">
+                          <div className="cms-comment-user-row">
+                            <div className="cms-comment-avatar-wrap">
+                              <img src={item.avatar} alt={item.author} className="cms-comment-avatar" />
+                            </div>
+                            <div className="cms-comment-meta">
+                              <span className="cms-comment-author">{item.author}</span>
+                              <span className="cms-comment-time">{item.time}</span>
+                            </div>
+                          </div>
+                          <p className="cms-comment-text">"{item.comment}"</p>
+                          <span className="cms-comment-on-link">
+                            on: <span className="cms-comment-target-title">{item.articleTitle}</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="cms-table-wrapper">
-                    <table className="cms-table">
-                      <thead>
-                        <tr>
-                          <th>Rank</th>
-                          <th>Page Path</th>
-                          <th style={{ textAlign: 'right' }}>Views</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {topPages.length > 0 ? (
-                          topPages.map((pg, index) => (
-                            <tr key={pg.path}>
-                              <td style={{ fontWeight: 700, color: index < 3 ? 'var(--cms-accent-blue)' : 'inherit' }}>
-                                #{index + 1}
-                              </td>
-                              <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{pg.path}</td>
-                              <td style={{ textAlign: 'right', fontWeight: 700 }}>{pg.views}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={3} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
-                              No page visits recorded in this date range.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+
+                  {/* Quick Actions 2x2 Grid (Screenshot 1) */}
+                  <div className="cms-card cms-quick-actions-card">
+                    <h3 className="cms-quick-actions-title">Quick Actions</h3>
+                    <div className="cms-quick-actions-grid">
+                      <button
+                        type="button"
+                        className="cms-quick-action-btn"
+                        onClick={() => {
+                          setActiveTab('articles')
+                          openNewArticle()
+                        }}
+                      >
+                        <span className="cms-qa-icon" style={{ background: '#fee2e2', color: '#dc2626' }}>✍️</span>
+                        <div className="cms-qa-text">
+                          <strong>Write Article</strong>
+                          <small>Create editorial blog</small>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="cms-quick-action-btn"
+                        onClick={() => setActiveTab('products')}
+                      >
+                        <span className="cms-qa-icon" style={{ background: '#dbeafe', color: '#2563eb' }}>🚜</span>
+                        <div className="cms-qa-text">
+                          <strong>Add Equipment</strong>
+                          <small>Manage machine specs</small>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="cms-quick-action-btn"
+                        onClick={() => setActiveTab('media')}
+                      >
+                        <span className="cms-qa-icon" style={{ background: '#ede9fe', color: '#7c3aed' }}>📁</span>
+                        <div className="cms-qa-text">
+                          <strong>Media Assets</strong>
+                          <small>Upload images & video</small>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="cms-quick-action-btn"
+                        onClick={() => {
+                          setActiveTab('security')
+                          setSecuritySubTab('overview')
+                        }}
+                      >
+                        <span className="cms-qa-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>🛡️</span>
+                        <div className="cms-qa-text">
+                          <strong>Security Guard</strong>
+                          <small>Threat log & IP bans</small>
+                        </div>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* TAB 2: ARTICLES & BLOG (RAFVEX EDITORIAL SYSTEM - SCREENSHOTS 3, 4, 5) */}
@@ -1554,79 +1842,413 @@ export default function AdminDashboard() {
             </>
           )}
 
-          {/* TAB 3: MEDIA LIBRARY */}
+          {/* TAB 3: MEDIA ASSET LIBRARY (SCREENSHOTS 2 & 3) */}
           {activeTab === 'media' && (
-            <>
-              <div className="cms-view-header">
-                <div className="cms-view-title-group">
-                  <h1>Media Asset Library</h1>
-                  <p>Centralized image, schematic, and video management with copyable URLs and alt tags.</p>
+            <div className="cms-medialib-view-content">
+              {/* Top View Header with Breadcrumb and Actions */}
+              <div className="cms-medialib-top-bar">
+                <div className="cms-medialib-badge">
+                  <span className="cms-red-dot" />
+                  <span>Media Library</span>
                 </div>
-                <div className="cms-view-actions">
-                  <button
-                    className="cms-btn cms-btn-primary"
-                    onClick={() => {
-                      const url = prompt('Enter image/video URL:')
-                      const title = prompt('Enter media title:')
-                      if (url && title) {
-                        const newMedia: MediaItem = {
-                          id: `med-${Date.now()}`,
-                          title,
-                          url,
-                          dateAdded: new Date().toISOString().split('T')[0]
-                        }
-                        const updated = [newMedia, ...mediaList]
-                        setMediaList(updated)
-                        void writeSharedContent('media-library', updated)
-                        showToast('Media item added to library.', 'success')
+              </div>
+
+              {/* 4 Metric KPI Cards (Screenshots 2 & 3) */}
+              <div className="cms-medialib-metrics-grid">
+                <div className="cms-medialib-metric-card">
+                  <div className="cms-ml-icon-wrap folder">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <div className="cms-ml-metric-info">
+                    <span className="cms-ml-metric-val">{mediaList.length}</span>
+                    <span className="cms-ml-metric-label">Total items</span>
+                  </div>
+                </div>
+
+                <div className="cms-medialib-metric-card">
+                  <div className="cms-ml-icon-wrap folder-alt">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                      <polyline points="2 17 12 22 22 17" />
+                      <polyline points="2 12 12 17 22 12" />
+                    </svg>
+                  </div>
+                  <div className="cms-ml-metric-info">
+                    <span className="cms-ml-metric-val">4</span>
+                    <span className="cms-ml-metric-label">Folders</span>
+                  </div>
+                </div>
+
+                <div className="cms-medialib-metric-card">
+                  <div className="cms-ml-icon-wrap image">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </div>
+                  <div className="cms-ml-metric-info">
+                    <span className="cms-ml-metric-val">{mediaList.length}</span>
+                    <span className="cms-ml-metric-label">Images</span>
+                  </div>
+                </div>
+
+                <div className="cms-medialib-metric-card">
+                  <div className="cms-ml-icon-wrap storage">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" />
+                      <polyline points="7 3 7 8 15 8" />
+                    </svg>
+                  </div>
+                  <div className="cms-ml-metric-info">
+                    <span className="cms-ml-metric-val">842.11 KB</span>
+                    <span className="cms-ml-metric-label">Folder size</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Toolbar Pills (Screenshot 2) */}
+              <div className="cms-medialib-actions-toolbar">
+                <button
+                  type="button"
+                  className="cms-tb-btn upload-red"
+                  onClick={() => {
+                    const url = prompt('Enter image/video URL:')
+                    const title = prompt('Enter media title:')
+                    if (url && title) {
+                      const newMedia: MediaItem = {
+                        id: `med-${Date.now()}`,
+                        title,
+                        url,
+                        dateAdded: new Date().toISOString().split('T')[0]
                       }
+                      const updated = [newMedia, ...mediaList]
+                      setMediaList(updated)
+                      void writeSharedContent('media-library', updated)
+                      showToast('Media item added to library.', 'success')
+                    }
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span>Upload</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-tb-pill-btn"
+                  onClick={() => {
+                    const fName = prompt('Enter folder name:')
+                    if (fName) showToast(`Folder "${fName}" created.`, 'success')
+                  }}
+                >
+                  <span>📁 New Folder</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-tb-pill-btn"
+                  onClick={() => showToast('New file upload initiated.', 'info' as any)}
+                >
+                  <span>📄 New File</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-tb-pill-btn"
+                  onClick={() => {
+                    const allUrls = mediaList.map((m) => m.url).join('\n')
+                    navigator.clipboard.writeText(allUrls)
+                    showToast('All image URLs copied to clipboard!', 'success')
+                  }}
+                >
+                  <span>🔗 All URLs</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-tb-pill-btn"
+                  onClick={() => showToast('Select mode activated.', 'info' as any)}
+                >
+                  <span>✅ Select</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-tb-pill-btn"
+                  onClick={() => {
+                    const allUrls = mediaList.map((m) => m.url).join('\n')
+                    navigator.clipboard.writeText(allUrls)
+                    showToast('Media list exported.', 'success')
+                  }}
+                >
+                  <span>⬇️ Download</span>
+                </button>
+              </div>
+
+              {/* Path Breadcrumb (Screenshot 2) */}
+              <div className="cms-medialib-path-row">
+                <div className="cms-path-breadcrumb">
+                  <span className="cms-path-part">📁</span>
+                  <span className="cms-path-sep">/</span>
+                  <span className="cms-path-link" onClick={() => setMediaPath('blog')}>blog</span>
+                  <span className="cms-path-sep">/</span>
+                  <span className="cms-path-link" onClick={() => setMediaPath('blog / equipment')}>equipment</span>
+                  <span className="cms-path-sep">/</span>
+                  <span className="cms-path-link active">{mediaPath}</span>
+                </div>
+                <button
+                  type="button"
+                  className="cms-path-back-btn"
+                  onClick={() => setMediaPath('blog / equipment')}
+                >
+                  <span>← Back</span>
+                </button>
+              </div>
+
+              {/* Files & Folders Table (Screenshot 2) */}
+              <div className="cms-card cms-medialib-files-card">
+                <div className="cms-files-card-header">
+                  <div className="cms-files-header-left">
+                    <span style={{ fontSize: '1.1rem' }}>📁</span>
+                    <h3>Files & Folders</h3>
+                  </div>
+
+                  <div className="cms-files-search-box">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search files... (press /)"
+                      value={mediaSearchTerm}
+                      onChange={(e) => setMediaSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="cms-files-header-right">
+                    <select
+                      className="cms-sort-select"
+                      value={mediaSortOrder}
+                      onChange={(e) => setMediaSortOrder(e.target.value as any)}
+                    >
+                      <option value="A-Z">↕ Name A-Z</option>
+                      <option value="Z-A">↕ Name Z-A</option>
+                      <option value="Newest">↕ Newest First</option>
+                    </select>
+                    <span className="cms-files-meta-text">
+                      {mediaList.length} items · 842.11 KB · Double-click to open
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cms-table-wrapper">
+                  <table className="cms-table cms-medialib-table">
+                    <thead>
+                      <tr>
+                        <th>NAME</th>
+                        <th>SIZE / DATE</th>
+                        <th style={{ textAlign: 'right' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mediaList
+                        .filter((m) => m.title.toLowerCase().includes(mediaSearchTerm.toLowerCase()))
+                        .map((item) => (
+                          <tr key={item.id} onClick={() => setSelectedMedia(item)}>
+                            <td>
+                              <div className="cms-file-name-cell">
+                                <img
+                                  src={item.url}
+                                  alt={item.title}
+                                  className="cms-file-thumb"
+                                  onError={(e) => {
+                                    ;(e.target as HTMLElement).style.display = 'none'
+                                  }}
+                                />
+                                <div className="cms-file-title-wrap">
+                                  <strong>{item.title}</strong>
+                                  <small>{item.dateAdded || 'Sep 07, 2026'}</small>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="cms-file-size-date">
+                              <span>128.45 KB · {item.dateAdded || 'Sep 07, 2026'}</span>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <div className="cms-file-row-actions" onClick={(e) => e.stopPropagation()}>
+                                <a
+                                  href={item.url}
+                                  download
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="cms-file-action-btn"
+                                  title="Download"
+                                >
+                                  ⬇️ Download
+                                </a>
+                                <button
+                                  type="button"
+                                  className="cms-file-action-btn"
+                                  onClick={() => setSelectedMedia(item)}
+                                >
+                                  👁️ Open
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-file-action-btn"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(item.url)
+                                    showToast('URL copied to clipboard!', 'success')
+                                  }}
+                                >
+                                  📋 Copy
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-file-action-btn danger"
+                                  onClick={() => {
+                                    if (confirm(`Delete media item "${item.title}"?`)) {
+                                      const updated = mediaList.filter((m) => m.id !== item.id)
+                                      setMediaList(updated)
+                                      void writeSharedContent('media-library', updated)
+                                      showToast('Item deleted.', 'warning')
+                                    }
+                                  }}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Image URLs Section (Screenshot 3) */}
+              <div className="cms-card cms-image-urls-card">
+                <div className="cms-card-header-row">
+                  <div className="cms-header-title-flex">
+                    <span style={{ fontSize: '1.1rem' }}>🔗</span>
+                    <h3>Image URLs</h3>
+                  </div>
+                  <span className="cms-urls-count-badge">
+                    {mediaList.length} image(s) · Click any URL to copy
+                  </span>
+                </div>
+
+                <div className="cms-urls-list">
+                  {mediaList.slice(0, 5).map((item, index) => (
+                    <div key={item.id} className="cms-url-copy-row">
+                      <span className="cms-url-index">{index + 1}</span>
+                      <img src={item.url} alt="" className="cms-url-thumb" />
+                      <span className="cms-url-name">{item.title}</span>
+                      <input
+                        type="text"
+                        readOnly
+                        value={item.url}
+                        className="cms-url-input"
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                      />
+                      <button
+                        type="button"
+                        className="cms-url-copy-btn"
+                        onClick={() => {
+                          navigator.clipboard.writeText(item.url)
+                          showToast(`URL for "${item.title}" copied!`, 'success')
+                        }}
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="cms-urls-footer-actions">
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-purple"
+                    onClick={() => {
+                      const allUrls = mediaList.map((m) => m.url).join('\n')
+                      navigator.clipboard.writeText(allUrls)
+                      showToast('All image URLs copied to clipboard!', 'success')
                     }}
                   >
-                    + Add Media Asset
+                    📋 Copy All URLs
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-green"
+                    onClick={() => {
+                      const firstFew = mediaList.slice(0, 3).map((m) => m.url).join('\n')
+                      navigator.clipboard.writeText(firstFew)
+                      showToast('Selected URLs copied to clipboard!', 'success')
+                    }}
+                  >
+                    ✅ Copy Selected URLs
                   </button>
                 </div>
               </div>
 
-              <div className="cms-card">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-                  {mediaList
-                    .filter((m) => m.title.toLowerCase().includes(globalSearch.toLowerCase()))
-                    .map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          background: 'var(--cms-bg-card)',
-                          border: '1px solid var(--cms-border)',
-                          borderRadius: '12px',
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          transition: 'transform 150ms ease'
-                        }}
-                        onClick={() => setSelectedMedia(item)}
-                      >
-                        <div style={{ height: '140px', background: '#050a14', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                          <img
-                            src={item.url}
-                            alt={item.title}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => {
-                              ;(e.target as HTMLElement).style.display = 'none'
+              {/* Image Preview Grid (Screenshot 3) */}
+              <div className="cms-card cms-image-preview-card">
+                <div className="cms-card-header-row">
+                  <div className="cms-header-title-flex">
+                    <span style={{ fontSize: '1.1rem' }}>🖼️</span>
+                    <h3>Image Preview</h3>
+                  </div>
+                  <span className="cms-urls-count-badge">
+                    {mediaList.length} image(s) · Double-click for full preview
+                  </span>
+                </div>
+
+                <div className="cms-image-preview-grid">
+                  {mediaList.map((item) => (
+                    <div
+                      key={item.id}
+                      className="cms-preview-tile"
+                      onClick={() => setSelectedMedia(item)}
+                    >
+                      <div className="cms-preview-img-wrap">
+                        <img src={item.url} alt={item.title} />
+                      </div>
+                      <div className="cms-preview-info">
+                        <strong className="cms-preview-title" title={item.title}>
+                          {item.title}
+                        </strong>
+                        <div className="cms-preview-url-row">
+                          <span className="cms-preview-shorturl">
+                            {item.url.slice(0, 24)}...
+                          </span>
+                          <button
+                            type="button"
+                            className="cms-preview-mini-copy"
+                            title="Copy URL"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigator.clipboard.writeText(item.url)
+                              showToast('Image URL copied!', 'success')
                             }}
-                          />
-                        </div>
-                        <div style={{ padding: '12px' }}>
-                          <div style={{ fontWeight: 650, fontSize: '0.84rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.title}
-                          </div>
-                          <div style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)', marginTop: '4px' }}>
-                            {item.dateAdded}
-                          </div>
+                          >
+                            📋
+                          </button>
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* TAB 4: EQUIPMENT & PRODUCTS */}
@@ -2341,6 +2963,304 @@ export default function AdminDashboard() {
                 </form>
               </div>
             </>
+          )}
+
+          {/* TAB 9: MAINTENANCE MODE (SCREENSHOT 5) */}
+          {activeTab === 'maintenance' && (
+            <div className="cms-maintenance-view-content">
+              {/* Header with Status Indicator & Save Button */}
+              <div className="cms-maint-header-row">
+                <div className="cms-maint-header-left">
+                  <span className="cms-maint-tag">SYSTEM AVAILABILITY</span>
+                  <div className="cms-maint-title-row">
+                    <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                    <h1>Maintenance Mode</h1>
+                  </div>
+                  <p className="cms-maint-description">
+                    Control website availability for all readers or targeted URLs. Authenticated admins always bypass maintenance.
+                  </p>
+                </div>
+
+                <div className="cms-maint-header-actions">
+                  <div className={`cms-maint-status-badge ${maintenanceGlobal ? 'warning' : 'healthy'}`}>
+                    <span className="cms-status-indicator-dot" />
+                    <span>{maintenanceGlobal ? 'Maintenance Mode Active' : 'All Systems Operational'}</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-red"
+                    onClick={() => {
+                      showToast('Maintenance settings saved successfully!', 'success')
+                    }}
+                  >
+                    💾 Save Settings
+                  </button>
+                </div>
+              </div>
+
+              {/* Global Maintenance Card with Toggle */}
+              <div className="cms-card cms-global-maintenance-card">
+                <div className="cms-global-maint-left">
+                  <div className="cms-global-maint-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                  </div>
+                  <div className="cms-global-maint-text">
+                    <strong>Global Maintenance</strong>
+                    <p>
+                      {maintenanceGlobal
+                        ? 'Website is locked to public visitors. Admins maintain full access.'
+                        : 'The entire public website is live and open to visitors.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="cms-global-maint-switch-wrap">
+                  <span className={`cms-maint-state-label ${maintenanceGlobal ? 'danger' : 'success'}`}>
+                    {maintenanceGlobal ? 'ON (MAINTENANCE)' : 'OFF (LIVE)'}
+                  </span>
+                  <label className="cms-maint-switch">
+                    <input
+                      type="checkbox"
+                      checked={maintenanceGlobal}
+                      onChange={(e) => {
+                        setMaintenanceGlobal(e.target.checked)
+                        showToast(
+                          e.target.checked
+                            ? 'Global Maintenance activated.'
+                            : 'Global Maintenance deactivated. Site is Live!',
+                          e.target.checked ? 'warning' : 'success'
+                        )
+                      }}
+                    />
+                    <span className="cms-maint-slider" />
+                  </label>
+                </div>
+              </div>
+
+              {/* 2-Column Maintenance Grid: Left Form Content | Right Routes & Live Preview */}
+              <div className="cms-maint-2col-grid">
+                {/* Left Column: Maintenance Page Display Content */}
+                <div className="cms-card cms-maint-display-card">
+                  <div className="cms-card-header-row">
+                    <div className="cms-header-title-flex">
+                      <span style={{ color: '#dc2626' }}>⚠️</span>
+                      <h3>MAINTENANCE PAGE DISPLAY CONTENT</h3>
+                    </div>
+                  </div>
+
+                  <div className="cms-maint-form-group">
+                    <label>SPLASH PAGE TITLE</label>
+                    <input
+                      type="text"
+                      className="cms-maint-input"
+                      value={maintenanceTitle}
+                      onChange={(e) => setMaintenanceTitle(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="cms-maint-form-group">
+                    <label>VISITOR NOTICE MESSAGE</label>
+                    <textarea
+                      rows={3}
+                      className="cms-maint-textarea"
+                      value={maintenanceMessage}
+                      onChange={(e) => setMaintenanceMessage(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="cms-maint-form-group">
+                    <label>
+                      <span>⏱️ ESTIMATED COMPLETION TIME (OPTIONAL)</span>
+                    </label>
+                    <input
+                      type="datetime-local"
+                      className="cms-maint-input"
+                      value={maintenanceEta}
+                      onChange={(e) => setMaintenanceEta(e.target.value)}
+                    />
+                    <small className="cms-field-hint">
+                      Enables an interactive countdown timer on the visitor maintenance splash screen.
+                    </small>
+                  </div>
+
+                  <div className="cms-maint-form-group">
+                    <div className="cms-progress-label-row">
+                      <label>📈 UPGRADE PROGRESS PERCENTAGE ({maintenanceProgress}%)</label>
+                      <span className="cms-progress-stage-badge">
+                        {maintenanceProgress >= 90 ? '90% · Final Stage' : `${maintenanceProgress}% · In Progress`}
+                      </span>
+                    </div>
+
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={maintenanceProgress}
+                      onChange={(e) => setMaintenanceProgress(Number(e.target.value))}
+                      className="cms-maint-slider-range"
+                    />
+
+                    <div className="cms-progress-presets">
+                      <span style={{ fontSize: '0.76rem', color: 'var(--cms-text-muted)' }}>Presets:</span>
+                      {[10, 25, 50, 75, 88, 95, 100].map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          className={`cms-preset-pill ${maintenanceProgress === val ? 'active' : ''}`}
+                          onClick={() => setMaintenanceProgress(val)}
+                        >
+                          {val}%
+                        </button>
+                      ))}
+                    </div>
+                    <small className="cms-field-hint">
+                      Adjust the maintenance progress displayed to visitors from 10% to 100%.
+                    </small>
+                  </div>
+                </div>
+
+                {/* Right Column: Per-Page Target Routes + Live Preview */}
+                <div className="cms-maint-right-col">
+                  {/* Per-Page Target Routes Card */}
+                  <div className="cms-card cms-maint-routes-card">
+                    <div className="cms-card-header-row">
+                      <div className="cms-header-title-flex">
+                        <span style={{ color: '#dc2626' }}>⚡</span>
+                        <h3>PER-PAGE TARGET ROUTES</h3>
+                      </div>
+                    </div>
+
+                    <p className="cms-routes-desc">
+                      Lock down specific pages or paths without closing the whole publication. Supports wildcard routes like <code>/equipment/*</code>.
+                    </p>
+
+                    <div className="cms-quick-select-routes">
+                      <span className="cms-quick-label">QUICK SELECT</span>
+                      <div className="cms-quick-pills-wrap">
+                        {[
+                          { label: 'Home', path: '/' },
+                          { label: 'All Articles', path: '/blog/*' },
+                          { label: 'All Equipment', path: '/products/*' },
+                          { label: 'Search', path: '/search' },
+                          { label: 'About', path: '/about' },
+                          { label: 'Contact', path: '/contact' },
+                          { label: 'Terms', path: '/terms-of-service' },
+                          { label: 'Privacy', path: '/privacy-policy' }
+                        ].map((r) => {
+                          const isSelected = maintenanceRoutes.includes(r.path)
+                          return (
+                            <button
+                              key={r.path}
+                              type="button"
+                              className={`cms-route-pill ${isSelected ? 'selected' : ''}`}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setMaintenanceRoutes(maintenanceRoutes.filter((x) => x !== r.path))
+                                } else {
+                                  setMaintenanceRoutes([...maintenanceRoutes, r.path])
+                                }
+                              }}
+                            >
+                              <span>{r.label}</span>
+                              <span className="cms-rp-path">{r.path}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="cms-add-custom-route-row">
+                      <span className="cms-quick-label">ADD CUSTOM PATH</span>
+                      <div className="cms-add-route-input-group">
+                        <input
+                          type="text"
+                          placeholder="Path (e.g. /category/ai/*)"
+                          value={newCustomRoute}
+                          onChange={(e) => setNewCustomRoute(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-red"
+                          onClick={() => {
+                            if (newCustomRoute.trim() && !maintenanceRoutes.includes(newCustomRoute.trim())) {
+                              setMaintenanceRoutes([...maintenanceRoutes, newCustomRoute.trim()])
+                              setNewCustomRoute('')
+                              showToast('Route added to maintenance target list.', 'success')
+                            }
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="cms-active-routes-list">
+                      <span className="cms-quick-label">ROUTES UNDER MAINTENANCE ({maintenanceRoutes.length})</span>
+                      {maintenanceRoutes.length > 0 ? (
+                        <div className="cms-routes-tags-wrap">
+                          {maintenanceRoutes.map((rt) => (
+                            <span key={rt} className="cms-active-route-tag">
+                              <code>{rt}</code>
+                              <button
+                                type="button"
+                                onClick={() => setMaintenanceRoutes(maintenanceRoutes.filter((x) => x !== rt))}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="cms-no-routes-placeholder">
+                          No individual pages selected.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Live Visitor Preview Card */}
+                  <div className="cms-card cms-maint-preview-card">
+                    <div className="cms-card-header-row">
+                      <div className="cms-header-title-flex">
+                        <span style={{ color: '#dc2626' }}>👁️</span>
+                        <h3>LIVE VISITOR PREVIEW</h3>
+                      </div>
+                      <span className="cms-preview-theme-pill">Light Red Theme</span>
+                    </div>
+
+                    <div className="cms-live-visitor-preview-box">
+                      <div className="cms-preview-inner-card">
+                        <div className="cms-preview-tag-badge">
+                          <span>● SCHEDULED UPGRADE</span>
+                        </div>
+
+                        <div className="cms-preview-logo-wrap">
+                          <img src="/images/header-logo.png" alt="Happy Machinery" className="cms-preview-logo-img" />
+                        </div>
+
+                        <h2 className="cms-preview-heading">{maintenanceTitle}</h2>
+                        <p className="cms-preview-message">{maintenanceMessage}</p>
+
+                        <div className="cms-preview-progress-box">
+                          <div className="cms-preview-pbar-header">
+                            <span>⚡ Upgrade Progress</span>
+                            <strong>{maintenanceProgress}% {maintenanceProgress >= 90 ? 'Final Stage' : ''}</strong>
+                          </div>
+                          <div className="cms-preview-track">
+                            <div className="cms-preview-fill" style={{ width: `${maintenanceProgress}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
