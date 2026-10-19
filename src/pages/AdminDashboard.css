@@ -22,7 +22,7 @@
   --cms-success: #10b981;
   --cms-warning: #f59e0b;
   --cms-danger: #0c2b5c;
-  --cms-sidebar-width: 260px;
+  --cms-sidebar-width: 268px;
   --cms-sidebar-collapsed-width: 76px;
   --cms-header-height: 68px;
   --cms-radius-sm: 6px;
@@ -187,10 +187,30 @@
 .cms-sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 12px;
+  overflow-x: hidden;
+  padding: 16px 14px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.cms-sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.cms-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cms-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+.cms-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.26);
 }
 
 .cms-nav-group-title {
@@ -665,15 +685,46 @@
 }
 
 /* ==============================================================================
-   Page Body Container & Standard Content Grid
+   Page Body Container & Scrollable Content Views
    ============================================================================== */
-.cms-body-container {
-  padding: 28px;
+.cms-body-container,
+.cms-main-scrollable-body {
+  padding: 28px 32px 48px 32px;
   flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 24px;
   box-sizing: border-box;
+  min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.cms-main-scrollable-body::-webkit-scrollbar {
+  width: 7px;
+}
+
+.cms-main-scrollable-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cms-main-scrollable-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+}
+
+.cms-main-scrollable-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.cms-theme-light .cms-main-scrollable-body {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+.cms-theme-light .cms-main-scrollable-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 /* Page Header & Actions */
@@ -5484,4 +5535,38 @@
 
 .cms-lightbox-copy-btn:active {
   transform: translateY(0);
+}
+
+/* ==============================================================================
+   Global CMS Custom Scrollbar System (No Stark White Browser Scrollbars)
+   ============================================================================== */
+.cms-admin-container * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.cms-admin-container ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.cms-admin-container ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cms-admin-container ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+}
+
+.cms-admin-container ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.cms-theme-light.cms-admin-container * {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+.cms-theme-light.cms-admin-container ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
 }
