@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Happy Machinery - Safe Automated Build, Production Deployment & Cache Purge
+(Deploys code strictly to Hostinger without touching Git)
+
 Usage:
     python3 deploy.py
-    python3 deploy.py -m "Update about us page styling"
     python3 deploy.py --yes
     python3 deploy.py --dry-run
 """
@@ -104,11 +105,9 @@ echo json_encode(['purged' => true, 'time' => time()]);
     log_success("Web server timestamp signals touched (index.html, .htaccess).")
 
 def main():
-    parser = argparse.ArgumentParser(description="Happy Machinery Safe Deployment Pipeline")
-    parser.add_argument("-m", "--message", help="Commit message to auto-commit and push to Git")
+    parser = argparse.ArgumentParser(description="Happy Machinery Production Deployment (Build + Backup + Sync + Cache Purge + Health Check)")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip interactive confirmation prompts")
     parser.add_argument("--dry-run", action="store_true", help="Only preview the files that will be uploaded")
-    parser.add_argument("--skip-git", action="store_true", help="Skip git push step")
     parser.add_argument("--skip-cache", action="store_true", help="Skip cache purge step")
     args = parser.parse_args()
 
@@ -119,7 +118,7 @@ def main():
     print(f"{Colors.BOLD}{Colors.CYAN} Happy Machinery — Production Deployer & Health Guard {Colors.RESET}")
     print(f"{Colors.BOLD}{Colors.CYAN}======================================================{Colors.RESET}")
 
-    total_steps = 7 if not args.skip_git else 6
+    total_steps = 6
     current_step = 1
 
     # Step 1: Verification & Local TypeScript/Vite Build
@@ -143,35 +142,7 @@ def main():
         log_error("dist/ directory is missing or corrupt after build.")
         sys.exit(1)
 
-    # Step 2: Git Commit & Push (if enabled)
-    if not args.skip_git:
-        log_step(current_step, total_steps, "Git Synchronization")
-        current_step += 1
-
-        git_status = run_cmd(["git", "status", "--porcelain"], capture=True)
-        if git_status:
-            commit_msg = args.message
-            if not commit_msg and not args.yes:
-                print(f"  Uncommitted changes detected:\n{Colors.DIM}{git_status}{Colors.RESET}")
-                prompt = input("  Enter commit message (or press Enter to skip git commit): ").strip()
-                if prompt:
-                    commit_msg = prompt
-
-            if commit_msg:
-                log_info(f"Staging and committing changes: '{commit_msg}'...")
-                run_cmd(["git", "add", "-A"])
-                run_cmd(["git", "commit", "-m", commit_msg])
-                log_success("Git commit created.")
-
-        log_info("Pushing to GitHub (origin main)...")
-        try:
-            run_cmd(["git", "push", "origin", "main"], capture=True)
-            log_success("GitHub repository updated (origin main).")
-        except Exception as e:
-            log_warning(f"Git push warning: {e}")
-            log_info("Continuing with production deployment...")
-
-    # Step 3: Test Hostinger SSH Connectivity
+    # Step 2: Test Hostinger SSH Connectivity
     log_step(current_step, total_steps, "Verifying Hostinger SSH Connectivity")
     current_step += 1
 
@@ -185,7 +156,7 @@ def main():
         log_error(str(e))
         sys.exit(1)
 
-    # Step 4: Automatic Remote Pre-Deployment Backup
+    # Step 3: Automatic Remote Pre-Deployment Backup
     log_step(current_step, total_steps, "Creating Instant Production Backup Snapshot")
     current_step += 1
 
@@ -210,7 +181,7 @@ def main():
             if proceed != "yes":
                 sys.exit(1)
 
-    # Step 5: Safe Sync to Hostinger public_html
+    # Step 4: Safe Sync to Hostinger public_html
     log_step(current_step, total_steps, "Synchronizing Built Application to Production")
     current_step += 1
 
@@ -267,13 +238,13 @@ def main():
 
     log_success("All files successfully transferred to Hostinger public_html!")
 
-    # Step 6: Clear Server, OPcache & CDN Caches
+    # Step 5: Clear Server, OPcache & CDN Caches
     if not args.skip_cache:
         log_step(current_step, total_steps, "Flushing Server, OPcache & LiteSpeed Caches")
         current_step += 1
         purge_server_cache()
 
-    # Step 7: Post-Deployment Smoke Tests & Health Check
+    # Step 6: Post-Deployment Smoke Tests & Health Check
     log_step(current_step, total_steps, "Post-Deployment Live Health Verification")
     
     time.sleep(1) # Brief pause for edge cache propagation
