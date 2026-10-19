@@ -885,7 +885,7 @@ export default function Blog() {
             </main>
 
             {/* Right Sticky Sidebar */}
-            <aside className="raf-sidebar-column">
+            <aside className="raf-sidebar-column custom-sidebar-scroll">
               {/* Widget 1: Popular Articles (Matching Screenshot 1) */}
               <div className="raf-sidebar-card">
                 <div className="raf-sidebar-card-header">
@@ -1186,7 +1186,7 @@ export default function Blog() {
           </div>
 
           {/* Right Column: Sticky Sidebar */}
-          <aside className="raf-sidebar-column">
+          <aside className="raf-sidebar-column custom-sidebar-scroll">
             {/* Widget 1: Popular Articles */}
             <div className="raf-sidebar-card">
               <div className="raf-sidebar-card-header">
