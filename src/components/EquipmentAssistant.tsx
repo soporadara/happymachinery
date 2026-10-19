@@ -80,9 +80,17 @@ function getReply(message: string) {
   return 'I’m not sure I understood that question, and I don’t want to give you a wrong answer. Please ask it in a short sentence, or use “Get a quote” to speak with the team about pricing, inventory, delivery, or anything not listed on the website.'
 }
 
-export default function EquipmentAssistant() {
+interface EquipmentAssistantProps {
+  isCartOpen?: boolean
+}
+
+export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantProps = {}) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState('')
+
+  if (isCartOpen) {
+    return null
+  }
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,

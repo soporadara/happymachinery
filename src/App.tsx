@@ -78,7 +78,7 @@ function AppContent({
         onRemoveItem={handleRemoveItem}
         onCheckout={handleCheckout}
       />
-      {!isAdminPage && <EquipmentAssistant />}
+      {!isAdminPage && <EquipmentAssistant isCartOpen={isCartOpen} />}
     </div>
   )
 }

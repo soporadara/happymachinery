@@ -489,9 +489,19 @@ main {
   inset: 0;
   background: rgba(2, 8, 23, 0.6);
   backdrop-filter: blur(8px);
-  z-index: 200;
+  z-index: 9999;
   display: flex;
   justify-content: flex-end;
+}
+
+/* Hide chat assistant button when cart is open so it never blocks the Checkout button */
+body:has(.cart-overlay) .equipment-assistant,
+.cart-overlay ~ .equipment-assistant,
+.cart-overlay + .equipment-assistant {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 .cart-drawer {
