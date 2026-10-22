@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DEFAULT_COMMENTS, DEFAULT_POSTS, BlogComment, BlogReply, BlogPost } from './adminData'
 import { readPersistentContent } from '../data/persistentStorage'
-import { readSharedContent } from '../data/sharedContentStorage'
+import { readSharedContent, appendSharedContent } from '../data/sharedContentStorage'
+import { getStoredSession } from '../data/cmsAuth'
 import { getBlogPostPath, getBlogPostSlug } from '../data/blogUrls'
 import { getRealBlogViews, recordRealBlogView } from '../data/blogViews'
 import './Blog.css'
@@ -523,12 +524,26 @@ export default function Blog() {
     }
   }, [])
 
+  const [commentError, setCommentError] = useState('')
+  const [replyError, setReplyError] = useState('')
+
   // Sync comments
   useEffect(() => {
-    const syncComments = () => {
+    const syncComments = async () => {
+      try {
+        const saved = await readSharedContent<BlogComment[]>('comments')
+        if (saved && Array.isArray(saved)) {
+          setComments(saved)
+          try { localStorage.setItem('happy-machinery-comments', JSON.stringify(saved)) } catch {}
+          return
+        }
+      } catch {}
       const saved = localStorage.getItem('happy-machinery-comments')
-      setComments(saved ? JSON.parse(saved) : DEFAULT_COMMENTS)
+      if (saved) {
+        try { setComments(JSON.parse(saved)) } catch {}
+      }
     }
+    void syncComments()
     window.addEventListener('comments-updated', syncComments)
     window.addEventListener('storage', syncComments)
     return () => {
@@ -536,6 +551,7 @@ export default function Blog() {
       window.removeEventListener('storage', syncComments)
     }
   }, [])
+
 
   // Reset form when post changes
   useEffect(() => {
@@ -552,14 +568,18 @@ export default function Blog() {
 
   const handleCommentSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!selectedPost || !commentName.trim() || !commentEmail.trim() || !commentText.trim()) return
-
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailPattern.test(commentEmail.trim())) {
-      alert('Please enter a valid email address.')
+    if (!selectedPost || !commentName.trim() || !commentEmail.trim() || !commentText.trim()) {
+      setCommentError('Please fill out all required fields.')
       return
     }
 
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailPattern.test(commentEmail.trim())) {
+      setCommentError('Please enter a valid email address.')
+      return
+    }
+
+    setCommentError('')
     const newComment: BlogComment = {
       id: Date.now(),
       postId: selectedPost.id,
@@ -568,13 +588,14 @@ export default function Blog() {
       email: commentEmail.trim(),
       text: commentText.trim(),
       date: new Date().toISOString().slice(0, 10),
-      status: 'Approved',
+      status: isAdmin ? 'Approved' : 'Pending',
       likes: 0,
       replies: []
     }
     const updatedComments = [newComment, ...comments]
     setComments(updatedComments)
-    localStorage.setItem('happy-machinery-comments', JSON.stringify(updatedComments))
+    try { localStorage.setItem('happy-machinery-comments', JSON.stringify(updatedComments)) } catch {}
+    void appendSharedContent('comments', newComment).catch(() => {})
     window.dispatchEvent(new Event('comments-updated'))
     setCommentName('')
     setCommentEmail('')
@@ -611,16 +632,17 @@ export default function Blog() {
       authorEmail = 'support@happymachinery.com'
     } else {
       if (!authorName) {
-        alert('Please enter your name.')
+        setReplyError('Please enter your name.')
         return
       }
       const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!authorEmail || !emailPattern.test(authorEmail)) {
-        alert('Please enter a valid email address.')
+        setReplyError('Please enter a valid email address.')
         return
       }
     }
 
+    setReplyError('')
     const newReply: BlogReply = {
       id: Date.now(),
       author: authorName,
@@ -640,7 +662,8 @@ export default function Blog() {
         : comment
     )
     setComments(updatedComments)
-    localStorage.setItem('happy-machinery-comments', JSON.stringify(updatedComments))
+    try { localStorage.setItem('happy-machinery-comments', JSON.stringify(updatedComments)) } catch {}
+    void appendSharedContent('comments', updatedComments).catch(() => {})
     window.dispatchEvent(new Event('comments-updated'))
 
     setReplyingTo(null)
@@ -652,12 +675,13 @@ export default function Blog() {
 
   // Extract unique categories dynamically
   const categories = useMemo(() => {
-    return ['All', ...Array.from(new Set(posts.map((p) => p.category)))]
-  }, [posts])
+    return ['All', ...Array.from(new Set(posts.filter((p) => isAdmin || p.status !== 'Draft').map((p) => p.category)))]
+  }, [posts, isAdmin])
 
-  // Filter posts based on Category and Search Query
+  // Filter posts based on Category and Search Query (excluding drafts for public visitors)
   const filteredPosts = useMemo(() => {
     return posts.filter((post) => {
+      if (!isAdmin && post.status === 'Draft') return false
       const matchesCategory = activeCategory === 'All' || post.category === activeCategory
       const query = searchQuery.trim().toLowerCase()
       const matchesSearch =
@@ -667,14 +691,15 @@ export default function Blog() {
         post.category.toLowerCase().includes(query)
       return matchesCategory && matchesSearch
     })
-  }, [posts, activeCategory, searchQuery])
+  }, [posts, activeCategory, searchQuery, isAdmin])
 
-  // Popular posts sorted by view count
+  // Popular posts sorted by view count (excluding drafts for public visitors)
   const popularPosts = useMemo(() => {
-    return [...posts]
+    return posts
+      .filter((p) => isAdmin || p.status !== 'Draft')
       .sort((a, b) => getPostViews(b) - getPostViews(a))
       .slice(0, 5)
-  }, [posts])
+  }, [posts, isAdmin])
 
   // Category counts for popular categories sidebar
   const categoryCounts = useMemo(() => {
@@ -682,9 +707,10 @@ export default function Blog() {
       .filter((cat) => cat !== 'All')
       .map((cat) => ({
         name: cat,
-        count: posts.filter((p) => p.category === cat).length
+        count: posts.filter((p) => p.category === cat && (isAdmin || p.status !== 'Draft')).length
       }))
-  }, [categories, posts])
+  }, [categories, posts, isAdmin])
+
 
   // Table of Contents for "On This Page" widget (Extracts real sections from article)
   const tocItems = useMemo(() => {
@@ -913,6 +939,27 @@ export default function Blog() {
   }
 
   if (selectedPost) {
+    const isDraft = selectedPost.status === 'Draft'
+    const adminSession = getStoredSession()
+    const isAdmin = !!adminSession
+
+    if (isDraft && !isAdmin) {
+      return (
+        <div className="raf-article-view-wrapper" style={{ padding: '80px 20px', minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ maxWidth: '520px', width: '100%', background: '#ffffff', padding: '40px 30px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 10px 30px rgba(0,0,0,0.06)', textAlign: 'center' }}>
+            <div style={{ fontSize: '44px', marginBottom: '16px' }}>📝</div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 750, color: '#0f172a', marginBottom: '10px' }}>Guide Under Editorial Review</h2>
+            <p style={{ color: '#64748b', fontSize: '0.92rem', lineHeight: 1.6, marginBottom: '24px' }}>
+              This machinery equipment guide is currently undergoing engineering editorial review and will be published once finalized.
+            </p>
+            <Link to="/blog" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 22px', background: '#0066ff', color: '#ffffff', borderRadius: '10px', textDecoration: 'none', fontWeight: 650, fontSize: '0.9rem' }}>
+              &larr; Browse Published Guides
+            </Link>
+          </div>
+        </div>
+      )
+    }
+
     const approvedComments = comments.filter(
       (c) => c.postId === selectedPost.id && c.status === 'Approved'
     )
@@ -920,6 +967,31 @@ export default function Blog() {
     return (
       <div className="raf-article-view-wrapper">
         <div className="raf-article-container">
+          {/* Admin Draft Banner */}
+          {isDraft && (
+            <div style={{
+              background: '#fffbeb',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              padding: '12px 18px',
+              borderRadius: '10px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 650 }}>
+                <span>⚠️ DRAFT PREVIEW MODE:</span>
+                <span style={{ fontWeight: 400 }}>This article is currently an unpublished draft and hidden from public visitors.</span>
+              </div>
+              <Link to="/ourcmskiuq" style={{ color: '#b45309', fontWeight: 700, fontSize: '0.82rem', textDecoration: 'underline' }}>
+                Open in CMS Editor &rarr;
+              </Link>
+            </div>
+          )}
+
           {/* Breadcrumb Navigation */}
           <nav className="raf-breadcrumb" aria-label="Breadcrumb">
             <Link to="/" className="raf-bc-link">Home</Link>
@@ -1181,6 +1253,12 @@ export default function Blog() {
                                 className="raf-form-textarea raf-reply-textarea"
                               />
 
+                              {replyError && (
+                                <div style={{ color: '#dc2626', fontSize: '0.82rem', marginBottom: '8px' }}>
+                                  {replyError}
+                                </div>
+                              )}
+
                               <div className="raf-reply-form-btns">
                                 <button
                                   type="button"
@@ -1221,6 +1299,12 @@ export default function Blog() {
                   {commentSubmitted && (
                     <div className="raf-comment-success-alert">
                       ✓ Thank you! Your comment has been posted successfully and is now visible.
+                    </div>
+                  )}
+
+                  {commentError && (
+                    <div style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.88rem' }}>
+                      {commentError}
                     </div>
                   )}
 

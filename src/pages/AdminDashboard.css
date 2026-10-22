@@ -10691,3 +10691,179 @@ html.dark .cms-kpi-card.red .cms-kpi-icon-circle {
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
+/* ==============================================================================
+   CMS Mobile & Tablet Viewport Hardening (320px to 768px)
+   ============================================================================== */
+@media (max-width: 768px) {
+  .cms-layout-body {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  .cms-main-content {
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding: 14px 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .cms-view-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  .cms-view-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .cms-view-actions .cms-btn {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+  }
+
+  .cms-table-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+    border-radius: 8px !important;
+  }
+
+  .cms-table,
+  .cms-prod-table {
+    min-width: 640px !important;
+  }
+
+  .cms-dialog-card,
+  .cms-recovery-modal,
+  .cms-media-modal-card {
+    max-width: calc(100vw - 24px) !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    margin: 12px !important;
+    padding: 18px 16px !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .cms-top-header {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+    height: auto !important;
+  }
+
+  .cms-header-search-bar {
+    order: 3 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .cms-header-actions {
+    margin-left: auto !important;
+    gap: 6px !important;
+  }
+
+  .cms-security-subnav,
+  .cms-articles-subnav,
+  .cms-subnav-strip {
+    display: flex !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+    gap: 6px !important;
+    padding-bottom: 6px !important;
+  }
+
+  .cms-security-subnav button,
+  .cms-articles-subnav button,
+  .cms-subnav-btn {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    font-size: 0.78rem !important;
+    padding: 7px 12px !important;
+  }
+
+  .cms-products-filter-toolbar,
+  .cms-tax-filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .cms-filter-search-box,
+  .cms-filter-dropdown-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .cms-inquiry-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .cms-inquiry-card {
+    padding: 14px !important;
+  }
+
+  .cms-inquiry-contact-strip {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+  }
+
+  .cms-comment-row-item {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .cms-comment-actions-wrap {
+    width: 100% !important;
+    justify-content: flex-end !important;
+  }
+
+  .cms-settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cms-hero-banner-inner {
+    padding: 16px 14px !important;
+  }
+
+  .cms-hero-banner-title {
+    font-size: 1.15rem !important;
+  }
+
+  .cms-hero-banner-desc {
+    font-size: 0.84rem !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .cms-topbar-crumb-title,
+  .cms-topbar-breadcrumb {
+    font-size: 0.78rem !important;
+  }
+
+  .cms-btn {
+    font-size: 0.78rem !important;
+    padding: 8px 12px !important;
+  }
+
+  .cms-dialog-card,
+  .cms-recovery-modal {
+    padding: 14px 12px !important;
+  }
+}
+
+

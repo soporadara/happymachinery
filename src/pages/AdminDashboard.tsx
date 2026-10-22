@@ -28,10 +28,7 @@ import {
   CartOrder,
   DEFAULT_POSTS, 
   DEFAULT_PRODUCTS, 
-  DEFAULT_MEDIA,
-  DEFAULT_INQUIRIES,
-  DEFAULT_COMMENTS,
-  DEFAULT_CART_ORDERS
+  DEFAULT_MEDIA
 } from './adminData'
 import { readSharedContent, writeSharedContent } from '../data/sharedContentStorage'
 import { getBlogPostPath } from '../data/blogUrls'
@@ -45,7 +42,7 @@ import './AdminDashboard.css'
 export interface TrashItem {
   id: string
   originalId: string | number
-  type: 'article' | 'product' | 'blog-category' | 'product-category'
+  type: 'article' | 'product' | 'blog-category' | 'product-category' | 'media'
   title: string
   subtitle?: string
   image?: string
@@ -1140,15 +1137,15 @@ export default function AdminDashboard() {
   const [prodEditorSpecs, setProdEditorSpecs] = useState<{ name: string; value: string }[]>([])
 
   // Inquiries & Leads States
-  const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => DEFAULT_INQUIRIES)
+  const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => [])
   const [inquirySearch, setInquirySearch] = useState('')
   const [inquiryStatusFilter, setInquiryStatusFilter] = useState<string>('all')
 
   // Cart Orders States
-  const [ordersList, setOrdersList] = useState<CartOrder[]>(() => DEFAULT_CART_ORDERS)
+  const [ordersList, setOrdersList] = useState<CartOrder[]>(() => [])
 
   // Comments Moderation States
-  const [commentsData, setCommentsData] = useState<BlogComment[]>(() => DEFAULT_COMMENTS)
+  const [commentsData, setCommentsData] = useState<BlogComment[]>(() => [])
   const [commentFilter, setCommentFilter] = useState<'all' | 'Pending' | 'Approved' | 'Spam'>('all')
 
   // Articles Sub-view & Editorial States
@@ -1253,7 +1250,7 @@ export default function AdminDashboard() {
       return []
     }
   })
-  const [trashFilter, setTrashFilter] = useState<'all' | 'article' | 'product' | 'category'>('all')
+  const [trashFilter, setTrashFilter] = useState<'all' | 'article' | 'product' | 'category' | 'media'>('all')
   const [trashSearch, setTrashSearch] = useState('')
 
   // Form Temp States
@@ -1375,14 +1372,66 @@ export default function AdminDashboard() {
     }
   }
 
+  const getMediaReferences = (url: string) => {
+    const refs: string[] = []
+    if (!url) return refs
+    const cleanUrl = url.toLowerCase()
+    posts.forEach((p) => {
+      if (p.image?.toLowerCase() === cleanUrl || p.content?.some((c) => c.toLowerCase().includes(cleanUrl))) {
+        refs.push(`Article: "${p.title}"`)
+      }
+    })
+    products.forEach((p) => {
+      if (
+        p.image?.toLowerCase() === cleanUrl ||
+        p.galleryImages?.some((g) => g.toLowerCase().includes(cleanUrl)) ||
+        p.description?.toLowerCase().includes(cleanUrl)
+      ) {
+        refs.push(`Product: "${p.name}"`)
+      }
+    })
+    return refs
+  }
+
   const handleDeleteSingleMedia = (item: MediaItem, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
-      const updated = mediaList.filter((m) => m.id !== item.id)
-      setMediaList(updated)
-      void writeSharedContent('media-library', updated)
-      showToast(`Asset "${item.title}" deleted.`, 'success')
-    }
+    const refs = getMediaReferences(item.url)
+    const warningText = refs.length > 0
+      ? `⚠️ WARNING: This asset is currently used in ${refs.slice(0, 3).join(', ')}${refs.length > 3 ? ` and ${refs.length - 3} more` : ''}. Deleting it will break images on those pages.\n\n`
+      : ''
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Move Asset to Trash Vault?',
+      message: `${warningText}Move "${item.title}" to Trash? It will be safely preserved in the Trash Vault and can be recovered back to the Media Library at any time.`,
+      confirmLabel: 'Move to Trash',
+      onConfirm: async () => {
+        const trashRecord: TrashItem = {
+          id: `media-${item.id}`,
+          originalId: item.id,
+          type: 'media',
+          title: item.title,
+          subtitle: `Size: ${item.size || 'N/A'} · Folder: ${item.folder || 'general'}`,
+          image: item.url,
+          deletedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          deletedTimestamp: Date.now(),
+          data: item
+        }
+        const updatedTrash = [trashRecord, ...trashItems]
+        const updated = mediaList.filter((m) => m.id !== item.id)
+
+        setTrashItems(updatedTrash)
+        setMediaList(updated)
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
+        await writeSharedContent('trash-items', updatedTrash)
+        await writeSharedContent('media-library', updated)
+        await logSecurityEvent('CONTENT_DELETED', `Media asset "${item.title}" moved to Trash.`, 'warning', currentUser?.username)
+
+        showToast(`Asset "${item.title}" moved to Trash. Recover anytime from Trash.`, 'warning')
+        setConfirmDialog(null)
+      }
+    })
   }
 
   const handleBatchDeleteMedia = () => {
@@ -1390,13 +1439,49 @@ export default function AdminDashboard() {
       showToast('No items selected.', 'warning')
       return
     }
-    if (window.confirm(`Delete ${selectedMediaIds.length} selected asset(s)?`)) {
-      const updated = mediaList.filter((m) => !selectedMediaIds.includes(m.id))
-      setMediaList(updated)
-      setSelectedMediaIds([])
-      void writeSharedContent('media-library', updated)
-      showToast(`Deleted ${selectedMediaIds.length} items.`, 'success')
-    }
+    const targetItems = mediaList.filter((m) => selectedMediaIds.includes(m.id))
+    const allRefs: string[] = []
+    targetItems.forEach((m) => {
+      const refs = getMediaReferences(m.url)
+      if (refs.length > 0) allRefs.push(`"${m.title}" (${refs.length} refs)`)
+    })
+    const warningText = allRefs.length > 0
+      ? `⚠️ WARNING: ${allRefs.length} selected asset(s) are actively referenced (${allRefs.slice(0, 3).join(', ')}).\n\n`
+      : ''
+
+    setConfirmDialog({
+      isOpen: true,
+      title: `Move ${selectedMediaIds.length} Assets to Trash Vault?`,
+      message: `${warningText}Move ${selectedMediaIds.length} selected asset(s) to Trash? They will be safely stored in the Trash Vault and can be restored at any time.`,
+      confirmLabel: 'Move All to Trash',
+      onConfirm: async () => {
+        const newTrash: TrashItem[] = targetItems.map((item) => ({
+          id: `media-${item.id}`,
+          originalId: item.id,
+          type: 'media',
+          title: item.title,
+          subtitle: `Size: ${item.size || 'N/A'} · Folder: ${item.folder || 'general'}`,
+          image: item.url,
+          deletedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          deletedTimestamp: Date.now(),
+          data: item
+        }))
+        const updatedTrash = [...newTrash, ...trashItems]
+        const updated = mediaList.filter((m) => !selectedMediaIds.includes(m.id))
+
+        setTrashItems(updatedTrash)
+        setMediaList(updated)
+        setSelectedMediaIds([])
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
+        await writeSharedContent('trash-items', updatedTrash)
+        await writeSharedContent('media-library', updated)
+        await logSecurityEvent('CONTENT_DELETED', `Batch moved ${selectedMediaIds.length} media assets to Trash.`, 'warning', currentUser?.username)
+
+        showToast(`Moved ${selectedMediaIds.length} items to Trash.`, 'warning')
+        setConfirmDialog(null)
+      }
+    })
   }
 
   const handleCopySelectedUrls = () => {
@@ -1538,13 +1623,13 @@ export default function AdminDashboard() {
       if (fetchedTrash && Array.isArray(fetchedTrash)) {
         setTrashItems(fetchedTrash)
       }
-      if (fetchedInquiries && Array.isArray(fetchedInquiries) && fetchedInquiries.length > 0) {
+      if (fetchedInquiries && Array.isArray(fetchedInquiries)) {
         setInquiriesList(fetchedInquiries)
       }
-      if (fetchedOrders && Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
+      if (fetchedOrders && Array.isArray(fetchedOrders)) {
         setOrdersList(fetchedOrders)
       }
-      if (fetchedComments && Array.isArray(fetchedComments) && fetchedComments.length > 0) {
+      if (fetchedComments && Array.isArray(fetchedComments)) {
         setCommentsData(fetchedComments)
       }
 
@@ -1724,6 +1809,11 @@ export default function AdminDashboard() {
       return
     }
 
+    if (adminUsers.some((u) => u.username.toLowerCase() === newAdminUsername.trim().toLowerCase())) {
+      showToast(`Username "${newAdminUsername}" is already taken.`, 'error')
+      return
+    }
+
     const newUser: AdminUser = {
       id: `usr-${Date.now()}`,
       username: newAdminUsername.trim().toLowerCase(),
@@ -1747,6 +1837,68 @@ export default function AdminDashboard() {
     setNewAdminPassword('')
     setShowAddAdminModal(false)
     showToast(`Administrator ${newUser.name} created successfully!`, 'success')
+  }
+
+  // Update Admin Role
+  const handleUpdateAdminRole = async (userId: string, newRole: AdminRole) => {
+    const targetUser = adminUsers.find((u) => u.id === userId)
+    if (!targetUser) return
+    if (targetUser.role === 'Super Administrator' && newRole !== 'Super Administrator') {
+      const superAdminCount = adminUsers.filter((u) => u.role === 'Super Administrator').length
+      if (superAdminCount <= 1) {
+        showToast('At least one Super Administrator account must remain active.', 'error')
+        return
+      }
+    }
+    const updated = adminUsers.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+    setAdminUsers(updated)
+    await writeSharedContent('admin-users', updated)
+    await logSecurityEvent('USER_UPDATED', `Role for ${targetUser.username} updated to ${newRole}.`, 'info', currentUser?.username)
+    showToast(`Role for ${targetUser.name} updated to ${newRole}.`, 'success')
+  }
+
+  // Toggle Admin Active Status
+  const handleToggleAdminStatus = async (user: AdminUser) => {
+    if (currentUser && user.id === currentUser.id) {
+      showToast('You cannot suspend your own administrative account.', 'error')
+      return
+    }
+    const newStatus = user.status === 'Active' ? 'Suspended' : 'Active'
+    const updated = adminUsers.map((u) => (u.id === user.id ? { ...u, status: newStatus as any } : u))
+    setAdminUsers(updated)
+    await writeSharedContent('admin-users', updated)
+    await logSecurityEvent('USER_UPDATED', `Account ${user.username} status set to ${newStatus}.`, 'warning', currentUser?.username)
+    showToast(`Account ${user.username} is now ${newStatus}.`, 'warning')
+  }
+
+  // Delete Admin Account
+  const handleDeleteAdmin = (user: AdminUser) => {
+    if (currentUser && user.id === currentUser.id) {
+      showToast('You cannot delete your own administrative account.', 'error')
+      return
+    }
+    if (user.role === 'Super Administrator') {
+      const superAdminCount = adminUsers.filter((u) => u.role === 'Super Administrator').length
+      if (superAdminCount <= 1) {
+        showToast('Cannot delete the sole Super Administrator account.', 'error')
+        return
+      }
+    }
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Revoke Administrator Access?',
+      message: `Permanently delete administrator account "${user.name}" (@${user.username})? They will immediately lose all access to the CMS.`,
+      confirmLabel: 'Delete Administrator',
+      onConfirm: async () => {
+        const updated = adminUsers.filter((u) => u.id !== user.id)
+        setAdminUsers(updated)
+        await writeSharedContent('admin-users', updated)
+        await logSecurityEvent('USER_DELETED', `Admin account ${user.username} deleted by ${currentUser?.username}.`, 'warning', currentUser?.username)
+        showToast(`Administrator ${user.name} removed.`, 'warning')
+        setConfirmDialog(null)
+      }
+    })
   }
 
   // Save Profile Updates
@@ -2253,6 +2405,14 @@ export default function AdminDashboard() {
 
     const finalSlug = editorSlug.trim() || editorTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
+    const isDuplicateSlug = posts.some((p) => p.slug === finalSlug && (!editingArticle || p.id !== editingArticle.id))
+    if (isDuplicateSlug) {
+      showToast(`An article with slug "${finalSlug}" already exists. Please choose a unique slug.`, 'error')
+      return
+    }
+
+    const finalStatus: 'Published' | 'Draft' = status === 'Scheduled' ? 'Draft' : status
+
     if (editingArticle) {
       const updated = posts.map((p) =>
         p.id === editingArticle.id
@@ -2264,14 +2424,15 @@ export default function AdminDashboard() {
               content: contentParagraphs,
               category: editorCategory,
               author: editorAuthor || currentUser?.name || 'Happy Machinery',
-              image: editorCoverImage || p.image
+              image: editorCoverImage || p.image,
+              status: finalStatus
             }
           : p
       )
       setPosts(updated)
       await writeSharedContent('blog-posts', updated)
-      await logSecurityEvent('CONTENT_PUBLISHED', `Article "${editorTitle}" updated (${status}).`, 'info', currentUser?.username)
-      showToast(`Article "${editorTitle}" saved as ${status}!`, 'success')
+      await logSecurityEvent('CONTENT_PUBLISHED', `Article "${editorTitle}" updated (${finalStatus}).`, 'info', currentUser?.username)
+      showToast(`Article "${editorTitle}" saved as ${finalStatus}!`, 'success')
     } else {
       const newPost: BlogPost = {
         id: Date.now(),
@@ -2284,13 +2445,14 @@ export default function AdminDashboard() {
         image: editorCoverImage || '/images/why-choose-v900-jobsite.png',
         date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         readTime: `${Math.max(2, Math.ceil(contentParagraphs.join(' ').split(/\s+/).length / 180))} min read`,
-        author: editorAuthor || currentUser?.name || 'Happy Machinery'
+        author: editorAuthor || currentUser?.name || 'Happy Machinery',
+        status: finalStatus
       }
       const updated = [newPost, ...posts]
       setPosts(updated)
       await writeSharedContent('blog-posts', updated)
-      await logSecurityEvent('CONTENT_PUBLISHED', `New article "${newPost.title}" created as ${status}.`, 'info', currentUser?.username)
-      showToast(`Article "${editorTitle}" published successfully!`, 'success')
+      await logSecurityEvent('CONTENT_PUBLISHED', `New article "${newPost.title}" created as ${finalStatus}.`, 'info', currentUser?.username)
+      showToast(`Article "${editorTitle}" saved as ${finalStatus}!`, 'success')
     }
     setArticlesSubView('list')
   }
@@ -2469,6 +2631,12 @@ export default function AdminDashboard() {
       const updated = exists ? productCategories : [...productCategories, restoredCat]
       setProductCategories(updated)
       await writeSharedContent('product-categories', updated)
+    } else if (item.type === 'media') {
+      const restoredMedia = item.data as MediaItem
+      const exists = mediaList.some((m) => m.id === restoredMedia.id)
+      const updatedMedia = exists ? mediaList : [restoredMedia, ...mediaList]
+      setMediaList(updatedMedia)
+      await writeSharedContent('media-library', updatedMedia)
     }
 
     const remaining = trashItems.filter((t) => t.id !== item.id)
@@ -2502,13 +2670,14 @@ export default function AdminDashboard() {
     setConfirmDialog({
       isOpen: true,
       title: `Restore All ${trashItems.length} Trashed Items?`,
-      message: 'This will recover all deleted articles, products, and categories back to their active sections.',
+      message: 'This will recover all deleted articles, products, categories, and media assets back to their active sections.',
       confirmLabel: 'Restore All',
       onConfirm: async () => {
         let newPosts = [...posts]
         let newProds = [...products]
         let newBlogCats = [...blogCategories]
         let newProdCats = [...productCategories]
+        let newMedia = [...mediaList]
 
         for (const item of trashItems) {
           if (item.type === 'article' && !newPosts.some((p) => p.id === item.data.id)) {
@@ -2519,6 +2688,8 @@ export default function AdminDashboard() {
             newBlogCats.push(item.data)
           } else if (item.type === 'product-category' && !newProdCats.some((c) => c.id === item.data.id)) {
             newProdCats.push(item.data)
+          } else if (item.type === 'media' && !newMedia.some((m) => m.id === item.data.id)) {
+            newMedia.unshift(item.data)
           }
         }
 
@@ -2526,6 +2697,7 @@ export default function AdminDashboard() {
         setProducts(newProds)
         setBlogCategories(newBlogCats)
         setProductCategories(newProdCats)
+        setMediaList(newMedia)
         setTrashItems([])
 
         localStorage.setItem('happy-machinery-trash', JSON.stringify([]))
@@ -2535,6 +2707,7 @@ export default function AdminDashboard() {
         await writeSharedContent('products', newProds)
         await writeSharedContent('blog-categories', newBlogCats)
         await writeSharedContent('product-categories', newProdCats)
+        await writeSharedContent('media-library', newMedia)
 
         showToast(`All ${trashItems.length} items restored!`, 'success')
         setConfirmDialog(null)
@@ -2772,6 +2945,12 @@ export default function AdminDashboard() {
       .filter(Boolean)
     const validSpecs = prodEditorSpecs.filter((s) => s.name.trim() && s.value.trim())
     const finalSlug = prodEditorSlug.trim() || prodEditorName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+    const isDuplicateSlug = products.some((p) => p.slug === finalSlug && p.id !== prodEditorId)
+    if (isDuplicateSlug) {
+      showToast(`A product with slug "${finalSlug}" already exists. Please choose a unique slug.`, 'error')
+      return
+    }
 
     if (prodEditorId !== null) {
       const updated = products.map((p) =>
@@ -3455,6 +3634,21 @@ export default function AdminDashboard() {
             </span>
             <span className="cms-nav-label">Accounts & Staff</span>
             <span className="cms-nav-badge">{adminUsers.length}</span>
+          </button>
+
+          <button
+            className={`cms-nav-item ${activeTab === 'maintenance' ? 'active' : ''}`}
+            onClick={() => setActiveTab('maintenance')}
+            data-tooltip="Maintenance Mode"
+            title={isSidebarCollapsed ? 'Maintenance Mode' : undefined}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Maintenance</span>
+            {maintenanceGlobal && <span className="cms-nav-badge danger">ON</span>}
           </button>
 
         </nav>
@@ -6479,6 +6673,7 @@ export default function AdminDashboard() {
                           <tr>
                             <th>Title</th>
                             <th>Category</th>
+                            <th>Status</th>
                             <th>Author</th>
                             <th>Slug</th>
                             <th>Date</th>
@@ -6486,9 +6681,31 @@ export default function AdminDashboard() {
                           </tr>
                         </thead>
                         <tbody>
-                          {posts
-                            .filter((p) => p.title.toLowerCase().includes(globalSearch.toLowerCase()) || p.category.toLowerCase().includes(globalSearch.toLowerCase()))
-                            .map((post) => (
+                          {(() => {
+                            const filtered = posts.filter(
+                              (p) =>
+                                p.title.toLowerCase().includes(globalSearch.toLowerCase()) ||
+                                p.category.toLowerCase().includes(globalSearch.toLowerCase()) ||
+                                (p.slug && p.slug.toLowerCase().includes(globalSearch.toLowerCase()))
+                            )
+
+                            if (filtered.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={7} style={{ textAlign: 'center', padding: '50px 20px' }}>
+                                    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                      <div style={{ fontSize: '32px' }}>📰</div>
+                                      <h4 style={{ margin: 0, fontSize: '0.98rem', color: 'var(--cms-text-primary)' }}>No articles found</h4>
+                                      <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                                        {globalSearch ? 'No articles match your search query.' : 'No articles published yet. Click "New Article" to create your first guide.'}
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            }
+
+                            return filtered.map((post) => (
                               <tr key={post.id}>
                                 <td style={{ fontWeight: 650, maxWidth: '280px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -6498,6 +6715,11 @@ export default function AdminDashboard() {
                                 </td>
                                 <td>
                                   <span className="cms-badge neutral">{post.category}</span>
+                                </td>
+                                <td>
+                                  <span className={`cms-badge ${post.status === 'Draft' ? 'warning' : 'success'}`}>
+                                    {post.status || 'Published'}
+                                  </span>
                                 </td>
                                 <td>{post.author || 'Happy Machinery'}</td>
                                 <td style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
@@ -6547,7 +6769,8 @@ export default function AdminDashboard() {
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                            ))
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -7859,7 +8082,22 @@ export default function AdminDashboard() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {paginated.map((prod) => (
+                                {paginated.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={9} style={{ textAlign: 'center', padding: '50px 20px' }}>
+                                      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ fontSize: '32px' }}>🚜</div>
+                                        <h4 style={{ margin: 0, fontSize: '0.98rem', color: 'var(--cms-text-primary)' }}>No machinery equipment found</h4>
+                                        <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                                          {prodSearch || prodStatusFilter !== 'all' || prodCategoryFilter !== 'all'
+                                            ? 'No products match your selected filters or search keyword.'
+                                            : 'No equipment listings currently in your catalog.'}
+                                        </p>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  paginated.map((prod) => (
                                   <tr key={prod.id}>
                                     <td>
                                       <div className="cms-prod-thumb-cell">
@@ -7953,7 +8191,7 @@ export default function AdminDashboard() {
                                       </div>
                                     </td>
                                   </tr>
-                                ))}
+                                )))}
                               </tbody>
                             </table>
 
@@ -8814,7 +9052,9 @@ export default function AdminDashboard() {
               <div className="cms-prod-metrics-grid">
                 <div className="cms-prod-metric-card">
                   <span className="cms-pm-label">Total Volume</span>
-                  <span className="cms-pm-value" style={{ color: '#10b981' }}>$27,841.00</span>
+                  <span className="cms-pm-value" style={{ color: '#10b981' }}>
+                    ${ordersList.reduce((sum, o) => sum + (Number(o.amount) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                   <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Total catalog sales</span>
                 </div>
 
@@ -8852,7 +9092,20 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {ordersList.map((order) => (
+                      {ordersList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '50px 20px' }}>
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ fontSize: '32px' }}>🛒</div>
+                              <h4 style={{ margin: 0, fontSize: '0.98rem', color: 'var(--cms-text-primary)' }}>No customer orders yet</h4>
+                              <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                                Incoming cart checkout sessions and machine orders will appear here automatically.
+                              </p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        ordersList.map((order) => (
                         <tr key={order.id}>
                           <td>
                             <span className="cms-sku-badge">{order.id}</span>
@@ -8890,7 +9143,7 @@ export default function AdminDashboard() {
                             </select>
                           </td>
                         </tr>
-                      ))}
+                      )))}
                     </tbody>
                   </table>
                 </div>
@@ -8966,8 +9219,8 @@ export default function AdminDashboard() {
 
               {/* Inquiries Cards Grid */}
               <div className="cms-inquiry-cards-grid">
-                {inquiriesList
-                  .filter((item) => {
+                {(() => {
+                  const filteredInquiries = inquiriesList.filter((item) => {
                     const matchSearch =
                       !inquirySearch ||
                       item.name.toLowerCase().includes(inquirySearch.toLowerCase()) ||
@@ -8976,7 +9229,24 @@ export default function AdminDashboard() {
                     const matchStatus = inquiryStatusFilter === 'all' || item.status === inquiryStatusFilter
                     return matchSearch && matchStatus
                   })
-                  .map((inq) => (
+
+                  if (filteredInquiries.length === 0) {
+                    return (
+                      <div className="cms-card" style={{ gridColumn: '1 / -1', padding: '60px 20px', textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ fontSize: '36px' }}>📬</div>
+                          <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--cms-text-primary)' }}>No contractor inquiries</h4>
+                          <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                            {inquirySearch || inquiryStatusFilter !== 'all'
+                              ? 'No inquiries match your current search or filter criteria.'
+                              : 'New equipment quote requests and contact form submissions will appear here.'}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return filteredInquiries.map((inq) => (
                     <div key={inq.id} className="cms-inquiry-card">
                       <div className="cms-inquiry-header-row">
                         <div className="cms-inquiry-author-info">
@@ -9026,7 +9296,8 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+                })()}
               </div>
             </div>
           )}
@@ -9071,9 +9342,25 @@ export default function AdminDashboard() {
 
               <div className="cms-card" style={{ padding: '20px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {commentsData
-                    .filter((c) => commentFilter === 'all' || c.status === commentFilter)
-                    .map((item) => (
+                  {(() => {
+                    const filteredComments = commentsData.filter((c) => commentFilter === 'all' || c.status === commentFilter)
+                    if (filteredComments.length === 0) {
+                      return (
+                        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ fontSize: '36px' }}>💬</div>
+                            <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--cms-text-primary)' }}>No comments to display</h4>
+                            <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                              {commentFilter !== 'all'
+                                ? `No comments currently marked as "${commentFilter}".`
+                                : 'Reader reviews and blog post comments will appear here for editorial moderation.'}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    return filteredComments.map((item) => (
                       <div
                         key={item.id}
                         className="cms-comment-row-item"
@@ -9155,7 +9442,8 @@ export default function AdminDashboard() {
                           </button>
                         </div>
                       </div>
-                    ))}
+                    ))
+                  })()}
                 </div>
               </div>
             </div>
@@ -9333,6 +9621,13 @@ export default function AdminDashboard() {
                     onClick={() => setTrashFilter('category')}
                   >
                     Categories ({trashItems.filter((i) => i.type === 'blog-category' || i.type === 'product-category').length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`cms-subnav-btn ${trashFilter === 'media' ? 'active' : ''}`}
+                    onClick={() => setTrashFilter('media')}
+                  >
+                    Media ({trashItems.filter((i) => i.type === 'media').length})
                   </button>
                 </div>
 
@@ -9950,7 +10245,18 @@ export default function AdminDashboard() {
                           </td>
                           <td>{user.email}</td>
                           <td>
-                            <span className="cms-badge neutral">{user.role}</span>
+                            <select
+                              className="cms-filter-dropdown-select"
+                              style={{ padding: '4px 8px', fontSize: '0.78rem' }}
+                              value={user.role}
+                              onChange={(e) => handleUpdateAdminRole(user.id, e.target.value as AdminRole)}
+                              disabled={currentUser?.id === user.id && user.role === 'Super Administrator'}
+                            >
+                              <option value="Super Administrator">Super Administrator</option>
+                              <option value="Administrator">Administrator</option>
+                              <option value="Editor">Editor</option>
+                              <option value="Analyst">Analyst</option>
+                            </select>
                           </td>
                           <td>
                             <span className={`cms-badge ${user.status === 'Active' ? 'success' : 'danger'}`}>
@@ -9959,16 +10265,44 @@ export default function AdminDashboard() {
                           </td>
                           <td>{new Date(user.createdAt).toLocaleDateString()}</td>
                           <td style={{ textAlign: 'right' }}>
-                            {user.status === 'Locked' ? (
-                              <button
-                                className="cms-btn cms-btn-primary cms-btn-sm"
-                                onClick={() => handleUnlockUser(user.id, user.username)}
-                              >
-                                Unlock
-                              </button>
-                            ) : (
-                              <span style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>Active</span>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                              {user.status === 'Locked' && (
+                                <button
+                                  type="button"
+                                  className="cms-btn cms-btn-primary cms-btn-sm"
+                                  onClick={() => handleUnlockUser(user.id, user.username)}
+                                >
+                                  Unlock
+                                </button>
+                              )}
+                              {currentUser?.id !== user.id && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="cms-action-btn-outline"
+                                    style={{ fontSize: '0.74rem', padding: '4px 8px' }}
+                                    onClick={() => handleToggleAdminStatus(user)}
+                                    title={user.status === 'Active' ? 'Suspend Account' : 'Activate Account'}
+                                  >
+                                    {user.status === 'Active' ? 'Suspend' : 'Activate'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-action-btn-outline danger"
+                                    style={{ fontSize: '0.74rem', padding: '4px 8px' }}
+                                    onClick={() => handleDeleteAdmin(user)}
+                                    title="Revoke Administrator Access"
+                                  >
+                                    Delete
+                                  </button>
+                                </>
+                              )}
+                              {currentUser?.id === user.id && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--cms-accent-blue)', fontWeight: 600 }}>
+                                  (Your Account)
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

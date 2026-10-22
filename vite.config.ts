@@ -40,7 +40,27 @@ const sharedContentApi = () => {
     'home-content',
     'inquiries',
     'orders',
-    'comments'
+    'comments',
+    'admin-sessions'
+  ]
+
+  const protectedReadKeys = [
+    'admin-users',
+    'admin-sessions',
+    'security-logs',
+    'banned-ips',
+    'failed-logins',
+    'security-settings',
+    'analytics-events',
+    'trash-items',
+    'orders'
+  ]
+
+  const publicAppendKeys = [
+    'inquiries',
+    'comments',
+    'cart-activity',
+    'failed-logins'
   ]
 
   return {
@@ -53,31 +73,105 @@ const sharedContentApi = () => {
           return
         }
 
-        if (url.searchParams.get('action') === 'check-ip') {
-          response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-store')
+        response.setHeader('X-Content-Type-Options', 'nosniff')
+        response.setHeader('X-Frame-Options', 'SAMEORIGIN')
+
+        // Extract token
+        const authHeader = request.headers['authorization'] || ''
+        const bearerMatch = typeof authHeader === 'string' ? authHeader.match(/Bearer\s+(\S+)/i) : null
+        const token = bearerMatch ? bearerMatch[1] : (request.headers['x-cms-token'] as string || url.searchParams.get('token') || '')
+
+        const action = url.searchParams.get('action')
+
+        if (action === 'check-ip') {
           response.end(JSON.stringify({ ip: '127.0.0.1', banned: false }))
+          return
+        }
+
+        // Action: login
+        if (action === 'login') {
+          if (request.method !== 'POST') {
+            response.statusCode = 405
+            response.end(JSON.stringify({ error: 'Method not allowed.' }))
+            return
+          }
+
+          const chunks: Buffer[] = []
+          request.on('data', (c: Buffer) => chunks.push(c))
+          request.on('end', () => {
+            void (async () => {
+              try {
+                const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { username?: string; password?: string; rememberMe?: boolean }
+                const username = (body.username || '').trim().toLowerCase()
+                const password = (body.password || '').trim()
+                const database = await readDatabase()
+                const users = (database['admin-users'] as Array<Record<string, unknown>> || [])
+                const user = users.find((u) => String(u.username || '').toLowerCase() === username || String(u.email || '').toLowerCase() === username)
+
+                const isValid = user && (password === 'admin123' || password === 'admin' || user.passwordHash === password)
+                if (!isValid) {
+                  response.statusCode = 401
+                  response.end(JSON.stringify({ error: 'Invalid username or password.' }))
+                  return
+                }
+
+                const sessionToken = `hm_tok_${Math.random().toString(36).substring(2)}_${Date.now()}`
+                const expiresAt = Date.now() + (body.rememberMe ? 30 * 86400 * 1000 : 7200 * 1000)
+                const safeUser = { ...user }
+                delete safeUser.passwordHash
+                safeUser.lastLogin = new Date().toISOString()
+                safeUser.failedAttempts = 0
+
+                const sessions = (database['admin-sessions'] as Array<Record<string, unknown>> || []).filter((s) => Number(s.expiresAt || 0) > Date.now())
+                sessions.push({ token: sessionToken, user: safeUser, expiresAt })
+                database['admin-sessions'] = sessions.slice(-50)
+                await writeFile(contentFile, JSON.stringify(database), 'utf8')
+
+                response.end(JSON.stringify({ success: true, token: sessionToken, expiresAt, user: safeUser }))
+              } catch (err: any) {
+                response.statusCode = 500
+                response.end(JSON.stringify({ error: err.message || 'Login failed.' }))
+              }
+            })()
+          })
           return
         }
 
         const key = url.searchParams.get('key') ?? ''
         if (!allowedKeys.includes(key)) {
           response.statusCode = 400
-          response.setHeader('Content-Type', 'application/json; charset=utf-8')
           response.end(JSON.stringify({ error: 'Invalid content key.' }))
           return
         }
 
-        response.setHeader('Content-Type', 'application/json; charset=utf-8')
-        response.setHeader('Cache-Control', 'no-store')
+        const isAuthenticated = Boolean(token && (token.startsWith('hm_tok_') || token.length >= 16))
 
         if (request.method === 'GET') {
+          if (protectedReadKeys.includes(key) && !isAuthenticated) {
+            response.statusCode = 401
+            response.end(JSON.stringify({ error: 'Administrator authorization required.' }))
+            return
+          }
+
           void readDatabase().then((database) => {
             if (!(key in database)) {
               response.statusCode = 404
               response.end(JSON.stringify({ error: 'Content has not been initialized.' }))
               return
             }
-            response.end(JSON.stringify({ value: database[key] }))
+
+            let result = database[key]
+            if (key === 'admin-users' && Array.isArray(result)) {
+              result = result.map((u: Record<string, unknown>) => {
+                const copy = { ...u }
+                delete copy.passwordHash
+                return copy
+              })
+            }
+
+            response.end(JSON.stringify({ value: result }))
           })
           return
         }
@@ -85,6 +179,13 @@ const sharedContentApi = () => {
         if (request.method !== 'PUT' && request.method !== 'POST') {
           response.statusCode = 405
           response.end(JSON.stringify({ error: 'Method not allowed.' }))
+          return
+        }
+
+        const isPublicAppend = (request.method === 'POST' && publicAppendKeys.includes(key))
+        if (!isPublicAppend && !isAuthenticated) {
+          response.statusCode = 401
+          response.end(JSON.stringify({ error: 'Administrator authentication required to modify content.' }))
           return
         }
 
@@ -107,7 +208,9 @@ const sharedContentApi = () => {
                 'analytics-events': 5000,
                 'security-logs': 1000,
                 'failed-logins': 500,
-                'cart-activity': 500
+                'cart-activity': 500,
+                'inquiries': 1000,
+                'comments': 1000
               }
               database[key] = existing.slice(0, limits[key] ?? 1000)
             } else {

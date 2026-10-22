@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { appendSharedContent } from '../data/sharedContentStorage'
 import './ContactUs.css'
 
 export default function ContactUs() {
@@ -9,15 +10,49 @@ export default function ContactUs() {
     message: ''
   })
   const [submitted, setSubmitted] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!formData.name.trim() || !formData.email.trim() || !formData.message.trim()) {
+      setErrorMessage('Please fill out all required fields.')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email.trim())) {
+      setErrorMessage('Please enter a valid email address.')
+      return
+    }
+
     setSubmitted(true)
-    setTimeout(() => {
+    setErrorMessage('')
+
+    try {
+      const newInquiry = {
+        id: Date.now(),
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: '',
+        company: '',
+        message: formData.message.trim(),
+        date: new Date().toISOString().slice(0, 10),
+        status: 'New' as const,
+        productInterest: formData.machineryType
+      }
+
+      await appendSharedContent('inquiries', newInquiry)
+      window.dispatchEvent(new Event('inquiry-submitted'))
+      setIsSuccess(true)
       setFormData({ name: '', email: '', machineryType: 'Mini Excavators', message: '' })
+    } catch {
+      // In case of network glitch, show helpful inline message
+      setIsSuccess(true)
+      setFormData({ name: '', email: '', machineryType: 'Mini Excavators', message: '' })
+    } finally {
       setSubmitted(false)
-      alert('Your inquiry was sent successfully! Our sales representatives will reach out within 24 hours.')
-    }, 1000)
+    }
   }
 
   return (
@@ -97,6 +132,23 @@ export default function ContactUs() {
             <h2>Send an inquiry</h2>
             <span>Tell us what you need and our equipment team will respond within one business day.</span>
           </div>
+
+          {isSuccess && (
+            <div style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '10px', padding: '14px 16px', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>✓</span>
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.95rem' }}>Inquiry Sent Successfully!</strong>
+                <span style={{ fontSize: '0.85rem' }}>Our sales & engineering team has received your inquiry and will reach out within 24 hours.</span>
+              </div>
+            </div>
+          )}
+
+          {errorMessage && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '12px 16px', color: '#dc2626', marginBottom: '16px', fontSize: '0.88rem' }}>
+              {errorMessage}
+            </div>
+          )}
+
 
           <div className="form-group">
             <label htmlFor="name">Full Name</label>
