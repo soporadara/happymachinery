@@ -48,6 +48,15 @@ const PRODUCT_META_LABELS: Record<ProductMetaSection, { title: string; singular:
   'product-tabs': { title: 'Product Tabs', singular: 'product tab', description: 'Control reusable information tabs shown on product pages.' }
 }
 
+const parseStoredValue = <T,>(raw: string | null, fallback: T): T => {
+  if (!raw) return fallback
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
 const mergeContentById = <T extends { id: string | number }>(...collections: (T[] | undefined)[]) => {
   const merged = new Map<string | number, T>()
   collections.flatMap((collection) => collection ?? []).forEach((item) => {
@@ -80,8 +89,7 @@ export default function AdminDashboard() {
   // Product Management State
   const [products, setProducts] = useState<AdminProduct[]>(() => {
     const saved = localStorage.getItem('happy-machinery-products')
-    if (!saved) return DEFAULT_PRODUCTS
-    const savedProducts = (JSON.parse(saved) as AdminProduct[]).map((product) => {
+    const savedProducts = parseStoredValue<AdminProduct[]>(saved, DEFAULT_PRODUCTS).map((product) => {
       if (['V900-RED', 'V900-YELLOW', 'V900-BLUE'].includes(product.sku)) {
         return { ...product, category: 'Equipment > Skid Steer Loaders' }
       }
@@ -126,8 +134,7 @@ export default function AdminDashboard() {
   const [productSection, setProductSection] = useState<ProductSection>('all')
   const [productMeta, setProductMeta] = useState<Record<ProductMetaSection, string[]>>(() => {
     const saved = localStorage.getItem('happy-machinery-product-meta')
-    if (!saved) return DEFAULT_PRODUCT_META
-    const savedMeta = JSON.parse(saved) as Record<ProductMetaSection, string[]>
+    const savedMeta = parseStoredValue<Record<ProductMetaSection, string[]>>(saved, DEFAULT_PRODUCT_META)
     return {
       ...DEFAULT_PRODUCT_META,
       ...savedMeta,
@@ -146,25 +153,25 @@ export default function AdminDashboard() {
   // Blog Management State
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     const saved = localStorage.getItem('happy-machinery-blog-posts')
-    return saved ? JSON.parse(saved) : DEFAULT_POSTS
+    return parseStoredValue<BlogPost[]>(saved, DEFAULT_POSTS)
   })
 
   // Media Library State
   const [mediaList, setMediaList] = useState<MediaItem[]>(() => {
     const saved = localStorage.getItem('happy-machinery-media-library')
-    return saved ? JSON.parse(saved) : DEFAULT_MEDIA
+    return parseStoredValue<MediaItem[]>(saved, DEFAULT_MEDIA)
   })
 
   // Inquiries State
   const [inquiries, setInquiries] = useState<Inquiry[]>(() => {
     const saved = localStorage.getItem('happy-machinery-inquiries')
-    return saved ? JSON.parse(saved) : DEFAULT_INQUIRIES
+    return parseStoredValue<Inquiry[]>(saved, DEFAULT_INQUIRIES)
   })
 
   // Comments State
   const [comments, setComments] = useState<BlogComment[]>(() => {
     const saved = localStorage.getItem('happy-machinery-comments')
-    return saved ? JSON.parse(saved) : DEFAULT_COMMENTS
+    return parseStoredValue<BlogComment[]>(saved, DEFAULT_COMMENTS)
   })
 
   // Blog Editor View States
