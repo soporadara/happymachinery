@@ -227,6 +227,7 @@ def main():
     log_info("Ensuring PHP endpoints, API, and .htaccess are in sync...")
     backend_files = [
         "public/api/content.php",
+        "public/api/sitemap.php",
         "public/share_preview.php",
         "public/share_image.php",
         "public/.htaccess"

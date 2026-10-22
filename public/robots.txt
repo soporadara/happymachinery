@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /hm-ops-7f3a9c2e8b41
+Disallow: /api/content.php
 
+# Search Engine Sitemap Index
 Sitemap: https://happymachinery.com/sitemap.xml

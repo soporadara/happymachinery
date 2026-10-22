@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>
 <urlset
   xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
@@ -6,29 +7,40 @@
 >
   <url>
     <loc>https://happymachinery.com/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/hero-v900-three-colors.png</image:loc>
+      <image:title>TYPHON STOMP V900 Three Colors Lineup</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+      <image:title>TYPHON STOMP V900 Jobsite Operations</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
+      <image:title>Happy Machinery TYPHON Fleet</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/v900-equipment-layout.png</image:loc>
+      <image:title>TYPHON STOMP V900 Equipment Layout Overview</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/v900-delivery.png</image:loc>
+      <image:title>V900 Transport and Delivery</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-red-jobsite.png</image:loc>
+      <image:title>Crimson Red V900 with Pallet Fork</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-yellow-jobsite.png</image:loc>
+      <image:title>Industrial Yellow V900 on Site</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-blue-jobsite.png</image:loc>
+      <image:title>Cobalt Blue V900 on Site</image:title>
     </image:image>
     <video:video>
       <video:thumbnail_loc>https://happymachinery.com/images/fork-red-jobsite.png</video:thumbnail_loc>
@@ -54,59 +66,334 @@
   </url>
   <url>
     <loc>https://happymachinery.com/store</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
     <image:image>
-      <image:loc>https://happymachinery.com/images/hero-v900-three-colors.png</image:loc>
+      <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
+      <image:title>Official TYPHON Machinery Catalog</image:title>
     </image:image>
   </url>
   <url>
-    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red</loc>
+    <loc>https://happymachinery.com/blog</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
     <image:image>
-      <image:loc>https://happymachinery.com/images/loader-red.png</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/fork-red.jpg</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/loader-red.jpg</image:loc>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105</loc>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/loader-yellow.png</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/fork-yellow.jpg</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/loader-yellow.jpg</image:loc>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue</loc>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/loader-blue.png</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/fork-blue.jpg</image:loc>
-    </image:image>
-    <image:image>
-      <image:loc>https://happymachinery.com/images/loader-blue.jpg</image:loc>
+      <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+      <image:title>Contractor Insights &amp; Equipment Guides</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://happymachinery.com/about</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.80</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/about-team-1.png</image:loc>
+      <image:title>Happy Machinery Team &amp; Facilities</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://happymachinery.com/contact</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.80</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
+      <image:title>Happy Machinery Direct Support</image:title>
+    </image:image>
   </url>
   <url>
-    <loc>https://happymachinery.com/blog</loc>
+    <loc>https://happymachinery.com/faq</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.70</priority>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/terms-of-service</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.50</priority>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/privacy-policy</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.50</priority>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-red.png</image:loc>
+      <image:title>Crimson Red TYPHON STOMP V900 Mini Skid Steer</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-red.jpg</image:loc>
+      <image:title>Crimson Red V900 with Pallet Fork Attachment</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-red.jpg</image:loc>
+      <image:title>Crimson Red V900 Studio View</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-yellow.png</image:loc>
+      <image:title>Industrial Yellow TYPHON STOMP V900 Skid Steer Loader</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-yellow.jpg</image:loc>
+      <image:title>Industrial Yellow V900 with Pallet Fork</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-yellow.jpg</image:loc>
+      <image:title>Industrial Yellow V900 Studio View</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-blue.png</image:loc>
+      <image:title>Cobalt Blue TYPHON STOMP V900 Skid Steer</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-blue.jpg</image:loc>
+      <image:title>Cobalt Blue V900 with Pallet Fork Attachment</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-blue.jpg</image:loc>
+      <image:title>Cobalt Blue V900 Studio View</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/product/typh-5005m-pallet-fork</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-yellow.jpg</image:loc>
+      <image:title>TYPH-5005M Pallet Fork Attachment</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/maximizing-skid-steer-efficiency-and-safety-on-residential-jobsites</loc>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+      <image:title>Maximizing Skid Steer Efficiency &amp; Safety on Residential Jobsites</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/wheel-loader-pallet-forks-vs-buckets-for-material-handling</loc>
+    <lastmod>2026-08-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-red-jobsite.png</image:loc>
+      <image:title>Wheel loader pallet forks vs buckets for material handling</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/can-a-compact-excavator-work-all-day</loc>
+    <lastmod>2026-07-25</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-blue-jobsite.png</image:loc>
+      <image:title>Can a Compact Excavator Work All Day?</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/7-essential-wheel-loader-bucket-capacity-tips-for-better-performance</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+      <image:title>7 Essential Wheel Loader Bucket Capacity Tips for Better Performance</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/signs-your-forklift-needs-immediate-maintenance</loc>
+    <lastmod>2026-08-10</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-yellow.jpg</image:loc>
+      <image:title>Signs Your Forklift Needs Immediate Maintenance</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/how-to-choose-the-right-mini-track-loader-for-your-jobsite</loc>
+    <lastmod>2026-07-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
+      <image:title>How to Choose the Right Mini Track Loader for Your Jobsite</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/stand-on-track-loaders-vs-wheeled-skid-steers</loc>
+    <lastmod>2026-07-12</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-red-jobsite.png</image:loc>
+      <image:title>Stand-On Track Loaders vs. Wheeled Skid Steers</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/daily-preventive-maintenance-checklist-for-track-loaders</loc>
+    <lastmod>2026-07-05</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-blue-jobsite.png</image:loc>
+      <image:title>Daily Preventive Maintenance Checklist for Track Loaders</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/stone-crusher-stabilizing-legs-setup</loc>
+    <lastmod>2026-10-08</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/8thOct/STONEKRUSHER-01.webp</image:loc>
+      <image:title>Stone Crusher Stabilizing Legs and Machine Support</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/road-roller-fastest-wearing-parts</loc>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/3rdOct/RoadRoller-01.webp</image:loc>
+      <image:title>Road Roller Maintenance: Top 5 Fastest Wearing Parts</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/common-dumper-machine-mistakes-prevention</loc>
+    <lastmod>2026-09-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/19thSep/DumperCommonMistakes-01.webp</image:loc>
+      <image:title>Dumper machine mistakes</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/scissor-lift-vs-forklift</loc>
+    <lastmod>2026-09-17</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/17thSep/ScissorLiftVsForkLift-01.webp</image:loc>
+      <image:title>Scissor Lift vs. Forklift: Choosing the Right Equipment for Your Jobsite</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/why-scissor-lift-level-working-surface-matters</loc>
+    <lastmod>2026-09-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/12thSep/ScissorLift-04.webp</image:loc>
+      <image:title>Why a Scissor Lift Level Working Surface is Critical for Safety</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/excavator-boom-swing-angle-guide</loc>
+    <lastmod>2026-09-10</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/10thSep/MiniExcavator-04.webp</image:loc>
+      <image:title>Excavator Boom Swing Angle &amp; House Swing Differences</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/undersized-skid-steer-engine-problems</loc>
+    <lastmod>2026-09-05</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/5thSep/SkidSteer-03.webp</image:loc>
+      <image:title>What Happens When a Skid Steer Engine Is Too Small?</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/does-mast-height-affect-forklift-engine-power</loc>
+    <lastmod>2026-08-31</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/29Aug/Forklift-01.webp</image:loc>
+      <image:title>Does Mast Height Affect Forklift Engine Power?</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/road-roller-drum-weight-performance</loc>
+    <lastmod>2026-08-27</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/27Aug/RoadRollerDrumWeight-01.webp</image:loc>
+      <image:title>Road Roller Drum Weight Performance</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/skid-steer-joystick-controls-mechanical-vs-pilot</loc>
+    <lastmod>2026-08-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/22thAug/SkidSteerControl-01.webp</image:loc>
+      <image:title>Skid Steer Joystick Controls: Mechanical vs. Pilot Comparison</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/scissor-lift-lifting-stages</loc>
+    <lastmod>2026-08-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/20thAug/ScissorLift-01.webp</image:loc>
+      <image:title>Scissor lift lifting stages</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/excavator-cooling-system-problems-solutions</loc>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Website-Team/Class5-6-7August/15-august/b11-01.webp</image:loc>
+      <image:title>Excavator Cooling System Problems and Solutions: Prevent Overheating</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://happymachinery.com/blog/how-drum-weight-affects-road-roller-performance</loc>
+    <lastmod>2026-08-31</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <image:image>
+      <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/27Aug/RoadRollerDrumWeight-01.webp</image:loc>
+      <image:title>How Drum Weight Affects Road Roller Compaction &amp; Depth</image:title>
     </image:image>
   </url>
 </urlset>
