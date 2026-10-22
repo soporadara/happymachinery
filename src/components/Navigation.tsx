@@ -68,9 +68,7 @@ export default function Navigation({
     e.preventDefault()
     if (!searchQuery.trim()) return
     setIsSearchOpen(false)
-    if (location.pathname !== '/store') {
-      navigate('/store')
-    }
+    navigate(`/store?search=${encodeURIComponent(searchQuery.trim())}`)
   }
 
   const openProduct = (productId: number) => {

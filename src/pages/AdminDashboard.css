@@ -9302,6 +9302,201 @@ html.dark .cms-kpi-card.red .cms-kpi-icon-circle {
   box-shadow: 0 6px 18px rgba(0, 102, 255, 0.45);
 }
 
+.cms-dialog-btn.danger {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  border: none;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+}
+
+.cms-dialog-btn.danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.5);
+}
+
+.cms-dialog-icon-wrap.danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.cms-dialog-icon-wrap.warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+/* Upload Dropzone Styles */
+.cms-upload-dropzone {
+  border: 2px dashed rgba(59, 130, 246, 0.35);
+  border-radius: 14px;
+  background: rgba(59, 130, 246, 0.03);
+  padding: 24px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.cms-upload-dropzone:hover,
+.cms-upload-dropzone.drag-over {
+  border-color: #0066ff;
+  background: rgba(0, 102, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.cms-upload-dropzone.has-file {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.cms-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.cms-dropzone-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 102, 255, 0.1);
+  color: #0066ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cms-dropzone-text {
+  font-size: 0.88rem;
+  color: var(--cms-text-primary);
+}
+
+.cms-dropzone-hint {
+  font-size: 0.74rem;
+  color: var(--cms-text-muted);
+}
+
+/* Warning Callout Box (Dependencies) */
+.cms-dialog-warning-callout {
+  margin-top: 14px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.warning-callout-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #d97706;
+  margin-bottom: 8px;
+}
+
+.warning-callout-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.warning-tag-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.warning-tag-pill.more {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--cms-text-muted);
+}
+
+.warning-callout-note {
+  font-size: 0.72rem;
+  color: #b45309;
+  display: block;
+}
+
+/* Action Dialog Folder Quick Picker Chips */
+.cms-action-dialog-folder-chips {
+  margin-bottom: 12px;
+}
+
+.cms-chips-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--cms-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.cms-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cms-folder-pick-chip {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--cms-bg-surface);
+  border: 1px solid var(--cms-border);
+  color: var(--cms-text-secondary);
+  transition: all 0.16s ease;
+}
+
+.cms-folder-pick-chip:hover,
+.cms-folder-pick-chip.active {
+  background: rgba(0, 102, 255, 0.12);
+  border-color: #0066ff;
+  color: #0066ff;
+}
+
+/* Upload Preview in Modal */
+.cms-upload-preview-wrap {
+  margin-top: 12px;
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--cms-border);
+  max-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #020817;
+}
+
+.cms-upload-preview-img {
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+}
+
+.cms-preview-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.9);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
 .cms-folder-header-icon {
   width: 32px;
   height: 32px;

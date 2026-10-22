@@ -1275,8 +1275,26 @@ export default function AdminDashboard() {
     title: string
     message: string
     confirmLabel?: string
+    isDanger?: boolean
+    warningDetails?: string[]
     onConfirm: () => void | Promise<void>
   } | null>(null)
+
+  // Custom Prompt / Action Dialog State (Replaces native window.prompt)
+  const [cmsActionDialog, setCmsActionDialog] = useState<{
+    isOpen: boolean
+    title: string
+    subtitle?: string
+    icon?: string
+    inputLabel: string
+    defaultValue?: string
+    placeholder?: string
+    confirmLabel?: string
+    isFolderSelect?: boolean
+    options?: string[]
+    onConfirm: (val: string) => void | Promise<void>
+  } | null>(null)
+  const [actionDialogInputValue, setActionDialogInputValue] = useState('')
 
   // Profile Edit State
   const [profileName, setProfileName] = useState('')
@@ -1361,15 +1379,27 @@ export default function AdminDashboard() {
 
   const handleRenameMedia = (item: MediaItem, e: React.MouseEvent) => {
     e.stopPropagation()
-    const newName = prompt('Enter new asset title:', item.title)
-    if (newName && newName.trim() && newName !== item.title) {
-      const updated = mediaList.map((m) =>
-        m.id === item.id ? { ...m, title: newName.trim() } : m
-      )
-      setMediaList(updated)
-      void writeSharedContent('media-library', updated)
-      showToast(`Renamed to "${newName.trim()}".`, 'success')
-    }
+    setActionDialogInputValue(item.title)
+    setCmsActionDialog({
+      isOpen: true,
+      title: 'Rename Media Asset',
+      subtitle: 'Update asset title and public description.',
+      icon: '✏️',
+      inputLabel: 'Asset Title',
+      defaultValue: item.title,
+      placeholder: 'Enter new asset title...',
+      confirmLabel: 'Save Title',
+      onConfirm: (newName) => {
+        if (newName && newName.trim() && newName.trim() !== item.title) {
+          const updated = mediaList.map((m) =>
+            m.id === item.id ? { ...m, title: newName.trim() } : m
+          )
+          setMediaList(updated)
+          void writeSharedContent('media-library', updated)
+          showToast(`Renamed to "${newName.trim()}".`, 'success')
+        }
+      }
+    })
   }
 
   const getMediaReferences = (url: string) => {
@@ -1396,15 +1426,14 @@ export default function AdminDashboard() {
   const handleDeleteSingleMedia = (item: MediaItem, e: React.MouseEvent) => {
     e.stopPropagation()
     const refs = getMediaReferences(item.url)
-    const warningText = refs.length > 0
-      ? `⚠️ WARNING: This asset is currently used in ${refs.slice(0, 3).join(', ')}${refs.length > 3 ? ` and ${refs.length - 3} more` : ''}. Deleting it will break images on those pages.\n\n`
-      : ''
 
     setConfirmDialog({
       isOpen: true,
       title: 'Move Asset to Trash Vault?',
-      message: `${warningText}Move "${item.title}" to Trash? It will be safely preserved in the Trash Vault and can be recovered back to the Media Library at any time.`,
-      confirmLabel: 'Move to Trash',
+      message: `Move "${item.title}" to Trash? It will be safely preserved in the Trash Vault and can be recovered back to the Media Library at any time.`,
+      confirmLabel: 'Move to Trash Vault',
+      isDanger: true,
+      warningDetails: refs,
       onConfirm: async () => {
         const trashRecord: TrashItem = {
           id: `media-${item.id}`,
@@ -7113,19 +7142,30 @@ export default function AdminDashboard() {
                       type="button"
                       className="cms-kiuq-tb-btn"
                       onClick={() => {
-                        const newName = prompt('Enter new folder name:')
-                        if (newName && newName.trim()) {
-                          const trimmed = newName.trim()
-                          if (mediaFolders.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
-                            showToast(`Folder "${trimmed}" already exists.`, 'warning')
-                          } else {
-                            setMediaFolders((prev) => [
-                              ...prev,
-                              { name: trimmed, isPinned: false, size: '0 KB', date: new Date().toISOString().split('T')[0] }
-                            ])
-                            showToast(`Folder "${trimmed}" created successfully!`, 'success')
+                        setActionDialogInputValue('')
+                        setCmsActionDialog({
+                          isOpen: true,
+                          title: 'Create New Media Folder',
+                          subtitle: 'Organize equipment photos, attachments, and marketing assets.',
+                          icon: '📁',
+                          inputLabel: 'Folder Name',
+                          placeholder: 'e.g. v900-field, attachments, hydraulics',
+                          confirmLabel: 'Create Folder',
+                          onConfirm: (newName) => {
+                            if (newName && newName.trim()) {
+                              const trimmed = newName.trim()
+                              if (mediaFolders.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
+                                showToast(`Folder "${trimmed}" already exists.`, 'warning')
+                              } else {
+                                setMediaFolders((prev) => [
+                                  ...prev,
+                                  { name: trimmed, isPinned: false, size: '0 KB', date: new Date().toISOString().split('T')[0] }
+                                ])
+                                showToast(`Folder "${trimmed}" created successfully!`, 'success')
+                              }
+                            }
                           }
-                        }
+                        })
                       }}
                     >
                       <span>📁</span>
@@ -7136,10 +7176,21 @@ export default function AdminDashboard() {
                       type="button"
                       className="cms-kiuq-tb-btn"
                       onClick={() => {
-                        const fileName = prompt('Enter new file name (e.g. README.txt, config.json):')
-                        if (fileName && fileName.trim()) {
-                          showToast(`File "${fileName.trim()}" created successfully!`, 'success')
-                        }
+                        setActionDialogInputValue('')
+                        setCmsActionDialog({
+                          isOpen: true,
+                          title: 'Create New File',
+                          subtitle: 'Specify a file name and format extension.',
+                          icon: '📝',
+                          inputLabel: 'File Name',
+                          placeholder: 'e.g. inventory-notes.txt, v900-spec.json',
+                          confirmLabel: 'Create File',
+                          onConfirm: (fileName) => {
+                            if (fileName && fileName.trim()) {
+                              showToast(`File "${fileName.trim()}" created successfully!`, 'success')
+                            }
+                          }
+                        })
                       }}
                     >
                       <span>📝</span>
@@ -7205,10 +7256,22 @@ export default function AdminDashboard() {
                       type="button"
                       className="cms-kiuq-tb-btn"
                       onClick={() => {
-                        const newExt = prompt('Enter new extension / type (e.g. webp, jpg, png):', 'webp')
-                        if (newExt && newExt.trim()) {
-                          showToast(`Batch type rename to .${newExt.trim()} complete.`, 'success')
-                        }
+                        setActionDialogInputValue('webp')
+                        setCmsActionDialog({
+                          isOpen: true,
+                          title: 'Batch Convert / Rename Type',
+                          subtitle: 'Specify target image format extension to apply.',
+                          icon: '🏷️',
+                          inputLabel: 'Target Format Extension',
+                          defaultValue: 'webp',
+                          placeholder: 'webp, png, jpg...',
+                          confirmLabel: 'Apply Type',
+                          onConfirm: (newExt) => {
+                            if (newExt && newExt.trim()) {
+                              showToast(`Batch type rename to .${newExt.trim()} complete.`, 'success')
+                            }
+                          }
+                        })
                       }}
                     >
                       <span style={{ color: '#d97706' }}>🏷️</span>
@@ -7453,13 +7516,28 @@ export default function AdminDashboard() {
                                     type="button"
                                     className="cms-kiuq-act-btn"
                                     onClick={() => {
-                                      const ren = prompt('Rename folder:', folder.name)
-                                      if (ren && ren.trim() && ren.trim() !== folder.name) {
-                                        setMediaFolders((prev) =>
-                                          prev.map((f) => (f.name === folder.name ? { ...f, name: ren.trim() } : f))
-                                        )
-                                        showToast(`Folder renamed to "${ren.trim()}".`, 'success')
-                                      }
+                                      setActionDialogInputValue(folder.name)
+                                      setCmsActionDialog({
+                                        isOpen: true,
+                                        title: 'Rename Folder',
+                                        subtitle: `Enter a new name for "${folder.name}". Contained assets will remain safe.`,
+                                        icon: '📁',
+                                        inputLabel: 'Folder Name',
+                                        defaultValue: folder.name,
+                                        confirmLabel: 'Rename Folder',
+                                        onConfirm: (ren) => {
+                                          if (ren && ren.trim() && ren.trim() !== folder.name) {
+                                            const trimmed = ren.trim()
+                                            setMediaFolders((prev) =>
+                                              prev.map((f) => (f.name === folder.name ? { ...f, name: trimmed } : f))
+                                            )
+                                            setMediaList((prev) =>
+                                              prev.map((m) => (m.folder === folder.name ? { ...m, folder: trimmed } : m))
+                                            )
+                                            showToast(`Folder renamed to "${trimmed}".`, 'success')
+                                          }
+                                        }
+                                      })
                                     }}
                                   >
                                     ✏️ Rename
@@ -7468,10 +7546,20 @@ export default function AdminDashboard() {
                                     type="button"
                                     className="cms-kiuq-act-btn danger"
                                     onClick={() => {
-                                      if (confirm(`Delete folder "${folder.name}"?`)) {
-                                        setMediaFolders((prev) => prev.filter((f) => f.name !== folder.name))
-                                        showToast(`Folder "${folder.name}" deleted.`, 'success')
-                                      }
+                                      setConfirmDialog({
+                                        isOpen: true,
+                                        title: 'Delete Media Folder?',
+                                        message: `Are you sure you want to delete folder "${folder.name}"? Assets inside will be moved to galleries.`,
+                                        confirmLabel: 'Delete Folder',
+                                        isDanger: true,
+                                        onConfirm: () => {
+                                          setMediaFolders((prev) => prev.filter((f) => f.name !== folder.name))
+                                          setMediaList((prev) =>
+                                            prev.map((m) => (m.folder === folder.name ? { ...m, folder: 'galleries' } : m))
+                                          )
+                                          showToast(`Folder "${folder.name}" deleted.`, 'success')
+                                        }
+                                      })
                                     }}
                                   >
                                     🗑
@@ -7574,8 +7662,24 @@ export default function AdminDashboard() {
                                   type="button"
                                   className="cms-kiuq-act-btn"
                                   onClick={() => {
-                                    const dest = prompt('Move item to folder:', 'galleries')
-                                    if (dest) handleMoveMediaFolder(item.id, dest)
+                                    const currentFolder = item.folder || 'galleries'
+                                    setActionDialogInputValue(currentFolder)
+                                    setCmsActionDialog({
+                                      isOpen: true,
+                                      title: 'Move Item to Folder',
+                                      subtitle: `Select or specify destination folder for "${item.title}".`,
+                                      icon: '📦',
+                                      inputLabel: 'Destination Folder',
+                                      defaultValue: currentFolder,
+                                      isFolderSelect: true,
+                                      options: mediaFolders.map((f) => f.name),
+                                      confirmLabel: 'Move Asset',
+                                      onConfirm: (dest) => {
+                                        if (dest && dest.trim()) {
+                                          handleMoveMediaFolder(item.id, dest.trim())
+                                        }
+                                      }
+                                    })
                                   }}
                                 >
                                   📦 Move
@@ -11910,9 +12014,11 @@ export default function AdminDashboard() {
                     value={uploadTargetFolder}
                     onChange={(e) => setUploadTargetFolder(e.target.value as any)}
                   >
-                    <option value="galleries">📁 galleries (Equipment & Jobsite Photos)</option>
-                    <option value="features">📁 features (Banners, Logos & Promos)</option>
-                    <option value="profileimg">📁 profileimg (Team, Authors & Portraits)</option>
+                    {mediaFolders.map((f) => (
+                      <option value={f.name} key={f.name}>
+                        📁 {f.name} {f.name === 'galleries' ? '(Equipment & Jobsite Photos)' : f.name === 'features' ? '(Banners & Promos)' : f.name === 'profileimg' ? '(Profiles & Team)' : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -11988,19 +12094,27 @@ export default function AdminDashboard() {
       {/* Sleek Custom Confirm Dialog */}
       {confirmDialog && (
         <div className="cms-dialog-backdrop" onClick={() => setConfirmDialog(null)}>
-          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
             <div className="cms-dialog-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
-                <div className="cms-dialog-icon-wrap warning">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
+                <div className={`cms-dialog-icon-wrap ${confirmDialog.isDanger ? 'danger' : 'warning'}`}>
+                  {confirmDialog.isDanger ? (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                  )}
                 </div>
                 <div className="cms-dialog-titles">
                   <h3>{confirmDialog.title}</h3>
-                  <p>{confirmDialog.message}</p>
+                  <p style={{ margin: 0 }}>{confirmDialog.message}</p>
                 </div>
               </div>
               <button
@@ -12013,6 +12127,28 @@ export default function AdminDashboard() {
                 &times;
               </button>
             </div>
+
+            {/* Warning Callout Box if Active References Exist */}
+            {confirmDialog.warningDetails && confirmDialog.warningDetails.length > 0 && (
+              <div className="cms-dialog-warning-callout">
+                <div className="warning-callout-header">
+                  <span className="callout-icon">⚠️</span>
+                  <span>Asset is in active use on the website:</span>
+                </div>
+                <div className="warning-callout-tags">
+                  {confirmDialog.warningDetails.slice(0, 4).map((ref, idx) => (
+                    <span key={idx} className="warning-tag-pill">{ref}</span>
+                  ))}
+                  {confirmDialog.warningDetails.length > 4 && (
+                    <span className="warning-tag-pill more">+{confirmDialog.warningDetails.length - 4} more</span>
+                  )}
+                </div>
+                <small className="warning-callout-note">
+                  Deleting will cause broken images on these pages until restored from Trash.
+                </small>
+              </div>
+            )}
+
             <div className="cms-dialog-footer" style={{ marginTop: '20px' }}>
               <button
                 type="button"
@@ -12023,15 +12159,100 @@ export default function AdminDashboard() {
               </button>
               <button
                 type="button"
-                className="cms-dialog-btn primary"
+                className={`cms-dialog-btn ${confirmDialog.isDanger ? 'danger' : 'primary'}`}
                 onClick={() => {
                   confirmDialog.onConfirm()
                   setConfirmDialog(null)
                 }}
               >
-                Confirm
+                {confirmDialog.confirmLabel || 'Confirm'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Action / Prompt Dialog (Replaces native browser prompt) */}
+      {cmsActionDialog && (
+        <div className="cms-dialog-backdrop" onClick={() => setCmsActionDialog(null)}>
+          <div className="cms-dialog-card action-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="cms-dialog-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                <div className="cms-dialog-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(30,64,175,0.25) 100%)', color: '#38bdf8', fontSize: '1.25rem' }}>
+                  {cmsActionDialog.icon || '💬'}
+                </div>
+                <div className="cms-dialog-titles">
+                  <h3>{cmsActionDialog.title}</h3>
+                  {cmsActionDialog.subtitle && <p>{cmsActionDialog.subtitle}</p>}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setCmsActionDialog(null)}
+                title="Close dialog"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                cmsActionDialog.onConfirm(actionDialogInputValue.trim())
+                setCmsActionDialog(null)
+              }}
+            >
+              <div className="cms-dialog-body">
+                <label className="cms-dialog-label">{cmsActionDialog.inputLabel}</label>
+                
+                {cmsActionDialog.isFolderSelect && cmsActionDialog.options && (
+                  <div className="cms-action-dialog-folder-chips">
+                    <span className="cms-chips-label">Quick select existing folder:</span>
+                    <div className="cms-chips-list">
+                      {cmsActionDialog.options.map((opt) => (
+                        <button
+                          type="button"
+                          key={opt}
+                          className={`cms-folder-pick-chip ${actionDialogInputValue === opt ? 'active' : ''}`}
+                          onClick={() => setActionDialogInputValue(opt)}
+                        >
+                          📁 {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder={cmsActionDialog.placeholder || 'Enter value...'}
+                  className="cms-dialog-input"
+                  value={actionDialogInputValue}
+                  onChange={(e) => setActionDialogInputValue(e.target.value)}
+                />
+              </div>
+
+              <div className="cms-dialog-footer">
+                <button
+                  type="button"
+                  className="cms-dialog-btn secondary"
+                  onClick={() => setCmsActionDialog(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="cms-dialog-btn primary"
+                  disabled={!actionDialogInputValue.trim()}
+                >
+                  {cmsActionDialog.confirmLabel || 'Confirm'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

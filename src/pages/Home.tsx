@@ -8,6 +8,13 @@ import { DEFAULT_HOME_CONTENT, HomePageContent } from '../data/homeContent'
 import { readSharedContent } from '../data/sharedContentStorage'
 import './Home.css'
 
+const extractYouTubeId = (url: string): string => {
+  if (!url) return ''
+  const regExp = /(?:youtube(?:-nocookie)?\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i
+  const match = url.match(regExp)
+  return match ? match[1] : url.replace(/[^a-zA-Z0-9_-]/g, '')
+}
+
 export default function Home() {
   const [content, setContent] = useState<HomePageContent>(DEFAULT_HOME_CONTENT)
   const [forkColor, setForkColor] = useState('red')
@@ -15,6 +22,27 @@ export default function Home() {
   const [activeSpecsCard, setActiveSpecsCard] = useState<string | null>(null)
   const [hoveredHotspot, setHoveredHotspot] = useState<string | null>(null)
   const [activeWhySpec, setActiveWhySpec] = useState(0)
+  const [activeVideoModal, setActiveVideoModal] = useState<{
+    videoId: string
+    title: string
+    tag: string
+  } | null>(null)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveVideoModal(null)
+    }
+    if (activeVideoModal) {
+      window.addEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [activeVideoModal])
 
   useEffect(() => {
     let mounted = true
@@ -773,7 +801,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* 11. YouTube video gallery */}
+      {/* 11. Bespoke Video Showcase Gallery */}
       {content.youtube.visible !== false && (
         <section className="youtube-showcase" aria-labelledby="youtube-showcase-title">
           <div className="youtube-showcase-shell">
@@ -786,26 +814,126 @@ export default function Home() {
             </div>
 
             <div className="youtube-video-grid">
-              {content.youtube.videos.map((vid, i) => (
-                <article className="youtube-video-card" key={i}>
-                  <div className="youtube-video-frame">
-                    <iframe
-                      src={vid.embedUrl.startsWith('http') ? vid.embedUrl : `https://www.youtube-nocookie.com/embed/${vid.embedUrl}`}
-                      title={vid.title}
-                      loading="lazy"
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    ></iframe>
-                  </div>
-                  <div className="youtube-video-copy">
-                    <span>{vid.tag}</span>
-                    <h3>{vid.title}</h3>
-                  </div>
-                </article>
-              ))}
+              {content.youtube.videos.map((vid, i) => {
+                const videoId = extractYouTubeId(vid.embedUrl)
+                return (
+                  <article className="youtube-video-card" key={i}>
+                    {/* Custom Bespoke Video Preview & Play Button */}
+                    <div
+                      className="custom-video-preview"
+                      onClick={() => setActiveVideoModal({ videoId, title: vid.title, tag: vid.tag })}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Play video: ${vid.title}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setActiveVideoModal({ videoId, title: vid.title, tag: vid.tag })
+                        }
+                      }}
+                    >
+                      <img
+                        src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
+                        alt={vid.title}
+                        className="custom-video-thumb"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                        }}
+                      />
+                      <div className="custom-video-overlay" aria-hidden="true"></div>
+
+                      {/* Top Glassmorphic Badge */}
+                      <div className="custom-video-top-badge">
+                        <span className="badge-pulse-indicator" aria-hidden="true"></span>
+                        <span>4K ULTRA HD</span>
+                      </div>
+
+                      {/* Bespoke Glowing Machinery Play Button */}
+                      <div className="custom-play-btn-wrap" aria-hidden="true">
+                        <div className="play-ripple-ring"></div>
+                        <div className="play-ripple-ring delay"></div>
+                        <div className="custom-play-disc">
+                          <svg className="custom-play-svg" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="7,4 20,12 7,20" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* Bottom Info Bar */}
+                      <div className="custom-video-bottom-bar">
+                        <span className="video-duration-pill">FIELD DEMO</span>
+                        <span className="video-click-prompt">Click to Play ▷</span>
+                      </div>
+                    </div>
+
+                    <div className="youtube-video-copy">
+                      <span className="custom-video-tag">{vid.tag}</span>
+                      <h3>{vid.title}</h3>
+                      <button
+                        type="button"
+                        className="custom-video-action-btn"
+                        onClick={() => setActiveVideoModal({ videoId, title: vid.title, tag: vid.tag })}
+                      >
+                        <span>Watch Walkaround Video</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           </div>
+
+          {/* Cinema Video Lightbox Modal */}
+          {activeVideoModal && (
+            <div
+              className="cinema-video-modal-backdrop"
+              onClick={() => setActiveVideoModal(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={activeVideoModal.title}
+            >
+              <div className="cinema-video-modal-shell" onClick={(e) => e.stopPropagation()}>
+                <div className="cinema-modal-header">
+                  <div className="cinema-modal-title-group">
+                    <span className="cinema-modal-tag">{activeVideoModal.tag}</span>
+                    <h3 className="cinema-modal-heading">{activeVideoModal.title}</h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="cinema-modal-close"
+                    onClick={() => setActiveVideoModal(null)}
+                    aria-label="Close video player"
+                  >
+                    &times;
+                  </button>
+                </div>
+
+                <div className="cinema-modal-player-wrap">
+                  <iframe
+                    src={`https://www.youtube-nocookie.com/embed/${activeVideoModal.videoId}?autoplay=1&rel=0&modestbranding=1&controls=1&playsinline=1`}
+                    title={activeVideoModal.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="cinema-modal-iframe"
+                  ></iframe>
+                </div>
+
+                <div className="cinema-modal-footer">
+                  <p>TYPHON STOMP V900 EPA Tier 4 Diesel Skid Steer Loader in action.</p>
+                  <Link
+                    to="/store"
+                    className="cinema-modal-cta"
+                    onClick={() => setActiveVideoModal(null)}
+                  >
+                    Browse Equipment Catalog →
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

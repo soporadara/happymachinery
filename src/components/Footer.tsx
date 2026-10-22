@@ -56,13 +56,35 @@ export default function Footer() {
         {/* Navigation Links Columns */}
         <div className="footer-columns-group">
           {/* Column 1: Products */}
-          <div className="footer-column">
+          <div className="footer-column footer-products-col">
             <h4>PRODUCTS</h4>
-            <ul>
-              <li><Link to="/store">Mini Excavators</Link></li>
-              <li><Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red">Mini Skid Steers</Link></li>
-              <li><Link to="/store">Attachments</Link></li>
-              <li><Link to="/store">Spare Parts</Link></li>
+            <ul className="footer-category-list">
+              <li><Link to="/store?search=Mini+Excavators">Mini Excavators</Link></li>
+              <li><Link to="/store?search=Mini+Skid+Steers">Mini Skid Steers</Link></li>
+              <li><Link to="/store?search=Attachments">Attachments</Link></li>
+              <li><Link to="/store?search=Spare+Parts">Spare Parts</Link></li>
+            </ul>
+
+            <div className="footer-v900-models-header">V900 COLOR EDITIONS</div>
+            <ul className="footer-v900-list">
+              <li>
+                <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105" className="footer-v900-link" title="TYPHON STOMP V900 - Industrial Yellow">
+                  <span className="v900-color-swatch yellow" aria-hidden="true"></span>
+                  <span>V900 Skid Steer – Yellow</span>
+                </Link>
+              </li>
+              <li>
+                <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red" className="footer-v900-link" title="TYPHON STOMP V900 - Crimson Red">
+                  <span className="v900-color-swatch red" aria-hidden="true"></span>
+                  <span>V900 Skid Steer – Red</span>
+                </Link>
+              </li>
+              <li>
+                <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue" className="footer-v900-link" title="TYPHON STOMP V900 - Cobalt Blue">
+                  <span className="v900-color-swatch blue" aria-hidden="true"></span>
+                  <span>V900 Skid Steer – Blue</span>
+                </Link>
+              </li>
             </ul>
           </div>
 

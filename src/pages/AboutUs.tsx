@@ -1,15 +1,33 @@
+import PageBanner from '../components/PageBanner'
 import './AboutUs.css'
 
 export default function AboutUs() {
   return (
     <div className="page about-page">
-      <div className="page-hero">
-        <p className="eyebrow">About Happy Machinery</p>
-        <h1>Experts in Mini Excavators, Skid Steers, and Heavy Machinery Solutions.</h1>
-        <p>
-          We provide construction professionals with state-of-the-art, reliable, high-performance equipment that increases productivity and fosters success on every job site.
-        </p>
-      </div>
+      <PageBanner
+        badgeText="ABOUT HAPPY MACHINERY"
+        eyebrow="COMMERCIAL HEAVY MACHINERY SPECIALISTS"
+        title="Experts in Mini Excavators, Skid Steers & Heavy Equipment"
+        titleHighlight="Engineered for Reliability"
+        description="We provide construction contractors, arborists, and landscapers with high-performance, compact machinery engineered for durability, agility in tight spaces, and maximum uptime."
+        features={[
+          { icon: '🇺🇸', text: 'USA Nationwide Warehousing' },
+          { icon: '🛡️', text: '1-Year Comprehensive Warranty' },
+          { icon: '🚜', text: '35.9" Tight-Access Agility' },
+          { icon: '🔧', text: 'Full OEM Spare Parts Support' }
+        ]}
+        primaryBtn={{
+          text: 'Explore Equipment Catalog',
+          link: '/store'
+        }}
+        secondaryBtn={{
+          text: 'Contact Our Specialists',
+          link: '/contact'
+        }}
+        showColorOptions={true}
+        imageSrc="/images/v900-promo.webp"
+        imageAlt="Happy Machinery TYPHON Fleet in Industrial Yellow, Crimson Red, and Cobalt Blue"
+      />
 
       <section className="split-section">
         <div className="split-content">

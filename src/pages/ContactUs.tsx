@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { appendSharedContent } from '../data/sharedContentStorage'
+import PageBanner from '../components/PageBanner'
 import './ContactUs.css'
 
 export default function ContactUs() {
@@ -57,11 +58,33 @@ export default function ContactUs() {
 
   return (
     <div className="page contact-page">
-      <div className="page-hero">
-        <p className="eyebrow">Contact Sales & Service</p>
-        <h1>Let's Discuss Your Fleet Needs</h1>
-        <p>Inquire about mini skid steers, track loaders, accessories, bulk pricing, or schedule local technical support.</p>
-      </div>
+      <PageBanner
+        badgeText="DIRECT SALES & TECHNICAL SERVICE"
+        eyebrow="COMMERCIAL HEAVY MACHINERY CONSULTATION"
+        title="Let's Discuss Your Fleet Needs"
+        titleHighlight="Fast Quotes & Support"
+        description="Inquire about mini skid steers, track loaders, accessories, bulk pricing, or schedule local technical support and nationwide freight delivery."
+        features={[
+          { icon: '📞', text: 'Toll-Free Direct Phone Support' },
+          { icon: '🚚', text: 'Freight & Liftgate Delivery Quotes' },
+          { icon: '📄', text: 'Financing & Invoice Support' },
+          { icon: '⏱️', text: 'Prompt Response Within 24 Hours' }
+        ]}
+        primaryBtn={{
+          text: '📞 Call Toll-Free: (888) 555-0199',
+          link: 'tel:+18885550199'
+        }}
+        secondaryBtn={{
+          text: 'Fill Out Inquiry Form ↓',
+          onClick: () => {
+            const form = document.querySelector('.contact-split')
+            if (form) form.scrollIntoView({ behavior: 'smooth' })
+          }
+        }}
+        showColorOptions={true}
+        imageSrc="/images/v900-promo.webp"
+        imageAlt="Happy Machinery TYPHON V900 Mini Skid Steers in Yellow, Red, and Blue"
+      />
 
       <div className="contact-split">
         <div className="contact-info-panel">

@@ -238,6 +238,50 @@ a.footer-contact-value:hover {
   transform: translateX(4px);
 }
 
+.footer-v900-models-header {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #7dd3fc;
+  text-transform: uppercase;
+  margin: 18px 0 10px 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footer-v900-link {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.v900-color-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.v900-color-swatch.yellow {
+  background-color: #f59e0b;
+  color: #f59e0b;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.v900-color-swatch.red {
+  background-color: #ef4444;
+  color: #ef4444;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.v900-color-swatch.blue {
+  background-color: #0284c7;
+  color: #0284c7;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
 /* Newsletter & Trust Badges Column */
 .footer-newsletter-col h4 {
   font-size: 0.92rem;

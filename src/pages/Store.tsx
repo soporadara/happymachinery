@@ -1,4 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import PageBanner from '../components/PageBanner'
 import type { Product } from '../components/CartDrawer'
 
 interface StoreProps {
@@ -7,6 +9,13 @@ interface StoreProps {
 }
 
 export default function Store({ searchQuery }: StoreProps) {
+  const [searchParams] = useSearchParams()
+  const searchParamValue = searchParams.get('search') || searchParams.get('q') || searchParams.get('category') || ''
+  
+  const effectiveSearch = useMemo(() => {
+    return (searchParamValue || searchQuery || '').trim()
+  }, [searchParamValue, searchQuery])
+
   useEffect(() => {
     const keepProductUrlClean = () => {
       const productHash = window.location.hash.match(/^#!\/(.+)\/p\/(\d+)$/)
@@ -44,6 +53,8 @@ export default function Store({ searchQuery }: StoreProps) {
 
     if (productId) {
       args.push(`defaultProductId=${productId}`);
+    } else if (effectiveSearch) {
+      args.push(`defaultSearchKeyword=${effectiveSearch}`);
     }
 
     const initScript = {
@@ -57,10 +68,14 @@ export default function Store({ searchQuery }: StoreProps) {
     let pollingTimer: number | null = null;
 
     const triggerRedirectFallback = () => {
+      const ecwid = (window as any).Ecwid;
       if (productId) {
-        const ecwid = (window as any).Ecwid;
         if (ecwid && typeof ecwid.openPage === 'function') {
           ecwid.openPage('product', { id: Number(productId) });
+        }
+      } else if (effectiveSearch) {
+        if (ecwid && typeof ecwid.openPage === 'function') {
+          ecwid.openPage('search', { keyword: effectiveSearch });
         }
       }
     };
@@ -144,7 +159,7 @@ export default function Store({ searchQuery }: StoreProps) {
   }, []);
 
   useEffect(() => {
-    const keyword = searchQuery.trim()
+    const keyword = effectiveSearch
     if (!keyword) return
 
     let attempts = 0
@@ -167,15 +182,37 @@ export default function Store({ searchQuery }: StoreProps) {
     }, 250)
 
     return () => window.clearInterval(searchTimer)
-  }, [searchQuery])
+  }, [effectiveSearch])
 
   return (
     <div className="page store-page">
-      <div className="page-hero">
-        <p className="eyebrow">Equipment Catalog</p>
-        <h1>Skid steers and worksite equipment.</h1>
-        <p>Explore TYPHON machinery, attachments, and jobsite-ready equipment selected for dependable daily work.</p>
-      </div>
+      <PageBanner
+        badgeText="OFFICIAL TYPHON CATALOG"
+        eyebrow="EQUIPMENT & ATTACHMENT INVENTORY"
+        title="Skid Steers & Heavy Equipment"
+        titleHighlight="Ready for Dispatch"
+        description="Explore genuine TYPHON machinery, Kubota-powered track loaders, mini excavators, hydraulic attachments, and OEM spare parts selected for dependable daily performance."
+        features={[
+          { icon: '⚡', text: '25 HP Kubota EPA Diesel' },
+          { icon: '⚖️', text: '1,102 lb (500 kg) Max Load' },
+          { icon: '🛡️', text: '1-Year Major Parts Warranty' },
+          { icon: '🚚', text: 'Fast Nationwide USA Delivery' }
+        ]}
+        primaryBtn={{
+          text: 'Browse Equipment Below ↓',
+          onClick: () => {
+            const el = document.getElementById('my-store-80100025')
+            if (el) el.scrollIntoView({ behavior: 'smooth' })
+          }
+        }}
+        secondaryBtn={{
+          text: '📞 Call Toll-Free: +1 (888) 555-0199',
+          link: 'tel:+18885550199'
+        }}
+        showColorOptions={true}
+        imageSrc="/images/v900-promo.webp"
+        imageAlt="TYPHON V900 Skid Steer Loader in Industrial Yellow, Crimson Red, and Cobalt Blue"
+      />
 
       {/* Ecwid Store Integration Element */}
       <div id="my-store-80100025" className="ecwid-store-container"></div>
