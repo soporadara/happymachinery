@@ -51,7 +51,7 @@ const PRODUCT_META_LABELS: Record<ProductMetaSection, { title: string; singular:
 const mergeContentById = <T extends { id: string | number }>(...collections: (T[] | undefined)[]) => {
   const merged = new Map<string | number, T>()
   collections.flatMap((collection) => collection ?? []).forEach((item) => {
-    if (!merged.has(item.id)) merged.set(item.id, item)
+    merged.set(item.id, item)
   })
   return Array.from(merged.values())
 }
@@ -210,7 +210,7 @@ export default function AdminDashboard() {
       try {
         const sharedProducts = await readSharedContent<AdminProduct[]>('products')
         if (cancelled) return
-        if (sharedProducts?.length) {
+        if (sharedProducts !== undefined) {
           setProducts(sharedProducts)
           localStorage.setItem('happy-machinery-products', JSON.stringify(sharedProducts))
         } else {
@@ -470,11 +470,20 @@ export default function AdminDashboard() {
       alert('Please add a product name, SKU, image, and valid price.')
       return
     }
+    if (salePrice !== undefined && (!Number.isFinite(salePrice) || salePrice <= 0 || salePrice >= price)) {
+      alert('Sale price must be greater than $0 and lower than the regular price.')
+      return
+    }
+    const normalizedSku = productSku.trim().toUpperCase()
+    if (products.some((product) => product.sku.trim().toUpperCase() === normalizedSku && product.id !== editingProductId)) {
+      alert('This SKU is already assigned to another product. Please use a unique SKU.')
+      return
+    }
 
     const savedProduct: AdminProduct = {
       id: editingProductId ?? Date.now(),
       name: productName.trim(),
-      sku: productSku.trim().toUpperCase(),
+      sku: normalizedSku,
       category: productCategory,
       description: productDescription.trim(),
       shortDescription: productShortDescription.trim(),
