@@ -168,7 +168,13 @@ export default function Store({ searchQuery }: StoreProps) {
     const scrollToStore = () => {
       const storeEl = document.getElementById('my-store-80100025')
       if (storeEl) {
-        storeEl.scrollIntoView({ behavior: 'smooth' })
+        const headerOffset = 90
+        const elementPosition = storeEl.getBoundingClientRect().top
+        const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth'
+        })
       }
     }
 
@@ -181,7 +187,9 @@ export default function Store({ searchQuery }: StoreProps) {
         } catch (e) {
           console.warn('Ecwid openPage search error:', e)
         }
-        scrollToStore()
+        setTimeout(scrollToStore, 80)
+        setTimeout(scrollToStore, 350)
+        setTimeout(scrollToStore, 800)
         return true
       }
       return false

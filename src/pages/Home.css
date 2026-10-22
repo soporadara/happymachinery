@@ -1254,6 +1254,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 32px;
+  align-items: start;
 }
 
 .v900-card {
@@ -1263,9 +1264,11 @@
   overflow: hidden;
   backdrop-filter: blur(12px);
   box-shadow: 0 12px 40px rgba(92, 164, 245, 0.04);
-  transition: all 280ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 280ms cubic-bezier(0.16, 1, 0.3, 1), border-color 280ms ease;
   display: flex;
   flex-direction: column;
+  height: fit-content;
+  align-self: start;
 }
 
 .v900-card:hover {
@@ -1373,7 +1376,6 @@
   padding: 28px;
   display: flex;
   flex-direction: column;
-  flex: 1;
 }
 
 .v900-content h3 {
@@ -1402,8 +1404,8 @@
   line-height: 1.55;
   color: #52708a;
   margin-top: 0;
-  margin-bottom: 20px;
-  flex: 1;
+  margin-bottom: 16px;
+  min-height: 48px;
 }
 
 .v900-footer {

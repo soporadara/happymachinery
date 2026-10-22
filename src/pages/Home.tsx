@@ -19,7 +19,11 @@ export default function Home() {
   const [content, setContent] = useState<HomePageContent>(DEFAULT_HOME_CONTENT)
   const [forkColor, setForkColor] = useState('red')
   const [activePerformance, setActivePerformance] = useState(0)
-  const [activeSpecsCard, setActiveSpecsCard] = useState<string | null>(null)
+  const [openSpecsCards, setOpenSpecsCards] = useState<Record<string, boolean>>({
+    red: false,
+    yellow: false,
+    blue: false
+  })
   const [hoveredHotspot, setHoveredHotspot] = useState<string | null>(null)
   const [activeWhySpec, setActiveWhySpec] = useState(0)
   const [activeVideoModal, setActiveVideoModal] = useState<{
@@ -204,11 +208,10 @@ export default function Home() {
   }
 
   const toggleSpecs = (cardType: string) => {
-    if (activeSpecsCard === cardType) {
-      setActiveSpecsCard(null)
-    } else {
-      setActiveSpecsCard(cardType)
-    }
+    setOpenSpecsCards((prev) => ({
+      ...prev,
+      [cardType]: !prev[cardType]
+    }))
   }
 
   const currentWhySpecs = (content.why.specs && content.why.specs.length > 0) ? content.why.specs : defaultWhySpecs
@@ -337,7 +340,7 @@ export default function Home() {
 
           <div className="v900-grid">
             {/* Card 1: Red */}
-            <article className={`v900-card red-theme${activeSpecsCard === 'red' ? ' specs-expanded' : ''}`}>
+            <article className={`v900-card red-theme${openSpecsCards.red ? ' specs-expanded' : ''}`}>
               <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red" className="v900-img-container">
                 <img className="v900-product-image" src="/images/loader-red.png" alt="Crimson Red TYPHON STOMP V900" title="Crimson Red TYPHON STOMP V900" />
                 <img className="v900-attachment-image" src="/images/fork-red.jpg" alt="Crimson Red TYPHON STOMP V900 with fork" title="Crimson Red TYPHON STOMP V900 with pallet fork" />
@@ -353,7 +356,7 @@ export default function Home() {
                 </p>
                 
                 <button className="btn-toggle-specs" onClick={() => toggleSpecs('red')}>
-                  {activeSpecsCard === 'red' ? 'Hide Specifications ▲' : 'Show Technical Specs ▼'}
+                  {openSpecsCards.red ? 'Hide Specifications ▲' : 'Show Technical Specs ▼'}
                 </button>
 
                 <div className="specs-slide-panel">
@@ -377,7 +380,7 @@ export default function Home() {
             </article>
 
             {/* Card 2: Yellow */}
-            <article className={`v900-card yellow-theme${activeSpecsCard === 'yellow' ? ' specs-expanded' : ''}`}>
+            <article className={`v900-card yellow-theme${openSpecsCards.yellow ? ' specs-expanded' : ''}`}>
               <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105" className="v900-img-container">
                 <img className="v900-product-image" src="/images/loader-yellow.png" alt="Industrial Yellow TYPHON STOMP V900" title="Industrial Yellow TYPHON STOMP V900" />
                 <img className="v900-attachment-image" src="/images/fork-yellow.jpg" alt="Industrial Yellow TYPHON STOMP V900 with fork" title="Industrial Yellow TYPHON STOMP V900 with pallet fork" />
@@ -393,7 +396,7 @@ export default function Home() {
                 </p>
                 
                 <button className="btn-toggle-specs" onClick={() => toggleSpecs('yellow')}>
-                  {activeSpecsCard === 'yellow' ? 'Hide Specifications ▲' : 'Show Technical Specs ▼'}
+                  {openSpecsCards.yellow ? 'Hide Specifications ▲' : 'Show Technical Specs ▼'}
                 </button>
 
                 <div className="specs-slide-panel">
@@ -417,7 +420,7 @@ export default function Home() {
             </article>
 
             {/* Card 3: Blue */}
-            <article className={`v900-card blue-theme${activeSpecsCard === 'blue' ? ' specs-expanded' : ''}`}>
+            <article className={`v900-card blue-theme${openSpecsCards.blue ? ' specs-expanded' : ''}`}>
               <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue" className="v900-img-container">
                 <img className="v900-product-image" src="/images/loader-blue.png" alt="Cobalt Blue TYPHON STOMP V900" title="Cobalt Blue TYPHON STOMP V900" />
                 <img className="v900-attachment-image" src="/images/fork-blue.jpg" alt="Cobalt Blue TYPHON STOMP V900 with fork" title="Cobalt Blue TYPHON STOMP V900 with pallet fork" />
@@ -433,7 +436,7 @@ export default function Home() {
                 </p>
                 
                 <button className="btn-toggle-specs" onClick={() => toggleSpecs('blue')}>
-                  {activeSpecsCard === 'blue' ? 'Hide Specifications ▲' : 'Show Technical Specs ▼'}
+                  {openSpecsCards.blue ? 'Hide Specifications ▲' : 'Show Technical Specs ▼'}
                 </button>
 
                 <div className="specs-slide-panel">

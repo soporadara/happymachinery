@@ -1,12 +1,18 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useSiteBranding } from '../data/siteBranding'
 import './Footer.css'
 
 export default function Footer() {
   const branding = useSiteBranding()
   const currentYear = new Date().getFullYear()
+  const navigate = useNavigate()
 
-  const handleCategoryClick = (keyword: string) => {
+  const handleCategoryClick = (e: React.MouseEvent, keyword: string) => {
+    e.preventDefault()
+    
+    navigate(`/store?search=${encodeURIComponent(keyword)}`)
+    window.location.hash = '!/~/search/keyword=' + encodeURIComponent(keyword)
+
     const ecwid = (window as any).Ecwid
     if (typeof ecwid?.openPage === 'function') {
       try {
@@ -15,12 +21,23 @@ export default function Footer() {
         console.warn('Ecwid openPage error:', err)
       }
     }
-    window.location.hash = '!/~/search/keyword=' + encodeURIComponent(keyword)
 
-    const storeEl = document.getElementById('my-store-80100025')
-    if (storeEl) {
-      storeEl.scrollIntoView({ behavior: 'smooth' })
+    const scrollToStore = () => {
+      const storeEl = document.getElementById('my-store-80100025')
+      if (storeEl) {
+        const headerOffset = 90
+        const elementPosition = storeEl.getBoundingClientRect().top
+        const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth'
+        })
+      }
     }
+
+    setTimeout(scrollToStore, 80)
+    setTimeout(scrollToStore, 400)
+    setTimeout(scrollToStore, 900)
   }
 
   return (
@@ -79,7 +96,7 @@ export default function Footer() {
               <li>
                 <Link
                   to="/store?search=Mini+Excavators"
-                  onClick={() => handleCategoryClick('Mini Excavators')}
+                  onClick={(e) => handleCategoryClick(e, 'Mini Excavators')}
                 >
                   Mini Excavators
                 </Link>
@@ -87,7 +104,7 @@ export default function Footer() {
               <li>
                 <Link
                   to="/store?search=Mini+Skid+Steers"
-                  onClick={() => handleCategoryClick('Mini Skid Steers')}
+                  onClick={(e) => handleCategoryClick(e, 'Mini Skid Steers')}
                 >
                   Mini Skid Steers
                 </Link>
@@ -95,7 +112,7 @@ export default function Footer() {
               <li>
                 <Link
                   to="/store?search=Attachments"
-                  onClick={() => handleCategoryClick('Attachments')}
+                  onClick={(e) => handleCategoryClick(e, 'Attachments')}
                 >
                   Attachments
                 </Link>
@@ -103,7 +120,7 @@ export default function Footer() {
               <li>
                 <Link
                   to="/store?search=Spare+Parts"
-                  onClick={() => handleCategoryClick('Spare Parts')}
+                  onClick={(e) => handleCategoryClick(e, 'Spare Parts')}
                 >
                   Spare Parts
                 </Link>
@@ -112,7 +129,6 @@ export default function Footer() {
 
             <div className="footer-v900-models-header">
               <span>V900 COLOR EDITIONS</span>
-              <span className="footer-v900-badge">Front Page</span>
             </div>
             <ul className="footer-v900-list">
               <li>

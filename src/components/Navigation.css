@@ -170,28 +170,42 @@
 /* Header search bar */
 .header-search {
   position: relative;
-  max-width: 200px;
+  width: 175px;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-search:focus-within,
+.header-search.is-focused {
+  width: 320px;
 }
 
 .header-search input {
   padding: 8px 16px 8px 40px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
   font-size: 0.88rem;
   outline: none;
-  transition: all 180ms ease;
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   width: 100%;
 }
 
-.header-search input:focus {
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.2);
+.header-search:focus-within input,
+.header-search.is-focused input {
+  border-color: rgba(56, 189, 248, 0.65);
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
 }
 
 .header-search input::placeholder {
   color: rgba(255, 255, 255, 0.6);
+  transition: color 0.25s ease;
+}
+
+.header-search:focus-within input::placeholder,
+.header-search.is-focused input::placeholder {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .header-search .search-submit {
@@ -600,16 +614,18 @@
 
   .header-search {
     min-width: 0;
-    max-width: 180px;
+    width: 155px;
+    max-width: none;
+  }
+
+  .header-search:focus-within,
+  .header-search.is-focused {
+    width: min(280px, calc(100vw - 160px));
   }
 
   .header-search input {
     max-width: 100%;
     width: 100%;
-  }
-
-  .header-search input:focus {
-    max-width: 100%;
   }
 
   .search-results-panel {
@@ -647,21 +663,24 @@
   }
 
   .header-search {
+    width: 130px;
     max-width: none;
+  }
+
+  .header-search:focus-within,
+  .header-search.is-focused {
+    width: min(200px, calc(100vw - 120px));
   }
 
   .header-search input {
     height: 40px;
     padding-right: 10px;
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .header-search input::placeholder {
-    font-size: 0;
-  }
-
-  .header-search input::placeholder {
-    color: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.78rem;
   }
 
   .cart-toggle,

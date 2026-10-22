@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { getV900ProductPath } from '../data/v900Urls'
 import { useSiteBranding } from '../data/siteBranding'
@@ -24,7 +24,9 @@ export default function Navigation({
   const branding = useSiteBranding()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
   const links = [
@@ -79,6 +81,7 @@ export default function Navigation({
   useEffect(() => {
     setIsMenuOpen(false)
     setIsSearchOpen(false)
+    setIsSearchFocused(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -127,27 +130,52 @@ export default function Navigation({
 
         <div className="nav-actions">
           <form
-            className="header-search"
+            className={`header-search${isSearchFocused ? ' is-focused' : ''}`}
             role="search"
             onSubmit={handleSearchSubmit}
-            onFocus={() => normalizedQuery && setIsSearchOpen(true)}
+            onFocus={() => {
+              setIsSearchFocused(true)
+              if (normalizedQuery) setIsSearchOpen(true)
+            }}
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setIsSearchFocused(false)
                 setIsSearchOpen(false)
               }
             }}
-            onKeyDown={(event) => event.key === 'Escape' && setIsSearchOpen(false)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setIsSearchFocused(false)
+                setIsSearchOpen(false)
+                searchInputRef.current?.blur()
+              }
+            }}
           >
-            <button className="search-submit" type="submit" aria-label="Search products" disabled={!searchQuery.trim()}>
+            <button
+              className="search-submit"
+              type="submit"
+              aria-label="Search products"
+              onClick={(e) => {
+                if (!searchQuery.trim()) {
+                  e.preventDefault()
+                  searchInputRef.current?.focus()
+                }
+              }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
             </button>
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search products..."
               value={searchQuery}
               onChange={(e) => {
                 onSearchChange(e.target.value)
                 setIsSearchOpen(Boolean(e.target.value.trim()))
+              }}
+              onFocus={() => {
+                setIsSearchFocused(true)
+                if (normalizedQuery) setIsSearchOpen(true)
               }}
               aria-label="Search items"
               aria-expanded={isSearchOpen && Boolean(normalizedQuery)}
