@@ -1880,9 +1880,6 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   Reset
                 </button>
 
-                {/* Two-finger Gesture Hint */}
-                <span className="lb-two-finger-hint">✌️ Two fingers to zoom & move</span>
-
                 {/* Close Button */}
                 <button
                   type="button"
