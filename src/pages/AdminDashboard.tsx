@@ -1639,8 +1639,29 @@ export default function AdminDashboard() {
       if (fetchedTrash && Array.isArray(fetchedTrash)) {
         setTrashItems(fetchedTrash)
       }
-      if (fetchedInquiries && Array.isArray(fetchedInquiries)) {
-        setInquiriesList(fetchedInquiries)
+      // Merge server-persisted inquiries with local storage cache
+      const serverInquiries = (fetchedInquiries && Array.isArray(fetchedInquiries)) ? fetchedInquiries : []
+      let localInquiries: Inquiry[] = []
+      try {
+        const rawLocal = localStorage.getItem('happy-machinery-inquiries')
+        localInquiries = rawLocal ? JSON.parse(rawLocal) : []
+      } catch {}
+
+      const inquiryMap = new Map<number, Inquiry>()
+      serverInquiries.forEach((item) => inquiryMap.set(item.id, item))
+      localInquiries.forEach((item) => {
+        if (!inquiryMap.has(item.id)) {
+          inquiryMap.set(item.id, item)
+        }
+      })
+      const mergedInquiries = Array.from(inquiryMap.values()).sort((a, b) => b.id - a.id)
+      setInquiriesList(mergedInquiries)
+      try {
+        localStorage.setItem('happy-machinery-inquiries', JSON.stringify(mergedInquiries))
+      } catch {}
+
+      if (mergedInquiries.length > serverInquiries.length) {
+        void writeSharedContent('inquiries', mergedInquiries).catch(() => {})
       }
       if (fetchedOrders && Array.isArray(fetchedOrders)) {
         setOrdersList(fetchedOrders)
@@ -1681,6 +1702,35 @@ export default function AdminDashboard() {
       void loadAllData()
     }
   }, [currentUser])
+
+  // Real-time synchronization for customer inquiries
+  useEffect(() => {
+    const handleInquirySync = () => {
+      void (async () => {
+        try {
+          const fetched = await readSharedContent<Inquiry[]>('inquiries')
+          const srv = (fetched && Array.isArray(fetched)) ? fetched : []
+          let loc: Inquiry[] = []
+          try {
+            const raw = localStorage.getItem('happy-machinery-inquiries')
+            loc = raw ? JSON.parse(raw) : []
+          } catch {}
+          const map = new Map<number, Inquiry>()
+          srv.forEach((i) => map.set(i.id, i))
+          loc.forEach((i) => { if (!map.has(i.id)) map.set(i.id, i) })
+          const merged = Array.from(map.values()).sort((a, b) => b.id - a.id)
+          setInquiriesList(merged)
+        } catch {}
+      })()
+    }
+
+    window.addEventListener('inquiry-submitted', handleInquirySync)
+    window.addEventListener('storage', handleInquirySync)
+    return () => {
+      window.removeEventListener('inquiry-submitted', handleInquirySync)
+      window.removeEventListener('storage', handleInquirySync)
+    }
+  }, [])
 
   // Initialize Profile form on open
   useEffect(() => {
@@ -2910,6 +2960,7 @@ export default function AdminDashboard() {
   const handleUpdateInquiryStatus = async (id: number, status: Inquiry['status']) => {
     const updated = inquiriesList.map((item) => item.id === id ? { ...item, status } : item)
     setInquiriesList(updated)
+    try { localStorage.setItem('happy-machinery-inquiries', JSON.stringify(updated)) } catch {}
     await writeSharedContent('inquiries', updated)
     showToast(`Inquiry status updated to ${status}.`, 'success')
   }
@@ -2917,6 +2968,7 @@ export default function AdminDashboard() {
   const handleDeleteInquiry = async (id: number) => {
     const updated = inquiriesList.filter((item) => item.id !== id)
     setInquiriesList(updated)
+    try { localStorage.setItem('happy-machinery-inquiries', JSON.stringify(updated)) } catch {}
     await writeSharedContent('inquiries', updated)
     showToast('Inquiry removed.', 'success')
   }
@@ -8512,6 +8564,34 @@ export default function AdminDashboard() {
                   <h1 className="cms-catalog-h1">Contractor Quotes & Inquiries</h1>
                   <p className="cms-catalog-subtext">Manage incoming machine requests, customer quote tickets, and fleet purchasing inquiries.</p>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="cms-btn-secondary"
+                    onClick={async () => {
+                      showToast('Checking for new inquiries...')
+                      try {
+                        const fetched = await readSharedContent<Inquiry[]>('inquiries')
+                        const srv = (fetched && Array.isArray(fetched)) ? fetched : []
+                        let loc: Inquiry[] = []
+                        try {
+                          const raw = localStorage.getItem('happy-machinery-inquiries')
+                          loc = raw ? JSON.parse(raw) : []
+                        } catch {}
+                        const map = new Map<number, Inquiry>()
+                        srv.forEach((i) => map.set(i.id, i))
+                        loc.forEach((i) => { if (!map.has(i.id)) map.set(i.id, i) })
+                        const merged = Array.from(map.values()).sort((a, b) => b.id - a.id)
+                        setInquiriesList(merged)
+                        showToast(`Loaded ${merged.length} inquiries.`, 'success')
+                      } catch {
+                        showToast('Could not refresh inquiries.', 'error')
+                      }
+                    }}
+                  >
+                    🔄 Refresh Inquiries
+                  </button>
+                </div>
               </div>
 
               {/* 4 Inquiries Metric Cards */}
@@ -8603,7 +8683,7 @@ export default function AdminDashboard() {
                       <div className="cms-inquiry-header-row">
                         <div className="cms-inquiry-author-info">
                           <strong>{inq.name}</strong>
-                          <span className="cms-inquiry-company">{inq.company}</span>
+                          {inq.company && <span className="cms-inquiry-company">{inq.company}</span>}
                         </div>
                         <span className="cms-inquiry-badge">{inq.productInterest || 'General Inquiry'}</span>
                       </div>
@@ -8614,7 +8694,7 @@ export default function AdminDashboard() {
 
                       <div className="cms-inquiry-contact-strip">
                         <span>📧 {inq.email}</span>
-                        <span>📞 {inq.phone}</span>
+                        {inq.phone && <span>📞 {inq.phone}</span>}
                         <span>📅 {inq.date}</span>
                       </div>
 

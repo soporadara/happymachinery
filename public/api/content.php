@@ -388,13 +388,15 @@ if (!is_array($payload) || !array_key_exists('value', $payload)) {
 if ($isPublicAppend) {
     $val = $payload['value'];
     if ($key === 'inquiries' && is_array($val)) {
+        $val['id'] = isset($val['id']) && is_numeric($val['id']) ? (int)$val['id'] : (int)(microtime(true) * 1000);
         $val['name'] = htmlspecialchars(trim((string)($val['name'] ?? '')), ENT_QUOTES, 'UTF-8');
         $val['email'] = filter_var(trim((string)($val['email'] ?? '')), FILTER_SANITIZE_EMAIL);
         $val['message'] = htmlspecialchars(trim((string)($val['message'] ?? '')), ENT_QUOTES, 'UTF-8');
         $val['company'] = htmlspecialchars(trim((string)($val['company'] ?? '')), ENT_QUOTES, 'UTF-8');
         $val['phone'] = htmlspecialchars(trim((string)($val['phone'] ?? '')), ENT_QUOTES, 'UTF-8');
+        $val['productInterest'] = htmlspecialchars(trim((string)($val['productInterest'] ?? 'Mini Excavators')), ENT_QUOTES, 'UTF-8');
         $val['ip'] = $clientIp;
-        $val['date'] = date('Y-m-d H:i:s');
+        $val['date'] = !empty($val['date']) ? htmlspecialchars(trim((string)$val['date']), ENT_QUOTES, 'UTF-8') : date('Y-m-d');
         $val['status'] = 'New';
         $payload['value'] = $val;
     } elseif ($key === 'comments' && is_array($val)) {

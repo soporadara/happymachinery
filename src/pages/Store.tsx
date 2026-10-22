@@ -222,8 +222,8 @@ export default function Store({ searchQuery }: StoreProps) {
           }
         }}
         secondaryBtn={{
-          text: '📞 Call Toll-Free: +1 (888) 555-0199',
-          link: 'tel:+18885550199'
+          text: '📞 Call US Sales: +1 (213) 214-2203',
+          link: 'tel:+12132142203'
         }}
         showColorOptions={true}
         imageSrc="/images/v900-promo.webp"

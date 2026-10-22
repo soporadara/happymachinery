@@ -20,7 +20,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'Happy Machinery',
   tagline: 'Compact Heavy Equipment & Attachments',
   contactEmail: 'support@typhonmachinery.com',
-  phone: '+1 (888) 555-0199',
+  phone: '+1 (213) 214-2203',
   address: '2522 S Malt Ave., Commerce, CA 90040, United States',
   businessHours: 'Monday – Friday: 8:00 AM – 6:00 PM CST',
   logo: '/images/header-logo.webp',

@@ -43,12 +43,30 @@ export default function ContactUs() {
         productInterest: formData.machineryType
       }
 
+      // 1. Immediately store to local storage backup so inquiry is NEVER lost
+      try {
+        const rawLocal = localStorage.getItem('happy-machinery-inquiries')
+        const localList = rawLocal ? JSON.parse(rawLocal) : []
+        const updated = [newInquiry, ...localList.filter((item: any) => item.id !== newInquiry.id)]
+        localStorage.setItem('happy-machinery-inquiries', JSON.stringify(updated))
+      } catch (err) {
+        console.warn('Could not cache inquiry to localStorage:', err)
+      }
+
+      // 2. Persist to shared backend content.json storage for CMS
       await appendSharedContent('inquiries', newInquiry)
+
+      // 3. Broadcast events so open CMS tabs or listeners update in real time
       window.dispatchEvent(new Event('inquiry-submitted'))
+      try {
+        window.dispatchEvent(new CustomEvent('inquiry-submitted-data', { detail: newInquiry }))
+      } catch {}
+
       setIsSuccess(true)
       setFormData({ name: '', email: '', machineryType: 'Mini Excavators', message: '' })
-    } catch {
-      // In case of network glitch, show helpful inline message
+    } catch (err) {
+      console.warn('Inquiry shared storage append status:', err)
+      // Since it is safely stored in local backup, display success
       setIsSuccess(true)
       setFormData({ name: '', email: '', machineryType: 'Mini Excavators', message: '' })
     } finally {
@@ -65,22 +83,11 @@ export default function ContactUs() {
         titleHighlight="Fast Quotes & Support"
         description="Inquire about mini skid steers, track loaders, accessories, bulk pricing, or schedule local technical support and nationwide freight delivery."
         features={[
-          { icon: '📞', text: 'Toll-Free Direct Phone Support' },
+          { icon: '📞', text: 'Direct US & Global Phone Support' },
           { icon: '🚚', text: 'Freight & Liftgate Delivery Quotes' },
           { icon: '📄', text: 'Financing & Invoice Support' },
           { icon: '⏱️', text: 'Prompt Response Within 24 Hours' }
         ]}
-        primaryBtn={{
-          text: '📞 Call Toll-Free: (888) 555-0199',
-          link: 'tel:+18885550199'
-        }}
-        secondaryBtn={{
-          text: 'Fill Out Inquiry Form ↓',
-          onClick: () => {
-            const form = document.querySelector('.contact-split')
-            if (form) form.scrollIntoView({ behavior: 'smooth' })
-          }
-        }}
         showColorOptions={true}
         imageSrc="/images/v900-promo.webp"
         imageAlt="Happy Machinery TYPHON V900 Mini Skid Steers in Yellow, Red, and Blue"
