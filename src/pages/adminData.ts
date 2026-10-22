@@ -423,7 +423,7 @@ export const DEFAULT_MEDIA: MediaItem[] = [
 export const DEFAULT_INQUIRIES: Inquiry[] = [
   { id: 1, name: 'Jason Miller', email: 'jason@millerbuilt.com', phone: '214-555-0182', company: 'Miller Landscaping Services', message: 'Looking for a quote on the V900 loader in yellow with the pallet fork and auger attachments. Need delivery to Dallas.', date: '2026-07-22', status: 'New', productInterest: 'TYPHON V900 Mini Track Loader' },
   { id: 2, name: 'Sarah Jenkins', email: 's.jenkins@epiccontractors.com', phone: '312-555-9831', company: 'Epic Infrastructure Group', message: 'Need bulk pricing for 3 units of the V900 loader. Do you offer warranty extensions for commercial fleets?', date: '2026-07-21', status: 'In Progress', productInterest: 'TYPHON V900 Mini Track Loader' },
-  { id: 3, name: 'Robert Chen', email: 'rchen@pacificbuilders.org', phone: '650-555-2245', company: 'Pacific Builders LLC', message: 'Interested in the mini excavator attachments. Will the standard auger plate fit older bobcat models?', date: '2026-07-20', status: 'Contacted', productInterest: 'Universal Pallet Forks' },
+  { id: 3, name: 'Robert Chen', email: 'rchen@pacificbuilders.org', phone: '650-555-2245', company: 'Pacific Builders', message: 'Interested in the mini excavator attachments. Will the standard auger plate fit older bobcat models?', date: '2026-07-20', status: 'Contacted', productInterest: 'Universal Pallet Forks' },
   { id: 4, name: 'David Vance', email: 'dvance@vanceconcrete.com', phone: '305-555-8812', company: 'Vance Concrete Contractors', message: 'Are the tracks non-marking rubber? We do indoor warehouse slab work and want to avoid track lines.', date: '2026-07-18', status: 'Resolved', productInterest: 'TYPHON V900 Mini Track Loader' }
 ]
 

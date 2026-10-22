@@ -957,7 +957,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                     <div className="pdp-rev-card">
                       <div className="pdp-rev-head">
                         <strong>Mark Dawson</strong>
-                        <span className="pdp-rev-company">Civil Earthworks LLC, Texas</span>
+                        <span className="pdp-rev-company">Civil Earthworks, Texas</span>
                         <span className="pdp-rev-stars-small">★★★★★</span>
                       </div>
                       <p className="pdp-rev-quote">

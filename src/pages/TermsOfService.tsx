@@ -14,12 +14,12 @@ export default function TermsOfService() {
         <span className="legal-eyebrow">📜 Commercial Agreement & Conditions</span>
         <h1>Terms of Service</h1>
         <p className="legal-hero-lead">
-          These Terms of Service govern your access to and use of Happy Machinery LLC's website, heavy equipment catalog, 
+          These Terms of Service govern your access to and use of Happy Machinery's website, heavy equipment catalog, 
           quotation systems, payment gateways, and freight delivery services. Please read these terms carefully before placing an order.
         </p>
         <div className="legal-meta-bar">
           <span className="legal-meta-item">
-            <strong>Entity:</strong> Happy Machinery LLC
+            <strong>Entity:</strong> Happy Machinery
           </span>
           <span className="legal-meta-item">
             <strong>Website:</strong> https://happymachinery.com
@@ -61,7 +61,7 @@ export default function TermsOfService() {
             <h2><span className="legal-section-num">1</span> Acceptance of Terms</h2>
             <p>
               By visiting, browsing, registering for an account, or purchasing commercial heavy equipment from 
-              <strong> Happy Machinery LLC</strong> ("Happy Machinery", "we", "our", or "us") via 
+              <strong> Happy Machinery</strong> ("we", "our", or "us") via 
               <strong> https://happymachinery.com</strong> (the "Site"), you agree to be bound by these Terms of Service 
               and all incorporated policies, including our <Link to="/privacy-policy">Privacy & Cookie Policy</Link>. 
               If you do not agree to these terms in their entirety, you must discontinue use of the Site immediately.
@@ -148,7 +148,7 @@ export default function TermsOfService() {
               wear required personal protective equipment (PPE), and operate within specified load charts.
             </p>
             <p>
-              To the maximum extent permitted by applicable law, Happy Machinery LLC and its affiliates shall not be liable for any indirect, 
+              To the maximum extent permitted by applicable law, Happy Machinery and its affiliates shall not be liable for any indirect, 
               incidental, consequential, punitive, or exemplary damages, including lost jobsite profits, equipment downtime, or property damage 
               arising out of machinery operation or delayed delivery.
             </p>
@@ -158,7 +158,7 @@ export default function TermsOfService() {
             <h2><span className="legal-section-num">9</span> Intellectual Property & Trademarks</h2>
             <p>
               All trademarks, service marks, trade names, logos, product photography, video footage, and text on 
-              <strong> https://happymachinery.com</strong> are the property of Happy Machinery LLC, TYPHON Machinery, 
+              <strong> https://happymachinery.com</strong> are the property of Happy Machinery, TYPHON Machinery, 
               Kubota Corporation, or their respective copyright holders. Unauthorized reproduction, scraping, or branding 
               impersonation is strictly prohibited.
             </p>
@@ -177,9 +177,9 @@ export default function TermsOfService() {
           <section id="contact" className="legal-section">
             <h2><span className="legal-section-num">11</span> Legal & Corporate Inquiries</h2>
             <div className="compliance-callout">
-              <h4>Happy Machinery LLC — Corporate Counsel & Sales Office</h4>
+              <h4>Happy Machinery — Corporate Counsel & Sales Office</h4>
               <p>
-                <strong>Company:</strong> Happy Machinery LLC<br />
+                <strong>Company:</strong> Happy Machinery<br />
                 <strong>Address:</strong> Dallas, TX, United States<br />
                 <strong>Email:</strong> <a href="mailto:support@happymachinery.com">support@happymachinery.com</a><br />
                 <strong>Phone:</strong> <a href="tel:+18885550199">+1 (888) 555-0199</a><br />

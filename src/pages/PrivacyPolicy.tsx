@@ -14,13 +14,13 @@ export default function PrivacyPolicy() {
         <span className="legal-eyebrow">🛡️ Official Legal Documentation</span>
         <h1>Privacy & Cookie Policy</h1>
         <p className="legal-hero-lead">
-          Happy Machinery LLC is committed to protecting your privacy and ensuring the security of your personal information. 
+          Happy Machinery is committed to protecting your privacy and ensuring the security of your personal information. 
           This policy explains how we collect, process, safeguard, and disclose your data in compliance with United States privacy laws, 
           GDPR, CCPA/CPRA, and Google API / Firebase Identity verification standards.
         </p>
         <div className="legal-meta-bar">
           <span className="legal-meta-item">
-            <strong>Entity:</strong> Happy Machinery LLC
+            <strong>Entity:</strong> Happy Machinery
           </span>
           <span className="legal-meta-item">
             <strong>Website:</strong> https://happymachinery.com
@@ -62,7 +62,7 @@ export default function PrivacyPolicy() {
           <section id="overview" className="legal-section">
             <h2><span className="legal-section-num">1</span> Overview & Scope</h2>
             <p>
-              This Privacy & Cookie Policy outlines how <strong>Happy Machinery LLC</strong> ("Happy Machinery", "we", "us", or "our") 
+              This Privacy & Cookie Policy outlines how <strong>Happy Machinery</strong> ("we", "us", or "our") 
               collects, uses, maintains, and discloses information collected from users (each, a "User" or "you") of the 
               <strong> https://happymachinery.com</strong> website, our digital machinery catalog, customer portals, quotation tools, 
               and associated cloud services.
@@ -228,7 +228,7 @@ export default function PrivacyPolicy() {
             <h2><span className="legal-section-num">10</span> Contact Privacy Officer</h2>
             <p>If you have questions, comments, or concerns regarding this Privacy & Cookie Policy, please contact our designated privacy department:</p>
             <div className="compliance-callout">
-              <h4>Happy Machinery LLC — Data Protection & Legal Inquiries</h4>
+              <h4>Happy Machinery — Data Protection & Legal Inquiries</h4>
               <p>
                 <strong>Attn:</strong> Privacy & Compliance Department<br />
                 <strong>Address:</strong> Dallas, TX, United States<br />
