@@ -57,11 +57,22 @@ const mergeContentById = <T extends { id: string | number }>(...collections: (T[
 }
 
 export default function AdminDashboard() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('happy-admin-auth') === 'true'
-  })
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [passcode, setPasscode] = useState('')
   const [loginError, setLoginError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    void fetch('/api/admin-auth.php', { credentials: 'same-origin', cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : { authenticated: false })
+      .then((payload: { authenticated?: boolean }) => {
+        if (active) setIsAuthenticated(payload.authenticated === true)
+      })
+      .catch(() => {
+        if (active) setIsAuthenticated(false)
+      })
+    return () => { active = false }
+  }, [])
   
   // Console Tab State
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'cart-activity' | 'blog' | 'media' | 'inquiries' | 'comments' | 'tools'>('overview')
@@ -363,20 +374,40 @@ export default function AdminDashboard() {
   }, [comments])
 
   // Login handler
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (passcode === 'admin123' || passcode.trim() === 'admin') {
+    setLoginError('')
+    try {
+      const response = await fetch('/api/admin-auth.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ action: 'login', password: passcode })
+      })
+      const payload = await response.json().catch(() => ({})) as { authenticated?: boolean; error?: string }
+      if (!response.ok || payload.authenticated !== true) {
+        setLoginError(payload.error || 'Sign-in failed. Please try again.')
+        return
+      }
       setIsAuthenticated(true)
-      localStorage.setItem('happy-admin-auth', 'true')
-      setLoginError('')
-    } else {
-      setLoginError('Incorrect password.')
+      setPasscode('')
+    } catch {
+      setLoginError('Could not connect to the authentication service. Please try again.')
     }
   }
 
-  const handleLogout = () => {
-    setIsAuthenticated(false)
-    localStorage.removeItem('happy-admin-auth')
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin-auth.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ action: 'logout' })
+      })
+    } finally {
+      setIsAuthenticated(false)
+      setPasscode('')
+    }
   }
 
   const resetProductForm = () => {
