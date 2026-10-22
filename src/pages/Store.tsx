@@ -222,17 +222,6 @@ export default function Store({ searchQuery }: StoreProps) {
           { icon: '🛡️', text: '1-Year Major Parts Warranty' },
           { icon: '🚚', text: 'Fast Nationwide USA Delivery' }
         ]}
-        primaryBtn={{
-          text: 'Browse Equipment Below ↓',
-          onClick: () => {
-            const el = document.getElementById('my-store-80100025')
-            if (el) el.scrollIntoView({ behavior: 'smooth' })
-          }
-        }}
-        secondaryBtn={{
-          text: '📞 Call US Sales: +1 (213) 214-2203',
-          link: 'tel:+12132142203'
-        }}
         showColorOptions={true}
         imageSrc="/images/v900-promo.webp"
         imageAlt="TYPHON V900 Skid Steer Loader in Industrial Yellow, Crimson Red, and Cobalt Blue"

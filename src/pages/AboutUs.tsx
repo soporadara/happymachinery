@@ -16,14 +16,6 @@ export default function AboutUs() {
           { icon: '🚜', text: '35.9" Tight-Access Agility' },
           { icon: '🔧', text: 'Full OEM Spare Parts Support' }
         ]}
-        primaryBtn={{
-          text: 'Explore Equipment Catalog',
-          link: '/store'
-        }}
-        secondaryBtn={{
-          text: 'Contact Our Specialists',
-          link: '/contact'
-        }}
         showColorOptions={true}
         imageSrc="/images/v900-promo.webp"
         imageAlt="Happy Machinery TYPHON Fleet in Industrial Yellow, Crimson Red, and Cobalt Blue"
