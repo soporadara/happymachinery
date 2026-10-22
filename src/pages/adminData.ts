@@ -336,7 +336,7 @@ export const DEFAULT_POSTS: BlogPost[] = [
 const EXISTING_PRODUCTS: AdminProduct[] = [
   {
     id: 901,
-    name: 'Skid Steer V900 — Crimson Red',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Crimson Red',
     sku: 'TYPH-V900R',
     category: 'Equipment > Skid Steer Loaders',
     description: 'Crimson Red V900 with Kubota D1105 diesel power and standard utility bucket.',
@@ -349,7 +349,7 @@ const EXISTING_PRODUCTS: AdminProduct[] = [
   },
   {
     id: 902,
-    name: 'Skid Steer V900 — Industrial Yellow',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Industrial Yellow',
     sku: 'TYPH-V900Y',
     category: 'Equipment > Skid Steer Loaders',
     description: 'Industrial Yellow V900 with Kubota D1105 diesel power and standard utility bucket.',
@@ -362,7 +362,7 @@ const EXISTING_PRODUCTS: AdminProduct[] = [
   },
   {
     id: 903,
-    name: 'Skid Steer V900 — Cobalt Blue',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Cobalt Blue',
     sku: 'TYPH-V900B',
     category: 'Equipment > Skid Steer Loaders',
     description: 'Cobalt Blue V900 with Kubota D1105 diesel power and standard utility bucket.',

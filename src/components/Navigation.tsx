@@ -39,21 +39,21 @@ export default function Navigation({
   const searchableProducts = [
     {
       id: 901,
-      name: 'Skid Steer V900 — Crimson Red',
+      name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red',
       category: 'Equipment, Mini Skid Steer',
       image: '/images/loader-red.png',
       keywords: 'red crimson typhon v900 skid steer loader pallet fork'
     },
     {
       id: 902,
-      name: 'Skid Steer V900 — Industrial Yellow',
+      name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow',
       category: 'Equipment, Mini Skid Steer',
       image: '/images/loader-yellow.png',
       keywords: 'yellow industrial typhon v900 skid steer loader pallet fork'
     },
     {
       id: 903,
-      name: 'Skid Steer V900 — Cobalt Blue',
+      name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue',
       category: 'Equipment, Mini Skid Steer',
       image: '/images/loader-blue.png',
       keywords: 'blue cobalt typhon v900 skid steer loader pallet fork'

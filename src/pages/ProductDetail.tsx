@@ -63,7 +63,7 @@ const COLOR_GALLERY_FALLBACKS: Record<string, string[]> = {
 const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
   '901': {
     id: 901,
-    name: 'Skid Steer V900 – Crimson Red',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red',
     price: V900_SALE_PRICE,
     originalPrice: V900_ORIGINAL_PRICE,
     description: 'The TYPH-V900R skid steer loader delivers powerful performance, reliable operation, and exceptional value. Perfect for construction, landscaping, and material handling tasks.',
@@ -84,7 +84,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
   },
   '902': {
     id: 902,
-    name: 'Skid Steer V900 – Industrial Yellow',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow',
     price: V900_SALE_PRICE,
     originalPrice: V900_ORIGINAL_PRICE,
     description: 'The TYPH-V900Y skid steer loader delivers powerful performance, reliable operation, and exceptional value. Perfect for construction, landscaping, and material handling tasks.',
@@ -105,7 +105,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
   },
   '903': {
     id: 903,
-    name: 'Skid Steer V900 – Cobalt Blue',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue',
     price: V900_SALE_PRICE,
     originalPrice: V900_ORIGINAL_PRICE,
     description: 'The TYPH-V900B skid steer loader delivers powerful performance, reliable operation, and exceptional value. Perfect for construction, landscaping, and material handling tasks.',
@@ -1708,9 +1708,15 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                 title="Watch on YouTube"
                 aria-label="Watch on YouTube"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.1c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z" />
-                  <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="#fff" />
+                <svg width="16" height="16" viewBox="0 0 24 24">
+                  <path
+                    d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"
+                    fill="#ffffff"
+                  />
+                  <polygon
+                    points="9.545 15.568 15.818 12 9.545 8.432"
+                    fill="#ff0000"
+                  />
                 </svg>
               </a>
 
