@@ -414,16 +414,48 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
     setIsDragging(false)
   }, [])
 
-  // Double Click: Toggle between 100% Fit and 2.0x Zoom at cursor
+  // Double Click: Toggle between 100% Fit and 2.0x Zoom
   const handleStageDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (zoomScale > 1.1) {
+    const target = e.target as HTMLElement | null
+    if (!target) return
+
+    // Never trigger zoom on clicks targeting buttons, select dropdowns, arrows, or navigation bars
+    if (target.closest('button, select, input, .lightbox-stage-arrow, .lightbox-top-bar, .lightbox-bottom-container, .lb-tool-btn, .lb-thumb-chip')) {
+      return
+    }
+
+    // Only allow double click zoom if the click originated on the image or the image wrapper
+    const isImageElement = target.classList.contains('lightbox-zoom-img') || target.classList.contains('lightbox-img-wrapper') || target.tagName === 'IMG'
+    if (!isImageElement && zoomScale <= 1.05) {
+      return
+    }
+
+    if (zoomScale > 1.05) {
       handleResetView()
     } else {
       const stage = lightboxStageRef.current
       if (stage) {
         const rect = stage.getBoundingClientRect()
-        const mouseX = e.clientX - rect.left - rect.width / 2
-        const mouseY = e.clientY - rect.top - rect.height / 2
+        // Determine click position relative to stage center
+        let mouseX = e.clientX - rect.left - rect.width / 2
+        let mouseY = e.clientY - rect.top - rect.height / 2
+
+        // If double click was not directly on the image, center zoom at (0, 0)
+        const imgElem = stage.querySelector('.lightbox-zoom-img') as HTMLImageElement | null
+        if (imgElem) {
+          const imgRect = imgElem.getBoundingClientRect()
+          const isInside = (
+            e.clientX >= imgRect.left &&
+            e.clientX <= imgRect.right &&
+            e.clientY >= imgRect.top &&
+            e.clientY <= imgRect.bottom
+          )
+          if (!isInside) {
+            mouseX = 0
+            mouseY = 0
+          }
+        }
+
         const targetZoom = 2.0
         const ratio = targetZoom / 1
         const rawX = mouseX - mouseX * ratio
@@ -443,6 +475,11 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
 
   // Touch Support for Lightbox (Two-finger pinch-to-zoom & two-finger/single-finger pan)
   const handleNativeTouchStart = useCallback((e: TouchEvent) => {
+    const target = e.target as HTMLElement | null
+    if (target && target.closest('button, select, input, .lightbox-stage-arrow, .lightbox-top-bar, .lightbox-bottom-container, .lb-tool-btn, .lb-thumb-chip')) {
+      return
+    }
+
     if (e.touches.length === 2) {
       e.preventDefault()
       const t1 = e.touches[0]
@@ -528,6 +565,21 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
 
   const handleNativeTouchEnd = useCallback((e: TouchEvent) => {
     if (e.touches.length === 0) {
+      if (touchStartRef.current && zoomScale <= 1.05 && touchStartRef.current.startDist === 0) {
+        const lastTouch = e.changedTouches[0]
+        if (lastTouch) {
+          const deltaX = lastTouch.clientX - touchStartRef.current.startMidX
+          const deltaY = lastTouch.clientY - touchStartRef.current.startMidY
+          // Horizontal swipe navigation on mobile touch when not zoomed in
+          if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
+            if (deltaX < 0) {
+              handleNextImage()
+            } else {
+              handlePrevImage()
+            }
+          }
+        }
+      }
       touchStartRef.current = null
       setIsDragging(false)
       if (zoomScale < 1) {
@@ -548,7 +600,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
         setIsDragging(true)
       }
     }
-  }, [zoomScale, panOffset])
+  }, [zoomScale, panOffset, handleNextImage, handlePrevImage])
 
   // Attach non-passive wheel & touch listeners to lightbox stage
   useEffect(() => {
@@ -895,6 +947,19 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
       })
     }
   }, [activeImageIndex, isLightboxOpen])
+
+  // Whenever the active image changes, unconditionally reset lightbox zoom and pan to 100% fit and centered
+  useEffect(() => {
+    setZoomScale(1)
+    setPanOffset({ x: 0, y: 0 })
+    setIsDragging(false)
+    setIsWheeling(false)
+  }, [activeImageIndex])
+
+  // Whenever the active image changes, unconditionally reset main gallery zoom as well
+  useEffect(() => {
+    handleResetMainView()
+  }, [activeImageIndex, handleResetMainView])
 
   const getShareUrl = () => {
     if (!product) return ''
@@ -1759,14 +1824,18 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                 <div className="lb-zoom-dropdown-wrap">
                   <select
                     className="lb-zoom-select"
-                    value={Math.round(zoomScale * 100)}
+                    value={[100, 125, 150, 200, 300, 400, 600, 800].includes(Math.round(zoomScale * 100)) ? Math.round(zoomScale * 100) : 'custom'}
                     onChange={(e) => {
+                      if (e.target.value === 'custom') return
                       const val = Number(e.target.value) / 100
                       setZoomScale(val)
                       if (val <= 1) setPanOffset({ x: 0, y: 0 })
                     }}
                     title="Choose Zoom Level"
                   >
+                    {![100, 125, 150, 200, 300, 400, 600, 800].includes(Math.round(zoomScale * 100)) && (
+                      <option value="custom">{Math.round(zoomScale * 100)}%</option>
+                    )}
                     <option value="100">100% (Fit)</option>
                     <option value="125">125%</option>
                     <option value="150">150%</option>
@@ -1784,6 +1853,11 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   type="button"
                   className="lb-tool-btn"
                   onClick={() => setZoomScale((prev) => Math.min(8, Number((prev + 0.25).toFixed(2))))}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                  }}
                   disabled={zoomScale >= 8}
                   title="Zoom In (+)"
                   aria-label="Zoom In"
@@ -1796,6 +1870,11 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   type="button"
                   className="lb-tool-btn reset"
                   onClick={handleResetView}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                  }}
                   title="Reset to Fit Screen (0)"
                 >
                   Reset
@@ -1811,6 +1890,11 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   onClick={() => {
                     setIsLightboxOpen(false)
                     handleResetView()
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
                   }}
                   title="Close viewer (Esc)"
                   aria-label="Close viewer"
@@ -1837,6 +1921,13 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                 onClick={(e) => {
                   e.stopPropagation()
                   handlePrevImage()
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation()
                 }}
                 aria-label="Previous image (Left Arrow)"
                 title="Previous image (←)"
@@ -1873,6 +1964,13 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   e.stopPropagation()
                   handleNextImage()
                 }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation()
+                }}
                 aria-label="Next image (Right Arrow)"
                 title="Next image (→)"
               >
@@ -1886,7 +1984,17 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
               <button
                 type="button"
                 className="lightbox-thumb-scroll-btn left"
-                onClick={() => scrollThumbStrip('left')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  scrollThumbStrip('left')
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation()
+                }}
                 title="Scroll thumbnails left"
                 aria-label="Scroll thumbnails left"
               >
@@ -1905,9 +2013,17 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                     type="button"
                     data-index={idx}
                     className={`lb-thumb-chip ${activeImageIndex === idx ? 'active' : ''}`}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setActiveImageIndex(idx)
                       handleResetView()
+                    }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
                     }}
                     title={`Angle ${idx + 1} of ${galleryImages.length}`}
                   >
@@ -1921,7 +2037,17 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
               <button
                 type="button"
                 className="lightbox-thumb-scroll-btn right"
-                onClick={() => scrollThumbStrip('right')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  scrollThumbStrip('right')
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation()
+                }}
                 title="Scroll thumbnails right"
                 aria-label="Scroll thumbnails right"
               >
