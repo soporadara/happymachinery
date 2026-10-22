@@ -867,18 +867,31 @@ export default function Home() {
                     </div>
 
                     <div className="youtube-video-copy">
-                      <span className="custom-video-tag">{vid.tag}</span>
+                      <div className="custom-video-meta-bar">
+                        <span className="custom-video-tag">{vid.tag}</span>
+                        <span className="custom-video-fps">1080p 60FPS</span>
+                      </div>
                       <h3>{vid.title}</h3>
-                      <button
-                        type="button"
-                        className="custom-video-action-btn"
-                        onClick={() => setActiveVideoModal({ videoId, title: vid.title, tag: vid.tag })}
-                      >
-                        <span>Watch Walkaround Video</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M5 12h14M12 5l7 7-7 7" />
-                        </svg>
-                      </button>
+                      <div className="custom-video-actions-group">
+                        <button
+                          type="button"
+                          className="custom-video-action-btn primary"
+                          onClick={() => setActiveVideoModal({ videoId, title: vid.title, tag: vid.tag })}
+                        >
+                          <span className="btn-play-glyph">▶</span>
+                          <span>Watch Field Demo</span>
+                        </button>
+                        <Link
+                          to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105"
+                          className="custom-video-action-btn secondary"
+                          title="Explore V900 Front Product Page"
+                        >
+                          <span>Explore V900 Specs</span>
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M5 12h14M12 5l7 7-7 7" />
+                          </svg>
+                        </Link>
+                      </div>
                     </div>
                   </article>
                 )
@@ -922,13 +935,45 @@ export default function Home() {
                 </div>
 
                 <div className="cinema-modal-footer">
-                  <p>TYPHON STOMP V900 EPA Tier 4 Diesel Skid Steer Loader in action.</p>
+                  <div className="cinema-modal-info">
+                    <p className="cinema-modal-desc">
+                      TYPHON STOMP V900 EPA Tier 4 Diesel Skid Steer Loader in action.
+                    </p>
+                    <div className="cinema-modal-colors">
+                      <span className="cinema-colors-label">V900 Color Editions:</span>
+                      <Link
+                        to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105"
+                        className="cinema-color-pill yellow"
+                        onClick={() => setActiveVideoModal(null)}
+                      >
+                        <span className="color-dot yellow"></span> Yellow
+                      </Link>
+                      <Link
+                        to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red"
+                        className="cinema-color-pill red"
+                        onClick={() => setActiveVideoModal(null)}
+                      >
+                        <span className="color-dot red"></span> Red
+                      </Link>
+                      <Link
+                        to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue"
+                        className="cinema-color-pill blue"
+                        onClick={() => setActiveVideoModal(null)}
+                      >
+                        <span className="color-dot blue"></span> Blue
+                      </Link>
+                    </div>
+                  </div>
+
                   <Link
-                    to="/store"
+                    to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105"
                     className="cinema-modal-cta"
                     onClick={() => setActiveVideoModal(null)}
                   >
-                    Browse Equipment Catalog →
+                    <span>Inspect V900 360° Specs & Features</span>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
                   </Link>
                 </div>
               </div>

@@ -6,6 +6,23 @@ export default function Footer() {
   const branding = useSiteBranding()
   const currentYear = new Date().getFullYear()
 
+  const handleCategoryClick = (keyword: string) => {
+    const ecwid = (window as any).Ecwid
+    if (typeof ecwid?.openPage === 'function') {
+      try {
+        ecwid.openPage('search', { keyword })
+      } catch (err) {
+        console.warn('Ecwid openPage error:', err)
+      }
+    }
+    window.location.hash = '!/~/search/keyword=' + encodeURIComponent(keyword)
+
+    const storeEl = document.getElementById('my-store-80100025')
+    if (storeEl) {
+      storeEl.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
+
   return (
     <footer className="footer">
       {/* Pre-Footer Highlight Bar: Value Propositions */}
@@ -59,30 +76,79 @@ export default function Footer() {
           <div className="footer-column footer-products-col">
             <h4>PRODUCTS</h4>
             <ul className="footer-category-list">
-              <li><Link to="/store?search=Mini+Excavators">Mini Excavators</Link></li>
-              <li><Link to="/store?search=Mini+Skid+Steers">Mini Skid Steers</Link></li>
-              <li><Link to="/store?search=Attachments">Attachments</Link></li>
-              <li><Link to="/store?search=Spare+Parts">Spare Parts</Link></li>
+              <li>
+                <Link
+                  to="/store?search=Mini+Excavators"
+                  onClick={() => handleCategoryClick('Mini Excavators')}
+                >
+                  Mini Excavators
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/store?search=Mini+Skid+Steers"
+                  onClick={() => handleCategoryClick('Mini Skid Steers')}
+                >
+                  Mini Skid Steers
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/store?search=Attachments"
+                  onClick={() => handleCategoryClick('Attachments')}
+                >
+                  Attachments
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/store?search=Spare+Parts"
+                  onClick={() => handleCategoryClick('Spare Parts')}
+                >
+                  Spare Parts
+                </Link>
+              </li>
             </ul>
 
-            <div className="footer-v900-models-header">V900 COLOR EDITIONS</div>
+            <div className="footer-v900-models-header">
+              <span>V900 COLOR EDITIONS</span>
+              <span className="footer-v900-badge">Front Page</span>
+            </div>
             <ul className="footer-v900-list">
               <li>
-                <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105" className="footer-v900-link" title="TYPHON STOMP V900 - Industrial Yellow">
+                <Link
+                  to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105"
+                  className="footer-v900-link"
+                  title="TYPHON STOMP V900 - Industrial Yellow (Front Product Page)"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
                   <span className="v900-color-swatch yellow" aria-hidden="true"></span>
-                  <span>V900 Skid Steer – Yellow</span>
+                  <span className="v900-link-name">V900 Skid Steer – Yellow</span>
+                  <span className="v900-view-pill">360° View</span>
                 </Link>
               </li>
               <li>
-                <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red" className="footer-v900-link" title="TYPHON STOMP V900 - Crimson Red">
+                <Link
+                  to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red"
+                  className="footer-v900-link"
+                  title="TYPHON STOMP V900 - Crimson Red (Front Product Page)"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
                   <span className="v900-color-swatch red" aria-hidden="true"></span>
-                  <span>V900 Skid Steer – Red</span>
+                  <span className="v900-link-name">V900 Skid Steer – Red</span>
+                  <span className="v900-view-pill">360° View</span>
                 </Link>
               </li>
               <li>
-                <Link to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue" className="footer-v900-link" title="TYPHON STOMP V900 - Cobalt Blue">
+                <Link
+                  to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue"
+                  className="footer-v900-link"
+                  title="TYPHON STOMP V900 - Cobalt Blue (Front Product Page)"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                >
                   <span className="v900-color-swatch blue" aria-hidden="true"></span>
-                  <span>V900 Skid Steer – Blue</span>
+                  <span className="v900-link-name">V900 Skid Steer – Blue</span>
+                  <span className="v900-view-pill">360° View</span>
                 </Link>
               </li>
             </ul>

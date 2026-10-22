@@ -246,13 +246,53 @@ a.footer-contact-value:hover {
   text-transform: uppercase;
   margin: 18px 0 10px 0;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer-v900-badge {
+  font-size: 0.62rem;
+  font-weight: 750;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.footer-v900-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .footer-v900-link {
-  display: inline-flex !important;
+  display: flex !important;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  padding: 3px 0;
+  text-decoration: none;
+  transition: all 0.18s ease;
+}
+
+.v900-link-name {
+  flex: 1;
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  transition: color 0.18s ease;
+}
+
+.footer-v900-link:hover .v900-link-name {
+  color: #ffffff;
 }
 
 .v900-color-swatch {
@@ -280,6 +320,25 @@ a.footer-contact-value:hover {
   background-color: #0284c7;
   color: #0284c7;
   border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.v900-view-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #94a3b8;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.footer-v900-link:hover .v900-view-pill {
+  color: #ffffff;
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.5);
+  transform: translateX(2px);
 }
 
 /* Newsletter & Trust Badges Column */

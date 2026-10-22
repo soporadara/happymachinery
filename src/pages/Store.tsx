@@ -162,11 +162,26 @@ export default function Store({ searchQuery }: StoreProps) {
     const keyword = effectiveSearch
     if (!keyword) return
 
+    // Immediately sync hash for Ecwid SPA router fallback
+    window.location.hash = '!/~/search/keyword=' + encodeURIComponent(keyword)
+
+    const scrollToStore = () => {
+      const storeEl = document.getElementById('my-store-80100025')
+      if (storeEl) {
+        storeEl.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
+
     let attempts = 0
     const openSearch = () => {
       const ecwid = (window as any).Ecwid
       if (typeof ecwid?.openPage === 'function') {
-        ecwid.openPage('search', { keyword })
+        try {
+          ecwid.openPage('search', { keyword })
+        } catch (e) {
+          console.warn('Ecwid openPage search error:', e)
+        }
+        scrollToStore()
         return true
       }
       return false
@@ -178,8 +193,9 @@ export default function Store({ searchQuery }: StoreProps) {
       attempts += 1
       if (openSearch() || attempts >= 40) {
         window.clearInterval(searchTimer)
+        scrollToStore()
       }
-    }, 250)
+    }, 150)
 
     return () => window.clearInterval(searchTimer)
   }, [effectiveSearch])
