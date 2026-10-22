@@ -13,6 +13,7 @@ export interface BlogPost {
   readTime: string
   author: string
   status?: 'Published' | 'Draft'
+  content_raw?: string
 }
 
 export interface MediaItem {

@@ -35,6 +35,8 @@ import { getBlogPostPath } from '../data/blogUrls'
 import { DEFAULT_HOME_CONTENT, HomePageContent } from '../data/homeContent'
 import HomePageCmsEditor from '../components/HomePageCmsEditor'
 import TopBlogsManager from '../components/TopBlogsManager'
+import TiptapEditor from '../components/Editor/TiptapEditor'
+import { renderMarkdownToReact } from './Blog'
 import { getMaintenanceConfig, saveMaintenanceConfig } from '../data/maintenanceConfig'
 import { cacheSiteSettings, updateBrowserFavicon } from '../data/siteBranding'
 import './AdminDashboard.css'
@@ -1154,30 +1156,17 @@ export default function AdminDashboard() {
   const [editorSlug, setEditorSlug] = useState('')
   const [editorExcerpt, setEditorExcerpt] = useState('')
   const [editorContent, setEditorContent] = useState('')
+  const [editorContentRaw, setEditorContentRaw] = useState('')
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [linkModalType, setLinkModalType] = useState<'internal' | 'external'>('internal')
   const [linkModalInternalUrl, setLinkModalInternalUrl] = useState('/store')
   const [linkModalExternalUrl, setLinkModalExternalUrl] = useState('https://')
   const [linkModalText, setLinkModalText] = useState('')
   // Live Visual WYSIWYG vs Markdown Code Mode
-  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual')
+  const [editorMode, setEditorMode] = useState<'visual' | 'code' | 'preview'>('visual')
   const [editorBlocks, setEditorBlocks] = useState<VisualBlock[]>([{ id: 'blk-init', type: 'text', text: '' }])
   const [activeVisualBlockIndex, setActiveVisualBlockIndex] = useState<number | null>(null)
   const [editingBlockIndex, setEditingBlockIndex] = useState<number | null>(null)
-  const [blockViewModes, setBlockViewModes] = useState<{ [blockId: string]: 'preview' | 'edit' | 'split' }>({})
-  const [globalBlockViewMode, setGlobalBlockViewMode] = useState<'preview' | 'split' | 'edit'>('preview')
-  const visualBlockTextareaRefs = useRef<{ [index: number]: HTMLTextAreaElement | null }>({})
-
-  const getBlockViewMode = (blockId: string, hasText: boolean): 'preview' | 'edit' | 'split' => {
-    if (blockViewModes[blockId]) return blockViewModes[blockId]
-    if (!hasText) return 'edit'
-    return globalBlockViewMode
-  }
-
-  const setBlockMode = (blockId: string, mode: 'preview' | 'edit' | 'split') => {
-    setBlockViewModes((prev) => ({ ...prev, [blockId]: mode }))
-  }
-
   // Image & YouTube Media Insertion Modals with Live Preview & Media Library
   const [imageModalOpen, setImageModalOpen] = useState(false)
   const [imageModalTab, setImageModalTab] = useState<'library' | 'upload' | 'url'>('library')
@@ -1214,8 +1203,6 @@ export default function AdminDashboard() {
     }
   }
 
-  const [contentHistory, setContentHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
   const [assignedSeries, setAssignedSeries] = useState('None (Standalone Article)')
 
   // Categories Taxonomy State (Screenshot 5)
@@ -1975,8 +1962,6 @@ export default function AdminDashboard() {
     setEditorSlug('')
     setEditorExcerpt('')
     setEditorContent('')
-    setContentHistory([''])
-    setHistoryIndex(0)
     setEditorBlocks([{ id: 'blk-' + Date.now(), type: 'text', text: '' }])
     setEditorMode('visual')
     setActiveVisualBlockIndex(null)
@@ -2001,8 +1986,6 @@ export default function AdminDashboard() {
     const rawParagraphs = Array.isArray(post.content) ? post.content : [post.content || '']
     const contentText = rawParagraphs.join('\n\n')
     setEditorContent(contentText)
-    setContentHistory([contentText])
-    setHistoryIndex(0)
     setEditorBlocks(parseContentToVisualBlocks(contentText))
     setEditorMode('visual')
     setActiveVisualBlockIndex(null)
@@ -2018,82 +2001,6 @@ export default function AdminDashboard() {
     setArticlesSubView('editor')
   }
 
-  const toggleEditorMode = (newMode: 'visual' | 'code') => {
-    if (newMode === 'visual' && editorMode === 'code') {
-      setEditorBlocks(parseContentToVisualBlocks(editorContent))
-    } else if (newMode === 'code' && editorMode === 'visual') {
-      const serialized = serializeVisualBlocksToContent(editorBlocks)
-      setEditorContent(serialized)
-    }
-    setEditorMode(newMode)
-  }
-
-  const handleUpdateBlockText = (index: number, newText: string) => {
-    setEditorBlocks((prev) => {
-      const next = [...prev]
-      next[index] = { ...next[index], text: newText }
-      const serialized = serializeVisualBlocksToContent(next)
-      setEditorContent(serialized)
-      return next
-    })
-  }
-
-  const handleUpdateImageDetails = (index: number, alt: string, caption: string) => {
-    setEditorBlocks((prev) => {
-      const next = [...prev]
-      next[index] = { ...next[index], alt, caption }
-      const serialized = serializeVisualBlocksToContent(next)
-      setEditorContent(serialized)
-      pushContentHistory(serialized)
-      return next
-    })
-  }
-
-  const handleDeleteBlock = (index: number) => {
-    setEditorBlocks((prev) => {
-      const next = prev.filter((_, idx) => idx !== index)
-      if (next.length === 0) {
-        next.push({ id: 'blk-' + Date.now(), type: 'text', text: '' })
-      }
-      const serialized = serializeVisualBlocksToContent(next)
-      setEditorContent(serialized)
-      pushContentHistory(serialized)
-      return next
-    })
-    showToast('Block removed from article.', 'warning')
-  }
-
-  const handleMoveBlock = (index: number, direction: 'up' | 'down') => {
-    setEditorBlocks((prev) => {
-      const targetIdx = direction === 'up' ? index - 1 : index + 1
-      if (targetIdx < 0 || targetIdx >= prev.length) return prev
-      const next = [...prev]
-      const temp = next[index]
-      next[index] = next[targetIdx]
-      next[targetIdx] = temp
-      const serialized = serializeVisualBlocksToContent(next)
-      setEditorContent(serialized)
-      pushContentHistory(serialized)
-      return next
-    })
-  }
-
-  const handleAddTextBlock = (afterIndex?: number) => {
-    const insertAt = typeof afterIndex === 'number' ? afterIndex + 1 : editorBlocks.length
-    const newBlock: VisualBlock = {
-      id: 'blk-' + Date.now(),
-      type: 'text',
-      text: ''
-    }
-    setEditorBlocks((prev) => {
-      const next = [...prev]
-      next.splice(insertAt, 0, newBlock)
-      const serialized = serializeVisualBlocksToContent(next)
-      setEditorContent(serialized)
-      return next
-    })
-    setActiveVisualBlockIndex(insertAt)
-  }
 
   const handleModalUploadFile = async (file: File) => {
     if (!file) return
@@ -2138,7 +2045,7 @@ export default function AdminDashboard() {
     const url = linkModalType === 'internal' ? linkModalInternalUrl : linkModalExternalUrl
     const text = linkModalText.trim() || (linkModalType === 'internal' ? linkModalInternalUrl : 'Link')
     const mdSnippet = `[${text}](${url})`
-    insertTextAtCursor(mdSnippet, '', '')
+    insertMediaAtSavedCursor(mdSnippet)
     setLinkModalOpen(false)
     showToast('Link inserted into article.', 'success')
   }
@@ -2283,131 +2190,7 @@ export default function AdminDashboard() {
   }
 
 
-  const pushContentHistory = (newVal: string) => {
-    setContentHistory((prev) => [...prev.slice(0, historyIndex + 1), newVal])
-    setHistoryIndex((prev) => prev + 1)
-  }
-
-  const handleUndo = () => {
-    if (historyIndex > 0) {
-      const prevVal = contentHistory[historyIndex - 1]
-      setHistoryIndex((prev) => prev - 1)
-      setEditorContent(prevVal)
-      if (editorMode === 'visual') {
-        setEditorBlocks(parseContentToVisualBlocks(prevVal))
-      }
-    }
-  }
-
-  const handleRedo = () => {
-    if (historyIndex < contentHistory.length - 1) {
-      const nextVal = contentHistory[historyIndex + 1]
-      setHistoryIndex((prev) => prev + 1)
-      setEditorContent(nextVal)
-      if (editorMode === 'visual') {
-        setEditorBlocks(parseContentToVisualBlocks(nextVal))
-      }
-    }
-  }
-
-  const insertTextAtCursor = (prefix: string, suffix: string = '', defaultText: string = '') => {
-    if (editorMode === 'visual') {
-      let targetIdx = activeVisualBlockIndex !== null && editorBlocks[activeVisualBlockIndex]?.type === 'text'
-        ? activeVisualBlockIndex
-        : -1
-      
-      if (targetIdx === -1) {
-        for (let i = editorBlocks.length - 1; i >= 0; i--) {
-          if (editorBlocks[i].type === 'text') {
-            targetIdx = i
-            break
-          }
-        }
-      }
-
-      if (targetIdx === -1) {
-        const newBlockId = 'blk-' + Date.now()
-        const newBlock: VisualBlock = {
-          id: newBlockId,
-          type: 'text',
-          text: `${prefix}${defaultText}${suffix}`
-        }
-        const updated = [...editorBlocks, newBlock]
-        setEditorBlocks(updated)
-        setBlockMode(newBlockId, 'edit')
-        const serialized = serializeVisualBlocksToContent(updated)
-        setEditorContent(serialized)
-        pushContentHistory(serialized)
-        return
-      }
-
-      const curBlock = editorBlocks[targetIdx]
-      const curText = curBlock.text || ''
-      const ta = visualBlockTextareaRefs.current[targetIdx]
-
-      let textToInsert = defaultText
-      let start = curText.length
-      let end = curText.length
-
-      if (ta && typeof ta.selectionStart === 'number' && typeof ta.selectionEnd === 'number' && ta.selectionStart !== ta.selectionEnd) {
-        start = ta.selectionStart
-        end = ta.selectionEnd
-        const selected = curText.substring(start, end)
-        if (selected) {
-          textToInsert = selected
-        }
-      } else if (ta && typeof ta.selectionStart === 'number') {
-        start = ta.selectionStart
-        end = ta.selectionStart
-      }
-
-      const replacement = `${prefix}${textToInsert}${suffix}`
-      let newText = ''
-      if (start === curText.length && end === curText.length && curText.trim()) {
-        newText = `${curText}\n\n${replacement}`
-      } else {
-        newText = curText.substring(0, start) + replacement + curText.substring(end)
-      }
-
-      const updated = [...editorBlocks]
-      updated[targetIdx] = { ...curBlock, text: newText }
-      setEditorBlocks(updated)
-      const serialized = serializeVisualBlocksToContent(updated)
-      setEditorContent(serialized)
-      pushContentHistory(serialized)
-
-      const blockId = curBlock.id || `blk-${targetIdx}`
-      if (getBlockViewMode(blockId, true) === 'edit') {
-        setTimeout(() => {
-          if (ta) {
-            ta.focus()
-            const newPos = start + prefix.length + textToInsert.length + suffix.length
-            ta.setSelectionRange(newPos, newPos)
-          }
-        }, 0)
-      }
-      return
-    }
-
-    const textarea = contentTextareaRef.current
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selected = editorContent.substring(start, end)
-    const textToInsert = selected || defaultText
-    const replacement = `${prefix}${textToInsert}${suffix}`
-
-    const newContent = editorContent.substring(0, start) + replacement + editorContent.substring(end)
-    setEditorContent(newContent)
-    pushContentHistory(newContent)
-
-    setTimeout(() => {
-      textarea.focus()
-      const newCursor = start + prefix.length + textToInsert.length + suffix.length
-      textarea.setSelectionRange(newCursor, newCursor)
-    }, 0)
-  }
+  const pushContentHistory = (_newVal?: string) => {}
 
   const handleSaveArticle = async (status: 'Published' | 'Draft' | 'Scheduled') => {
     if (!editorTitle.trim()) {
@@ -2417,10 +2200,23 @@ export default function AdminDashboard() {
 
     let contentParagraphs: string[] = []
     if (editorContent.trim()) {
-      contentParagraphs = editorContent
-        .split(/\n\s*\n/)
-        .map((p) => p.trim())
-        .filter(Boolean)
+      if (editorContent.includes('</p>') || editorContent.includes('</div>') || editorContent.includes('</h2>')) {
+        contentParagraphs = editorContent
+          .replace(/<\/p>/gi, '</p>\n\n')
+          .replace(/<\/h([1-6])>/gi, '</h$1>\n\n')
+          .replace(/<\/div>/gi, '</div>\n\n')
+          .replace(/<\/blockquote>/gi, '</blockquote>\n\n')
+          .replace(/<\/ul>/gi, '</ul>\n\n')
+          .replace(/<\/ol>/gi, '</ol>\n\n')
+          .split(/\n\s*\n/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+      } else {
+        contentParagraphs = editorContent
+          .split(/\n\s*\n/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+      }
     }
 
     if (contentParagraphs.length === 0) {
@@ -2428,9 +2224,10 @@ export default function AdminDashboard() {
       return
     }
 
+    const plainFirstParagraph = contentParagraphs[0] ? contentParagraphs[0].replace(/<[^>]*>/g, '').trim() : ''
     const finalExcerpt =
       editorExcerpt.trim() ||
-      (contentParagraphs[0] ? contentParagraphs[0].slice(0, 220).trim() + '...' : editorTitle)
+      (plainFirstParagraph ? plainFirstParagraph.slice(0, 220).trim() + '...' : editorTitle)
 
     const finalSlug = editorSlug.trim() || editorTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
@@ -2454,7 +2251,8 @@ export default function AdminDashboard() {
               category: editorCategory,
               author: editorAuthor || currentUser?.name || 'Happy Machinery',
               image: editorCoverImage || p.image,
-              status: finalStatus
+              status: finalStatus,
+              content_raw: editorContentRaw || undefined
             }
           : p
       )
@@ -2475,7 +2273,8 @@ export default function AdminDashboard() {
         date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         readTime: `${Math.max(2, Math.ceil(contentParagraphs.join(' ').split(/\s+/).length / 180))} min read`,
         author: editorAuthor || currentUser?.name || 'Happy Machinery',
-        status: finalStatus
+        status: finalStatus,
+        content_raw: editorContentRaw || undefined
       }
       const updated = [newPost, ...posts]
       setPosts(updated)
@@ -4774,13 +4573,13 @@ export default function AdminDashboard() {
                         />
                       </div>
 
-                      {/* Card 3: Article Content (Unified Rich WYSIWYG & Media - Image 2) */}
+                      {/* Card 3: Article Content (Unified Modern WYSIWYG & Media - Rafelblog Style) */}
                       <div className="cms-editor-card cms-article-content-card">
                         <div className="cms-editor-card-header-row">
                           <div className="cms-editor-card-header-left">
                             <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
                             <span className="cms-wysiwyg-badge">
-                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : 'Markdown Code'}
+                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : editorMode === 'code' ? 'Markdown / HTML Source' : 'Live Reader Preview'}
                             </span>
                           </div>
 
@@ -4789,20 +4588,20 @@ export default function AdminDashboard() {
                             <button
                               type="button"
                               className={`cms-mode-toggle-btn ${editorMode === 'visual' ? 'active' : ''}`}
-                              onClick={() => toggleEditorMode('visual')}
-                              title="Visual WYSIWYG: Shows real images, playable videos, and live formatted text without raw markdown"
+                              onClick={() => setEditorMode('visual')}
+                              title="Visual WYSIWYG: Seamless fluid writing, clipboard paste (Cmd+V), drag & drop, and inline media controls"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                                 <circle cx="12" cy="12" r="3" />
                               </svg>
-                              <span>Visual (Live Media)</span>
+                              <span>Visual (WYSIWYG)</span>
                             </button>
                             <button
                               type="button"
                               className={`cms-mode-toggle-btn ${editorMode === 'code' ? 'active' : ''}`}
-                              onClick={() => toggleEditorMode('code')}
-                              title="Markdown Code: Edit raw markdown syntax directly"
+                              onClick={() => setEditorMode('code')}
+                              title="Raw Code: Direct markdown or HTML editing"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="16 18 22 12 16 6" />
@@ -4810,708 +4609,149 @@ export default function AdminDashboard() {
                               </svg>
                               <span>Code (Markdown)</span>
                             </button>
-
-                            {editorMode === 'visual' && (
-                              <div className="cms-global-view-toggle">
-                                <span className="cms-gvt-label">Text View:</span>
-                                <button
-                                  type="button"
-                                  className={`cms-gvt-btn ${globalBlockViewMode === 'preview' ? 'active' : ''}`}
-                                  onClick={() => {
-                                    setGlobalBlockViewMode('preview')
-                                    setBlockViewModes({})
-                                  }}
-                                  title="Display all sections with real Bold, Underline, Bullet Lists, and Headings (no ** or #)"
-                                >
-                                  👁 Real Preview
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`cms-gvt-btn ${globalBlockViewMode === 'split' ? 'active' : ''}`}
-                                  onClick={() => {
-                                    setGlobalBlockViewMode('split')
-                                    setBlockViewModes({})
-                                  }}
-                                  title="Show text editor with live formatted preview below"
-                                >
-                                  ⚡ Dual Split
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`cms-gvt-btn ${globalBlockViewMode === 'edit' ? 'active' : ''}`}
-                                  onClick={() => {
-                                    setGlobalBlockViewMode('edit')
-                                    setBlockViewModes({})
-                                  }}
-                                  title="Edit text in all sections"
-                                >
-                                  ✏️ Edit Text
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Rich WYSIWYG Toolbar */}
-                        <div className="cms-wysiwyg-toolbar">
-                          {/* Formatting Group */}
-                          <div className="cms-tb-group">
                             <button
                               type="button"
-                              className="cms-tb-btn"
-                              title="Bold (**text**)"
-                              onClick={() => insertTextAtCursor("**", "**", "bold text")}
-                            >
-                              <strong>B</strong>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Italic (*text*)"
-                              onClick={() => insertTextAtCursor("*", "*", "italic text")}
-                            >
-                              <em>I</em>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Underline (<u>text</u>)"
-                              onClick={() => insertTextAtCursor("<u>", "</u>", "underlined text")}
-                            >
-                              <span style={{ textDecoration: "underline" }}>U</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Strikethrough (~~text~~)"
-                              onClick={() => insertTextAtCursor("~~", "~~", "strikethrough text")}
-                            >
-                              <span style={{ textDecoration: "line-through" }}>S</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Inline Code (`code`)"
-                              onClick={() => insertTextAtCursor("`", "`", "code")}
-                            >
-                              &lt;&gt;
-                            </button>
-                          </div>
-
-                          <div className="cms-tb-sep" />
-
-                          {/* Headings */}
-                          <div className="cms-tb-group">
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Heading 1"
-                              onClick={() => insertTextAtCursor("\n# ", "\n", "Main Section Title")}
-                            >
-                              H1
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Heading 2"
-                              onClick={() => insertTextAtCursor("\n## ", "\n", "Sub Section Title")}
-                            >
-                              H2
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Heading 3"
-                              onClick={() => insertTextAtCursor("\n### ", "\n", "Topic Subsection")}
-                            >
-                              H3
-                            </button>
-                          </div>
-
-                          <div className="cms-tb-sep" />
-
-                          {/* Lists & Block formatting */}
-                          <div className="cms-tb-group">
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Bullet List"
-                              onClick={() => insertTextAtCursor("\n- ", "\n", "Key technical specification")}
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <line x1="8" y1="6" x2="21" y2="6" />
-                                <line x1="8" y1="12" x2="21" y2="12" />
-                                <line x1="8" y1="18" x2="21" y2="18" />
-                                <circle cx="3" cy="6" r="1.5" fill="currentColor" />
-                                <circle cx="3" cy="12" r="1.5" fill="currentColor" />
-                                <circle cx="3" cy="18" r="1.5" fill="currentColor" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Numbered List"
-                              onClick={() => insertTextAtCursor("\n1. ", "\n", "First operational step")}
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <line x1="10" y1="6" x2="21" y2="6" />
-                                <line x1="10" y1="12" x2="21" y2="12" />
-                                <line x1="10" y1="18" x2="21" y2="18" />
-                                <path d="M4 6h1v4M4 10h2M3 14h3l-3 4h3" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Blockquote"
-                              onClick={() => insertTextAtCursor("\n> ", "\n", "Editorial quote or equipment recommendation...")}
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
-                                <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Horizontal Divider"
-                              onClick={() => insertTextAtCursor("\n\n---\n\n", "", "")}
-                            >
-                              —
-                            </button>
-                          </div>
-
-                          <div className="cms-tb-sep" />
-
-                          {/* Media & Embeds */}
-                          <div className="cms-tb-group">
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Insert Link"
-                              onClick={() => {
-                                setLinkModalText('')
-                                setLinkModalOpen(true)
-                              }}
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                              </svg>
-                            </button>
-                            {/* Image Pill Button */}
-                            <button
-                              type="button"
-                              className="cms-tb-btn-image"
-                              title="Insert Image (from Media Library or URL)"
-                              onClick={() => {
-                                const textarea = contentTextareaRef.current
-                                let selectedText = ''
-                                if (textarea && editorMode === 'code') {
-                                  setSavedCursorPos({ start: textarea.selectionStart, end: textarea.selectionEnd })
-                                  selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd).trim()
-                                }
-                                setImageModalUrl('')
-                                setImageModalAlt(selectedText || '')
-                                setImageModalCaption('')
-                                setImageModalTab('library')
-                                setEditingBlockIndex(null)
-                                setImageModalOpen(true)
-                              }}
+                              className={`cms-mode-toggle-btn ${editorMode === 'preview' ? 'active' : ''}`}
+                              onClick={() => setEditorMode('preview')}
+                              title="Live Reader Preview: Preview how this article looks to readers on the website"
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                <circle cx="8.5" cy="8.5" r="1.5" />
-                                <polyline points="21 15 16 10 5 21" />
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
                               </svg>
-                              <span>Image</span>
-                            </button>
-
-                            {/* YouTube Pill Button */}
-                            <button
-                              type="button"
-                              className="cms-tb-btn-youtube"
-                              title="Insert YouTube Video Embed (Live Player)"
-                              onClick={() => {
-                                const textarea = contentTextareaRef.current
-                                let selectedText = ''
-                                if (textarea && editorMode === 'code') {
-                                  setSavedCursorPos({ start: textarea.selectionStart, end: textarea.selectionEnd })
-                                  selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd).trim()
-                                }
-                                setYoutubeModalUrl('')
-                                setYoutubeModalTitle(selectedText || '')
-                                setYoutubeModalOpen(true)
-                              }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                              </svg>
-                              <span>YouTube</span>
-                            </button>
-                          </div>
-
-                          {/* Undo / Redo */}
-                          <div className="cms-tb-history-group">
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Undo"
-                              disabled={historyIndex <= 0}
-                              onClick={handleUndo}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 7v6h6" />
-                                <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-                              </svg>
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-tb-btn"
-                              title="Redo"
-                              disabled={historyIndex >= contentHistory.length - 1}
-                              onClick={handleRedo}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M21 7v6h-6" />
-                                <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
-                              </svg>
+                              <span>Preview</span>
                             </button>
                           </div>
                         </div>
 
-                        {/* Visual WYSIWYG Mode vs Markdown Code Mode */}
-                        {editorMode === 'visual' ? (
-                          <div className="cms-visual-editor-container">
-                            {editorBlocks.map((block, bIdx) => (
-                              <React.Fragment key={block.id || `blk-${bIdx}`}>
-                                {block.type === 'image' && (
-                                  <div className="cms-visual-block cms-visual-image-block">
-                                    <div className="cms-vib-header">
-                                      <div className="cms-vib-badge blue">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                          <circle cx="8.5" cy="8.5" r="1.5" />
-                                          <polyline points="21 15 16 10 5 21" />
-                                        </svg>
-                                        <span>IMAGE EMBED</span>
-                                        {block.alt && <span className="cms-vib-alt-tag">{block.alt}</span>}
-                                      </div>
-                                      <div className="cms-vib-actions">
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn replace"
-                                          title="Replace from Media Library (galleries)"
-                                          onClick={() => {
-                                            setEditingBlockIndex(bIdx)
-                                            setImageModalUrl(block.url || '')
-                                            setImageModalAlt(block.alt || '')
-                                            setImageModalCaption(block.caption || '')
-                                            setImageModalTab('library')
-                                            setImageModalOpen(true)
-                                          }}
-                                        >
-                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <polyline points="1 4 1 10 7 10" />
-                                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                                          </svg>
-                                          <span>Replace from Media Library</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn move"
-                                          title="Move Up"
-                                          disabled={bIdx === 0}
-                                          onClick={() => handleMoveBlock(bIdx, 'up')}
-                                        >
-                                          ▲
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn move"
-                                          title="Move Down"
-                                          disabled={bIdx === editorBlocks.length - 1}
-                                          onClick={() => handleMoveBlock(bIdx, 'down')}
-                                        >
-                                          ▼
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn delete"
-                                          title="Delete this image"
-                                          onClick={() => handleDeleteBlock(bIdx)}
-                                        >
-                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <polyline points="3 6 5 6 21 6" />
-                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                          </svg>
-                                          <span>Delete</span>
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    <div
-                                      className="cms-vib-media-wrapper"
-                                      title="Click to replace image from Media Library"
-                                      onClick={() => {
-                                        setEditingBlockIndex(bIdx)
-                                        setImageModalUrl(block.url || '')
-                                        setImageModalAlt(block.alt || '')
-                                        setImageModalCaption(block.caption || '')
-                                        setImageModalTab('library')
-                                        setImageModalOpen(true)
-                                      }}
-                                    >
-                                      <img
-                                        src={block.url}
-                                        alt={block.alt || 'Jobsite Equipment Image'}
-                                        className="cms-vib-img clickable-thumb"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).src = '/images/why-choose-v900-jobsite.png'
-                                        }}
-                                      />
-                                    </div>
-
-                                    <div className="cms-vib-caption-row">
-                                      <span className="cms-vib-caption-label">Caption:</span>
-                                      <input
-                                        type="text"
-                                        className="cms-vib-caption-input"
-                                        placeholder="Add an optional caption for this image (e.g. Scissor lift operation)..."
-                                        value={block.caption || ''}
-                                        onChange={(e) => handleUpdateImageDetails(bIdx, block.alt || '', e.target.value)}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-
-                                {block.type === 'video' && (
-                                  <div className="cms-visual-block cms-visual-video-block">
-                                    <div className="cms-vib-header video">
-                                      <div className="cms-vib-badge red">
-                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                                        </svg>
-                                        <span>YOUTUBE VIDEO EMBED</span>
-                                        {block.videoTitle && <span className="cms-vib-alt-tag">{block.videoTitle}</span>}
-                                      </div>
-                                      <div className="cms-vib-actions">
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn move"
-                                          title="Move Up"
-                                          disabled={bIdx === 0}
-                                          onClick={() => handleMoveBlock(bIdx, 'up')}
-                                        >
-                                          ▲
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn move"
-                                          title="Move Down"
-                                          disabled={bIdx === editorBlocks.length - 1}
-                                          onClick={() => handleMoveBlock(bIdx, 'down')}
-                                        >
-                                          ▼
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-vib-btn delete"
-                                          title="Delete this video"
-                                          onClick={() => handleDeleteBlock(bIdx)}
-                                        >
-                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <polyline points="3 6 5 6 21 6" />
-                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                          </svg>
-                                          <span>Delete</span>
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    <div className="cms-vib-media-wrapper video-aspect">
-                                      <iframe
-                                        src={`https://www.youtube.com/embed/${block.videoId || extractYouTubeId(block.url || '')}`}
-                                        title={block.videoTitle || 'Jobsite Equipment Video'}
-                                        className="cms-vib-iframe"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                        allowFullScreen
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-
-                                {block.type === 'text' && (() => {
-                                  const blockId = block.id || `blk-${bIdx}`
-                                  const mode = getBlockViewMode(blockId, Boolean((block.text || '').trim()))
-                                  const renderedHtml = convertMarkdownToVisualHtml(block.text || '')
-
-                                  return (
-                                    <div className={`cms-visual-block cms-visual-text-block ${activeVisualBlockIndex === bIdx ? 'active-block' : ''}`}>
-                                      <div className="cms-vib-header text">
-                                        <div className="cms-vib-badge text">
-                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                                            <line x1="4" y1="6" x2="20" y2="6" />
-                                            <line x1="4" y1="12" x2="16" y2="12" />
-                                            <line x1="4" y1="18" x2="18" y2="18" />
-                                          </svg>
-                                          <span>PARAGRAPH SECTION #{bIdx + 1}</span>
-                                        </div>
-
-                                        {/* Block View Switcher */}
-                                        <div className="cms-vib-view-toggle">
-                                          <button
-                                            type="button"
-                                            className={`cms-vib-tab-btn ${mode === 'preview' ? 'active' : ''}`}
-                                            onClick={() => setBlockMode(blockId, 'preview')}
-                                            title="Real Visual Preview: Shows bold, underline, bullet lists, and headings formatted without ** or #"
-                                          >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                              <circle cx="12" cy="12" r="3" />
-                                            </svg>
-                                            <span>Real Preview</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className={`cms-vib-tab-btn ${mode === 'edit' ? 'active' : ''}`}
-                                            onClick={() => {
-                                              setBlockMode(blockId, 'edit')
-                                              setActiveVisualBlockIndex(bIdx)
-                                              setTimeout(() => visualBlockTextareaRefs.current[bIdx]?.focus(), 50)
-                                            }}
-                                            title="Edit text / markdown"
-                                          >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                            </svg>
-                                            <span>Edit Text</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className={`cms-vib-tab-btn ${mode === 'split' ? 'active' : ''}`}
-                                            onClick={() => {
-                                              setBlockMode(blockId, 'split')
-                                              setActiveVisualBlockIndex(bIdx)
-                                            }}
-                                            title="Dual view: Edit text with live formatted preview below"
-                                          >
-                                            <span>⚡ Dual</span>
-                                          </button>
-                                        </div>
-
-                                        <div className="cms-vib-actions">
-                                          <button
-                                            type="button"
-                                            className="cms-vib-btn move"
-                                            title="Move Up"
-                                            disabled={bIdx === 0}
-                                            onClick={() => handleMoveBlock(bIdx, 'up')}
-                                          >
-                                            ▲
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="cms-vib-btn move"
-                                            title="Move Down"
-                                            disabled={bIdx === editorBlocks.length - 1}
-                                            onClick={() => handleMoveBlock(bIdx, 'down')}
-                                          >
-                                            ▼
-                                          </button>
-                                          {editorBlocks.length > 1 && (
-                                            <button
-                                              type="button"
-                                              className="cms-vib-btn delete"
-                                              title="Delete this text block"
-                                              onClick={() => handleDeleteBlock(bIdx)}
-                                            >
-                                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <polyline points="3 6 5 6 21 6" />
-                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                              </svg>
-                                              <span>Delete</span>
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Real Formatted Preview: Bold is bold, underline is underlined, bullets are list, headings are styled - NO ** or # */}
-                                      {mode === 'preview' && (
-                                        <div
-                                          className="cms-visual-rendered-view"
-                                          onClick={() => {
-                                            setBlockMode(blockId, 'edit')
-                                            setActiveVisualBlockIndex(bIdx)
-                                            setTimeout(() => visualBlockTextareaRefs.current[bIdx]?.focus(), 50)
-                                          }}
-                                          title="Click anywhere to edit this section"
-                                        >
-                                          {renderedHtml ? (
-                                            <div
-                                              className="cms-rendered-content-flow"
-                                              dangerouslySetInnerHTML={{ __html: renderedHtml }}
-                                            />
-                                          ) : (
-                                            <div className="cms-rendered-empty-hint">
-                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                              </svg>
-                                              <span>Click to type here. Real formatting (Bold, Underline, Bullet Lists, Headings) will render live with zero ** or # syntax.</span>
-                                            </div>
-                                          )}
-                                          <div className="cms-rendered-edit-footer">
-                                            <span className="cms-rendered-edit-pill">
-                                              ✏️ Click anywhere to edit text
-                                            </span>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Edit Text Mode */}
-                                      {(mode === 'edit' || mode === 'split') && (
-                                        <div className="cms-vib-edit-wrapper">
-                                          <textarea
-                                            ref={(el) => { visualBlockTextareaRefs.current[bIdx] = el }}
-                                            rows={Math.max(5, (block.text || '').split('\n').length + 2)}
-                                            className="cms-visual-textarea"
-                                            placeholder="Type your content here... Highlight text and click Bold (B), Underline (U), Bullet List, or Headings on the toolbar above for instant visual formatting."
-                                            value={block.text || ''}
-                                            onFocus={() => setActiveVisualBlockIndex(bIdx)}
-                                            onChange={(e) => handleUpdateBlockText(bIdx, e.target.value)}
-                                          />
-
-                                          {/* Live preview strip below textarea */}
-                                          {Boolean((block.text || '').trim()) && (
-                                            <div className="cms-vib-live-preview-box">
-                                              <div className="cms-vib-live-preview-label">
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                                    <circle cx="12" cy="12" r="3" />
-                                                  </svg>
-                                                  <span>LIVE FORMATTED PREVIEW (NO ** OR #)</span>
-                                                </div>
-                                                <button
-                                                  type="button"
-                                                  className="cms-preview-done-btn"
-                                                  onClick={() => setBlockMode(blockId, 'preview')}
-                                                >
-                                                  Switch to Real Preview ✓
-                                                </button>
-                                              </div>
-                                              <div
-                                                className="cms-visual-rendered-view inline-preview"
-                                                dangerouslySetInnerHTML={{ __html: renderedHtml }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })()}
-
-                                {/* Quick Add Divider Between Blocks */}
-                                <div className="cms-visual-add-divider">
-                                  <div className="cms-vad-line" />
-                                  <div className="cms-vad-buttons">
-                                    <button
-                                      type="button"
-                                      className="cms-vad-btn text"
-                                      title="Add text paragraph here"
-                                      onClick={() => handleAddTextBlock(bIdx)}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <line x1="12" y1="5" x2="12" y2="19" />
-                                        <line x1="5" y1="12" x2="19" y2="12" />
-                                      </svg>
-                                      <span>+ Text</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="cms-vad-btn image"
-                                      title="Insert image from Media Library here"
-                                      onClick={() => {
-                                        setActiveVisualBlockIndex(bIdx)
-                                        setEditingBlockIndex(null)
-                                        setImageModalUrl('')
-                                        setImageModalAlt('')
-                                        setImageModalCaption('')
-                                        setImageModalTab('library')
-                                        setImageModalOpen(true)
-                                      }}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                        <circle cx="8.5" cy="8.5" r="1.5" />
-                                        <polyline points="21 15 16 10 5 21" />
-                                      </svg>
-                                      <span>+ Image (Media Library)</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="cms-vad-btn video"
-                                      title="Insert YouTube video here"
-                                      onClick={() => {
-                                        setActiveVisualBlockIndex(bIdx)
-                                        setYoutubeModalUrl('')
-                                        setYoutubeModalTitle('')
-                                        setYoutubeModalOpen(true)
-                                      }}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                                      </svg>
-                                      <span>+ YouTube</span>
-                                    </button>
-                                  </div>
-                                  <div className="cms-vad-line" />
-                                </div>
-                              </React.Fragment>
-                            ))}
-
-                            {/* Bottom Add Bar if blocks are empty */}
-                            {editorBlocks.length === 0 && (
-                              <div className="cms-visual-empty-actions">
-                                <p>Your article content is currently empty.</p>
-                                <div className="cms-vad-buttons centered">
-                                  <button type="button" className="cms-vad-btn text" onClick={() => handleAddTextBlock()}>
-                                    + Add Text
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="cms-vad-btn image"
-                                    onClick={() => {
-                                      setActiveVisualBlockIndex(null)
-                                      setEditingBlockIndex(null)
-                                      setImageModalUrl('')
-                                      setImageModalAlt('')
-                                      setImageModalCaption('')
-                                      setImageModalTab('library')
-                                      setImageModalOpen(true)
-                                    }}
-                                  >
-                                    + Insert Image from Library
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                        {/* Content Body Based on Mode */}
+                        {editorMode === 'visual' && (
+                          <div className="cms-tiptap-editor-wrap" style={{ minHeight: '520px' }}>
+                            <TiptapEditor
+                              content={editorContent}
+                              onChangeHtml={(html) => {
+                                setEditorContent(html)
+                                pushContentHistory(html)
+                              }}
+                              onChangeRaw={(raw) => setEditorContentRaw(raw)}
+                              mediaList={mediaList.map((m: any) => ({
+                                id: m.id,
+                                title: m.title,
+                                url: m.url,
+                                folder: m.folder,
+                                dateAdded: m.dateAdded,
+                                size: m.size
+                              }))}
+                              onMediaUploaded={(newItem: any) => {
+                                setMediaList((prev: any) => [newItem, ...prev])
+                              }}
+                            />
                           </div>
-                        ) : (
-                          <textarea
-                            ref={contentTextareaRef}
-                            rows={24}
-                            className="cms-wysiwyg-textarea"
-                            placeholder="Write your editorial article content here... Full support for Markdown, live media embeds, tables, callouts, and code blocks..."
-                            value={editorContent}
-                            onChange={(e) => {
-                              setEditorContent(e.target.value)
-                              pushContentHistory(e.target.value)
-                            }}
-                          />
+                        )}
+
+                        {editorMode === 'code' && (
+                          <div className="cms-code-editor-container" style={{ padding: '16px' }}>
+                            <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                Direct Markdown / HTML source. You can paste images (Cmd+V) or drop image files directly into this area.
+                              </span>
+                              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#94a3b8' }}>
+                                {editorContent.length} chars
+                              </span>
+                            </div>
+                            <textarea
+                              ref={contentTextareaRef}
+                              rows={26}
+                              className="cms-wysiwyg-textarea"
+                              style={{ width: '100%', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: '13.5px', lineHeight: 1.6 }}
+                              placeholder="Write or edit article content here... Paste images (Cmd+V) or drag & drop image files to auto-convert to WebP..."
+                              value={editorContent}
+                              onSelect={(e) => {
+                                const target = e.target as HTMLTextAreaElement
+                                setSavedCursorPos({ start: target.selectionStart, end: target.selectionEnd })
+                              }}
+                              onChange={(e) => {
+                                setEditorContent(e.target.value)
+                                pushContentHistory(e.target.value)
+                              }}
+                              onPaste={async (e) => {
+                                const items = e.clipboardData?.items
+                                if (!items) return
+                                for (let i = 0; i < items.length; i++) {
+                                  if (items[i].type.startsWith('image/')) {
+                                    const file = items[i].getAsFile()
+                                    if (file) {
+                                      e.preventDefault()
+                                      const reader = new FileReader()
+                                      reader.onload = () => {
+                                        const img = new Image()
+                                        img.onload = () => {
+                                          const canvas = document.createElement('canvas')
+                                          canvas.width = img.width
+                                          canvas.height = img.height
+                                          const ctx = canvas.getContext('2d')
+                                          ctx?.drawImage(img, 0, 0)
+                                          const webpUrl = canvas.toDataURL('image/webp', 0.88)
+                                          insertMediaAtSavedCursor(`\n\n![Pasted Image](${webpUrl})\n\n`)
+                                          showToast('Image pasted and converted to WebP.', 'success')
+                                        }
+                                        img.src = reader.result as string
+                                      }
+                                      reader.readAsDataURL(file)
+                                      return
+                                    }
+                                  }
+                                }
+                              }}
+                              onDrop={async (e) => {
+                                const files = e.dataTransfer?.files
+                                if (!files || files.length === 0) return
+                                for (let i = 0; i < files.length; i++) {
+                                  if (files[i].type.startsWith('image/')) {
+                                    e.preventDefault()
+                                    const reader = new FileReader()
+                                    reader.onload = () => {
+                                      const img = new Image()
+                                      img.onload = () => {
+                                        const canvas = document.createElement('canvas')
+                                        canvas.width = img.width
+                                        canvas.height = img.height
+                                        const ctx = canvas.getContext('2d')
+                                        ctx?.drawImage(img, 0, 0)
+                                        const webpUrl = canvas.toDataURL('image/webp', 0.88)
+                                        insertMediaAtSavedCursor(`\n\n![Dropped Image](${webpUrl})\n\n`)
+                                        showToast('Image dropped and converted to WebP.', 'success')
+                                      }
+                                      img.src = reader.result as string
+                                    }
+                                    reader.readAsDataURL(files[i])
+                                    return
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {editorMode === 'preview' && (
+                          <div className="cms-article-live-preview-box" style={{ padding: '28px', background: 'var(--cms-card-bg, #ffffff)', minHeight: '440px' }}>
+                            <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--cms-border, #e2e8f0)', paddingBottom: '16px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#dc2626' }}>
+                                {editorCategory || 'Jobsite Productivity'}
+                              </span>
+                              <h2 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--cms-text, #0f172a)', margin: '8px 0' }}>
+                                {editorTitle || 'Untitled Editorial Post'}
+                              </h2>
+                              {editorExcerpt && (
+                                <p style={{ fontSize: '15px', color: 'var(--cms-text-muted, #64748b)', fontStyle: 'italic', margin: 0 }}>
+                                  {editorExcerpt}
+                                </p>
+                              )}
+                            </div>
+                            <div className="raf-article-prose" style={{ lineHeight: 1.85, color: 'var(--cms-text, #334155)' }}>
+                              {renderMarkdownToReact(editorContent, 'editor-live-preview')}
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -6844,7 +6084,15 @@ export default function AdminDashboard() {
                     </svg>
                   </button>
 
-                  <div className="cms-kiuq-brand">
+                  <div className="cms-kiuq-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img
+                      src="/images/header-logo.webp"
+                      alt="Happy Machinery"
+                      style={{ height: '28px', width: 'auto', objectFit: 'contain' }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/images/logo.png'
+                      }}
+                    />
                     <div className="cms-kiuq-brand-info">
                       <span className="cms-kiuq-brand-name">Happy Machinery</span>
                       <span className="cms-kiuq-brand-tag">Asset & Media Library</span>

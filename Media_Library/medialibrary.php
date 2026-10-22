@@ -985,11 +985,11 @@ function saveSecurityData($data) {
 
 function defaultAppSettings() {
     return [
-        "app_name" => "File Manager-KiuQ",
-        "dashboard_logo_url" => "",
-        "favicon_url" => "",
+        "app_name" => "Happy Machinery Media",
+        "dashboard_logo_url" => "/images/header-logo.webp",
+        "favicon_url" => "/images/logo.png",
         "dashboard_theme_url" => "",
-        "footer_name" => "KiuQ.com",
+        "footer_name" => "Happy Machinery",
     ];
 }
 

@@ -338,6 +338,17 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     )
   }
 
+  // Rich HTML block pass-through (for Tiptap / Gutenberg rich blocks)
+  if (line.startsWith('<') && (line.endsWith('>') || line.includes('</'))) {
+    return (
+      <div
+        key={key}
+        className="blog-body-html-block"
+        dangerouslySetInnerHTML={{ __html: line }}
+      />
+    )
+  }
+
   return (
     <p key={key} className="blog-body-p">
       {renderInlineMarkdown(line, `${key}-p`)}

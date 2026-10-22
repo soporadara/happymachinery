@@ -1,0 +1,564 @@
+/* ==============================================================================
+   Happy Machinery — Modern Tiptap WYSIWYG Editor Styles
+   Seamless fluid writing, inline media controls, drag & drop, clipboard paste
+   ============================================================================== */
+
+/* Editor Container */
+.tiptap-editor-root {
+  background: var(--cms-card-bg, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 16px;
+  overflow: visible;
+  position: relative;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  font-family: inherit;
+}
+
+.cms-theme-dark .tiptap-editor-root,
+html.dark .tiptap-editor-root,
+.dark .tiptap-editor-root {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+/* Sticky MenuBar */
+.tiptap-menubar {
+  position: sticky;
+  top: 72px;
+  z-index: 25;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 12px;
+  background: rgba(248, 250, 252, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--cms-border, #e2e8f0);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
+.cms-theme-dark .tiptap-menubar,
+html.dark .tiptap-menubar,
+.dark .tiptap-menubar {
+  background: rgba(15, 23, 42, 0.96);
+  border-bottom-color: #334155;
+}
+
+.tiptap-tb-btn {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 120ms ease;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.tiptap-tb-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.tiptap-tb-btn.is-active,
+.tiptap-tb-btn.active {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626 !important;
+  font-weight: 700;
+}
+
+.cms-theme-dark .tiptap-tb-btn,
+html.dark .tiptap-tb-btn,
+.dark .tiptap-tb-btn {
+  color: #94a3b8;
+}
+
+.cms-theme-dark .tiptap-tb-btn:hover,
+html.dark .tiptap-tb-btn:hover,
+.dark .tiptap-tb-btn:hover {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.cms-theme-dark .tiptap-tb-btn.is-active,
+html.dark .tiptap-tb-btn.is-active,
+.dark .tiptap-tb-btn.is-active {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171 !important;
+}
+
+.tiptap-tb-sep {
+  width: 1px;
+  height: 20px;
+  background: #cbd5e1;
+  margin: 0 4px;
+}
+
+.cms-theme-dark .tiptap-tb-sep,
+html.dark .tiptap-tb-sep,
+.dark .tiptap-tb-sep {
+  background: #334155;
+}
+
+/* Prose Content editable area */
+.tiptap.ProseMirror,
+.ProseMirror {
+  min-height: 480px;
+  padding: 24px 28px;
+  outline: none !important;
+  color: #1e293b;
+  font-size: 16px;
+  line-height: 1.8;
+  word-break: break-word;
+}
+
+.cms-theme-dark .tiptap.ProseMirror,
+.cms-theme-dark .ProseMirror,
+html.dark .tiptap.ProseMirror,
+html.dark .ProseMirror,
+.dark .tiptap.ProseMirror,
+.dark .ProseMirror {
+  color: #e2e8f0;
+}
+
+.tiptap.ProseMirror p,
+.ProseMirror p {
+  margin: 0 0 1.25em 0;
+}
+
+.tiptap.ProseMirror h1,
+.ProseMirror h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 1.6em 0 0.6em 0;
+  color: #0f172a;
+}
+
+.tiptap.ProseMirror h2,
+.ProseMirror h2 {
+  font-size: 1.5rem;
+  font-weight: 750;
+  line-height: 1.35;
+  margin: 1.4em 0 0.5em 0;
+  color: #0f172a;
+}
+
+.tiptap.ProseMirror h3,
+.ProseMirror h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 1.2em 0 0.4em 0;
+  color: #0f172a;
+}
+
+.cms-theme-dark .tiptap.ProseMirror h1,
+.cms-theme-dark .tiptap.ProseMirror h2,
+.cms-theme-dark .tiptap.ProseMirror h3,
+html.dark .tiptap.ProseMirror h1,
+html.dark .tiptap.ProseMirror h2,
+html.dark .tiptap.ProseMirror h3,
+.dark .tiptap.ProseMirror h1,
+.dark .tiptap.ProseMirror h2,
+.dark .tiptap.ProseMirror h3 {
+  color: #f8fafc;
+}
+
+.tiptap.ProseMirror ul,
+.ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.6em;
+  margin: 0 0 1.25em 0;
+}
+
+.tiptap.ProseMirror ol,
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.6em;
+  margin: 0 0 1.25em 0;
+}
+
+.tiptap.ProseMirror li,
+.ProseMirror li {
+  margin-bottom: 0.4em;
+}
+
+.tiptap.ProseMirror blockquote,
+.ProseMirror blockquote {
+  border-left: 4px solid #ef4444;
+  padding: 10px 18px;
+  margin: 1.5em 0;
+  background: rgba(239, 68, 68, 0.05);
+  border-radius: 0 10px 10px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+.cms-theme-dark .tiptap.ProseMirror blockquote,
+html.dark .tiptap.ProseMirror blockquote,
+.dark .tiptap.ProseMirror blockquote {
+  background: rgba(239, 68, 68, 0.12);
+  color: #cbd5e1;
+}
+
+.tiptap.ProseMirror hr,
+.ProseMirror hr {
+  border: 0;
+  border-top: 2px dashed #cbd5e1;
+  margin: 2em 0;
+}
+
+.cms-theme-dark .tiptap.ProseMirror hr,
+html.dark .tiptap.ProseMirror hr,
+.dark .tiptap.ProseMirror hr {
+  border-top-color: #334155;
+}
+
+.tiptap.ProseMirror code,
+.ProseMirror code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  background: rgba(148, 163, 184, 0.18);
+  padding: 2px 6px;
+  border-radius: 5px;
+  color: #dc2626;
+}
+
+.cms-theme-dark .tiptap.ProseMirror code,
+html.dark .tiptap.ProseMirror code,
+.dark .tiptap.ProseMirror code {
+  background: rgba(148, 163, 184, 0.22);
+  color: #f87171;
+}
+
+/* Tables inside Editor */
+.tiptap.ProseMirror table,
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5em 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tiptap.ProseMirror table th,
+.ProseMirror table th {
+  background: #f1f5f9;
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+.tiptap.ProseMirror table td,
+.ProseMirror table td {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.tiptap.ProseMirror table tr:nth-child(even),
+.ProseMirror table tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.cms-theme-dark .tiptap.ProseMirror table,
+html.dark .tiptap.ProseMirror table,
+.dark .tiptap.ProseMirror table {
+  border-color: #334155;
+}
+
+.cms-theme-dark .tiptap.ProseMirror table th,
+html.dark .tiptap.ProseMirror table th,
+.dark .tiptap.ProseMirror table th {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.cms-theme-dark .tiptap.ProseMirror table td,
+html.dark .tiptap.ProseMirror table td,
+.dark .tiptap.ProseMirror table td {
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+.cms-theme-dark .tiptap.ProseMirror table tr:nth-child(even),
+html.dark .tiptap.ProseMirror table tr:nth-child(even),
+.dark .tiptap.ProseMirror table tr:nth-child(even) {
+  background: rgba(30, 41, 59, 0.4);
+}
+
+/* Image Node Views */
+.tiptap-image-wrapper {
+  margin: 1.75em 0;
+  position: relative;
+  transition: all 150ms ease;
+}
+
+.tiptap-image-wrapper[data-alignment="center"] {
+  text-align: center;
+}
+
+.tiptap-image-wrapper[data-alignment="left"] {
+  text-align: left;
+}
+
+.tiptap-image-wrapper[data-alignment="right"] {
+  text-align: right;
+}
+
+.tiptap-image-wrapper img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.tiptap-image-wrapper img:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.tiptap-image-caption {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+}
+
+.cms-theme-dark .tiptap-image-caption,
+html.dark .tiptap-image-caption,
+.dark .tiptap-image-caption {
+  color: #94a3b8;
+}
+
+/* Youtube Embed Node */
+.tiptap-youtube-wrapper {
+  margin: 1.75em 0;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.tiptap-youtube-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Terminal Node View */
+.code-terminal-block {
+  margin: 1.75em 0;
+  background: #090d16;
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.code-terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+}
+
+.code-terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.code-terminal-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.code-terminal-dot.red { background: #ef4444; }
+.code-terminal-dot.yellow { background: #f59e0b; }
+.code-terminal-dot.green { background: #10b981; }
+
+.code-terminal-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.04em;
+}
+
+.code-terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-terminal-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.code-terminal-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.code-terminal-body {
+  padding: 16px 20px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+/* Link Card Node View */
+.rich-link-card {
+  margin: 1.5em 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  transition: all 140ms ease;
+  overflow: hidden;
+}
+
+.rich-link-card:hover {
+  border-color: #ef4444;
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.12);
+  transform: translateY(-1px);
+}
+
+.cms-theme-dark .rich-link-card,
+html.dark .rich-link-card,
+.dark .rich-link-card {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+/* Modals Overlay & Box */
+.tiptap-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.tiptap-modal-dialog {
+  background: #ffffff;
+  border-radius: 20px;
+  max-width: 820px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cms-theme-dark .tiptap-modal-dialog,
+html.dark .tiptap-modal-dialog,
+.dark .tiptap-modal-dialog {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+.tiptap-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cms-theme-dark .tiptap-modal-header,
+html.dark .tiptap-modal-header,
+.dark .tiptap-modal-header {
+  border-bottom-color: #334155;
+}
+
+.tiptap-modal-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px 0 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cms-theme-dark .tiptap-modal-tabs,
+html.dark .tiptap-modal-tabs,
+.dark .tiptap-modal-tabs {
+  border-bottom-color: #334155;
+}
+
+.tiptap-modal-tab-btn {
+  padding: 8px 16px;
+  border-radius: 10px 10px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.tiptap-modal-tab-btn.active {
+  color: #dc2626;
+  border-bottom-color: #dc2626;
+  background: rgba(220, 38, 38, 0.05);
+}
+
+.tiptap-modal-body {
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tiptap-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cms-theme-dark .tiptap-modal-footer,
+html.dark .tiptap-modal-footer,
+.dark .tiptap-modal-footer {
+  border-top-color: #334155;
+}
