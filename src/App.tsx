@@ -129,9 +129,24 @@ function App() {
     return savedTheme === 'dark' ? 'dark' : 'light'
   })
 
-  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('hm_cart_items')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hm_cart_items', JSON.stringify(cartItems))
+    } catch (e) {
+      console.warn('Could not save cart items to localStorage', e)
+    }
+  }, [cartItems])
 
   useEffect(() => {
     localStorage.setItem('nova-theme', theme)

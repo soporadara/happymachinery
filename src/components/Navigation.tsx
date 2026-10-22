@@ -26,6 +26,8 @@ export default function Navigation({
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+  const [isCartBumping, setIsCartBumping] = useState(false)
+  const prevCartCountRef = useRef(cartItemCount)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -92,6 +94,15 @@ export default function Navigation({
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  useEffect(() => {
+    if (cartItemCount > prevCartCountRef.current) {
+      setIsCartBumping(true)
+      const timer = setTimeout(() => setIsCartBumping(false), 650)
+      return () => clearTimeout(timer)
+    }
+    prevCartCountRef.current = cartItemCount
+  }, [cartItemCount])
 
   return (
     <nav className={`navbar${isScrolled ? ' scrolled' : ''}${isMenuOpen ? ' menu-open' : ''}`}>
@@ -218,17 +229,21 @@ export default function Navigation({
           </form>
 
           <button
-            className="cart-toggle"
+            className={`cart-toggle${isCartBumping ? ' cart-bump' : ''}`}
             type="button"
             onClick={onOpenCart}
-            aria-label="View shopping cart"
+            aria-label={`View shopping cart (${cartItemCount} item${cartItemCount === 1 ? '' : 's'})`}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="9" cy="21" r="1"></circle>
               <circle cx="20" cy="21" r="1"></circle>
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
             </svg>
-            {cartItemCount > 0 && <span className="cart-badge">{cartItemCount}</span>}
+            {cartItemCount > 0 && (
+              <span className="cart-badge" key={cartItemCount}>
+                {cartItemCount}
+              </span>
+            )}
           </button>
 
           <button

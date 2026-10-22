@@ -7,8 +7,7 @@ export default function AboutUs() {
       <PageBanner
         badgeText="ABOUT HAPPY MACHINERY"
         eyebrow="COMMERCIAL HEAVY MACHINERY SPECIALISTS"
-        title="Experts in Mini Excavators, Skid Steers & Heavy Equipment"
-        titleHighlight="Engineered for Reliability"
+        title="About Us"
         description="We provide construction contractors, arborists, and landscapers with high-performance, compact machinery engineered for durability, agility in tight spaces, and maximum uptime."
         features={[
           { icon: '🇺🇸', text: 'USA Nationwide Warehousing' },

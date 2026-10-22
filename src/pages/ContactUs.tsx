@@ -78,9 +78,7 @@ export default function ContactUs() {
     <div className="page contact-page">
       <PageBanner
         badgeText="DIRECT SALES & TECHNICAL SERVICE"
-        eyebrow="COMMERCIAL HEAVY MACHINERY CONSULTATION"
-        title="Let's Discuss Your Fleet Needs"
-        titleHighlight="Fast Quotes & Support"
+        title="Contact Us"
         description="Inquire about mini skid steers, track loaders, accessories, bulk pricing, or schedule local technical support and nationwide freight delivery."
         features={[
           { icon: '📞', text: 'Direct US & Global Phone Support' },

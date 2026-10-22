@@ -212,9 +212,7 @@ export default function Store({ searchQuery }: StoreProps) {
     <div className="page store-page">
       <PageBanner
         badgeText="OFFICIAL TYPHON CATALOG"
-        eyebrow="EQUIPMENT & ATTACHMENT INVENTORY"
-        title="Skid Steers & Heavy Equipment"
-        titleHighlight="Ready for Dispatch"
+        title="Store"
         description="Explore genuine TYPHON machinery, Kubota-powered track loaders, mini excavators, hydraulic attachments, and OEM spare parts selected for dependable daily performance."
         features={[
           { icon: '⚡', text: '25 HP Kubota EPA Diesel' },

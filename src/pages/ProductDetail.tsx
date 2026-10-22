@@ -183,6 +183,9 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
   const [activeTab, setActiveTab] = useState<'overview' | 'specifications' | 'reviews' | 'shipping'>('overview')
   const [quantity, setQuantity] = useState(1)
   const thumbnailStripRef = useRef<HTMLDivElement>(null)
+  const mainProductImageRef = useRef<HTMLImageElement>(null)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -980,9 +983,100 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
   }
 
   const handleAdd = () => {
-    if (!addToCartEnabled) return
-    onAddToCart(product, quantity)
-    onOpenCart()
+    if (!addToCartEnabled || !product) return
+
+    const cartBtn = document.querySelector('.cart-toggle') as HTMLElement | null
+    const sourceImg = mainProductImageRef.current
+
+    if (!cartBtn || !sourceImg) {
+      onAddToCart(product, quantity)
+      setToastMessage(`Added ${quantity} × ${product.name} to cart`)
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
+      return
+    }
+
+    const imgRect = sourceImg.getBoundingClientRect()
+    const cartRect = cartBtn.getBoundingClientRect()
+
+    const startX = imgRect.left
+    const startY = imgRect.top
+    const width = imgRect.width
+    const height = imgRect.height
+
+    const targetCenterX = cartRect.left + cartRect.width / 2
+    const targetCenterY = cartRect.top + cartRect.height / 2
+
+    const startCenterX = startX + width / 2
+    const startCenterY = startY + height / 2
+
+    const deltaX = targetCenterX - startCenterX
+    const deltaY = targetCenterY - startCenterY
+
+    // Create flying clone element directly over current product image position
+    const clone = document.createElement('div')
+    clone.className = 'fly-to-cart-clone'
+    clone.style.top = `${startY}px`
+    clone.style.left = `${startX}px`
+    clone.style.width = `${width}px`
+    clone.style.height = `${height}px`
+    clone.style.backgroundImage = `url("${activeImage}")`
+
+    document.body.appendChild(clone)
+
+    // Keyframe sequence:
+    // 1) Anticipation dip: dropdown a bit (~36px down, slight squish)
+    // 2) Arc flight: launches towards header cart icon
+    // 3) Shrinks into cart icon and disappears
+    const animation = clone.animate(
+      [
+        {
+          transform: 'translate3d(0, 0, 0) scale(1) rotate(0deg)',
+          opacity: 1,
+          offset: 0
+        },
+        {
+          transform: 'translate3d(0, 36px, 0) scale(0.96, 0.92) rotate(0deg)',
+          opacity: 1,
+          offset: 0.18
+        },
+        {
+          transform: `translate3d(${deltaX * 0.45}px, ${deltaY * 0.4 - 36}px, 0) scale(0.6) rotate(-8deg)`,
+          opacity: 0.95,
+          offset: 0.52
+        },
+        {
+          transform: `translate3d(${deltaX * 0.88}px, ${deltaY * 0.88}px, 0) scale(0.22) rotate(-14deg)`,
+          opacity: 0.8,
+          offset: 0.84
+        },
+        {
+          transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(0.06) rotate(-20deg)`,
+          opacity: 0,
+          offset: 1
+        }
+      ],
+      {
+        duration: 820,
+        easing: 'cubic-bezier(0.2, 0.8, 0.25, 1)',
+        fill: 'forwards'
+      }
+    )
+
+    const finishFlight = () => {
+      clone.remove()
+      onAddToCart(product, quantity)
+      cartBtn.classList.remove('cart-bump')
+      void cartBtn.offsetWidth
+      cartBtn.classList.add('cart-bump')
+
+      setToastMessage(`Added ${quantity} × ${product.name} to cart`)
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500)
+    }
+
+    animation.onfinish = finishFlight
+    animation.oncancel = finishFlight
   }
 
   return (
@@ -1105,6 +1199,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   }}
                 >
                   <img
+                    ref={mainProductImageRef}
                     src={activeImage}
                     alt={product.name}
                     className="pdp-main-product-img"
@@ -2058,6 +2153,17 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Added to Cart Floating Toast */}
+      {toastMessage && (
+        <div className="pdp-cart-toast" role="status" aria-live="polite">
+          <span className="pdp-cart-toast-check">✓</span>
+          <span className="pdp-cart-toast-text">{toastMessage}</span>
+          <button type="button" className="pdp-cart-toast-btn" onClick={onOpenCart}>
+            View Cart
+          </button>
         </div>
       )}
     </div>

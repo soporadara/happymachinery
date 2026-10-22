@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
 import './EquipmentAssistant.css'
 
 type Message = {
@@ -86,9 +85,6 @@ interface EquipmentAssistantProps {
 }
 
 export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantProps = {}) {
-  const location = useLocation()
-  const isHomePage = location.pathname === '/'
-
   const [isOpen, setIsOpen] = useState(false)
   const [isContactOpen, setIsContactOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -130,9 +126,8 @@ export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantPro
 
   return (
     <aside className="equipment-assistant-dock" aria-label="Customer contact & assistance">
-      {/* 1. Direct Contact Widget (ONLY ON HOME PAGE) - Positioned above Need Help Choosing */}
-      {isHomePage && (
-        <div className="floating-widget-wrapper contact-widget-wrapper">
+      {/* 1. Direct Contact Support Widget (Shown on all pages) */}
+      <div className="floating-widget-wrapper contact-widget-wrapper">
           {isContactOpen && (
             <div className="quick-contact-panel" role="dialog" aria-modal="true" aria-label="Direct Contact Support">
               <header className="quick-contact-header">
@@ -229,14 +224,13 @@ export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantPro
               {isContactOpen ? (
                 <span className="floating-close-cross">×</span>
               ) : (
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                 </svg>
               )}
             </button>
           </div>
         </div>
-      )}
 
       {/* 2. Need Help Choosing Assistant Widget - Circle UI with Hover Tooltip Pill & Radar Pulse Wave */}
       <div className="floating-widget-wrapper assistant-widget-wrapper">

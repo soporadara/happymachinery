@@ -598,7 +598,7 @@ html.dark .assistant-footer {
   .equipment-assistant-dock {
     right: 14px;
     bottom: 14px;
-    gap: 12px;
+    gap: 10px;
   }
   .floating-circle-btn {
     width: 48px;
@@ -607,6 +607,10 @@ html.dark .assistant-footer {
   .assistant-panel,
   .quick-contact-panel {
     width: calc(100vw - 28px);
+    max-width: 360px;
+    max-height: calc(100dvh - 110px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     border-radius: 18px;
   }
   .floating-btn-tooltip {

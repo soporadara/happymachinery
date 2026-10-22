@@ -1901,3 +1901,97 @@ html.dark .pdp-specs-table tr:nth-child(even) {
 html.dark .pdp-specs-table td {
   border-color: #334155;
 }
+
+/* ==============================================================================
+   Fly to Cart Animation & Toast Styles
+   ============================================================================== */
+.fly-to-cart-clone {
+  position: fixed;
+  z-index: 999999;
+  pointer-events: none;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border-radius: 16px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+  will-change: transform, opacity;
+}
+
+.pdp-cart-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  background: rgba(7, 24, 46, 0.94);
+  color: #ffffff;
+  padding: 12px 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: toastFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.pdp-cart-toast-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.pdp-cart-toast-text {
+  color: #f1f5f9;
+}
+
+.pdp-cart-toast-btn {
+  background: #0066ff;
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pdp-cart-toast-btn:hover {
+  background: #1a75ff;
+  transform: scale(1.04);
+}
+
+@keyframes toastFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@media (max-width: 640px) {
+  .pdp-cart-toast {
+    bottom: 20px;
+    width: calc(100% - 32px);
+    max-width: 380px;
+    padding: 10px 16px;
+    font-size: 0.84rem;
+    white-space: normal;
+  }
+}

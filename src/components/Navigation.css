@@ -404,18 +404,41 @@
 
 .cart-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  background: #ef4444;
-  color: #fff;
+  top: -5px;
+  right: -5px;
+  background: #ff2b2b;
+  color: #ffffff;
   font-size: 0.72rem;
   font-weight: 800;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 0 2px #0f305d, 0 3px 8px rgba(255, 43, 43, 0.7);
+  animation: badgePop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+  line-height: 1;
+}
+
+@keyframes badgePop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.35); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes cartBumpAnim {
+  0% { transform: scale(1); }
+  22% { transform: scale(1.25) rotate(-10deg); }
+  50% { transform: scale(1.15) rotate(8deg); }
+  75% { transform: scale(1.05) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.cart-toggle.cart-bump {
+  animation: cartBumpAnim 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 /* Dark Mode support */
@@ -464,6 +487,10 @@
   border-color: rgba(0, 102, 255, 0.25);
   background: rgba(7, 24, 46, 0.85);
   color: #d0e4fa;
+}
+
+.app-shell.dark .cart-badge {
+  box-shadow: 0 0 0 2px #07182e, 0 3px 8px rgba(255, 43, 43, 0.85);
 }
 
 .app-shell.dark .cart-toggle:hover,

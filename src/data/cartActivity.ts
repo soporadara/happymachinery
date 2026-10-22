@@ -14,28 +14,39 @@ export interface CartActivity {
   page: string
 }
 
+const safeUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'cart-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9)
+}
+
 const getCartSessionId = () => {
   const storageKey = 'happy-machinery-cart-session'
   const existing = sessionStorage.getItem(storageKey)
   if (existing) return existing
-  const created = crypto.randomUUID()
+  const created = safeUUID()
   sessionStorage.setItem(storageKey, created)
   return created
 }
 
 export const recordCartActivity = async (product: Product, quantity: number) => {
-  const activity: CartActivity = {
-    id: crypto.randomUUID(),
-    productId: product.id,
-    productName: product.name,
-    image: product.image,
-    quantity,
-    unitPrice: product.price,
-    total: product.price * quantity,
-    occurredAt: new Date().toISOString(),
-    sessionId: getCartSessionId(),
-    page: window.location.pathname
-  }
+  try {
+    const activity: CartActivity = {
+      id: safeUUID(),
+      productId: product.id,
+      productName: product.name,
+      image: product.image,
+      quantity,
+      unitPrice: product.price,
+      total: product.price * quantity,
+      occurredAt: new Date().toISOString(),
+      sessionId: getCartSessionId(),
+      page: window.location.pathname
+    }
 
-  await appendSharedContent('cart-activity', activity)
+    await appendSharedContent('cart-activity', activity)
+  } catch (err) {
+    console.warn('recordCartActivity notice:', err)
+  }
 }
