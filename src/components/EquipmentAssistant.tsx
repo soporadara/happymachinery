@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import './EquipmentAssistant.css'
 
 type Message = {
@@ -85,12 +86,29 @@ interface EquipmentAssistantProps {
 }
 
 export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantProps = {}) {
+  const location = useLocation()
+  const isHomePage = location.pathname === '/'
+
   const [isOpen, setIsOpen] = useState(false)
+  const [isContactOpen, setIsContactOpen] = useState(false)
   const [input, setInput] = useState('')
+
+  // Close popups on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false)
+        setIsContactOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   if (isCartOpen) {
     return null
   }
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
@@ -111,69 +129,189 @@ export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantPro
   }
 
   return (
-    <aside className={`equipment-assistant${isOpen ? ' is-open' : ''}`} aria-label="Equipment assistant">
-      {isOpen && (
-        <div className="assistant-panel">
-          <header className="assistant-header">
-            <div className="assistant-identity">
-              <span className="assistant-avatar" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M12 3a7 7 0 0 0-7 7v2a3 3 0 0 0 3 3h1v-5H5m14 0v2a3 3 0 0 1-3 3h-1v-5h4" />
-                  <path d="M9 19h4a3 3 0 0 0 3-3v-1" />
-                </svg>
-              </span>
-              <span><strong>Equipment Assistant</strong><small><i></i> Online · Equipment guide</small></span>
-            </div>
-            <button type="button" className="assistant-close" onClick={() => setIsOpen(false)} aria-label="Close equipment assistant">×</button>
-          </header>
+    <aside className="equipment-assistant-dock" aria-label="Customer contact & assistance">
+      {/* 1. Direct Contact Widget (ONLY ON HOME PAGE) - Positioned above Need Help Choosing */}
+      {isHomePage && (
+        <div className="floating-widget-wrapper contact-widget-wrapper">
+          {isContactOpen && (
+            <div className="quick-contact-panel" role="dialog" aria-modal="true" aria-label="Direct Contact Support">
+              <header className="quick-contact-header">
+                <div className="quick-contact-title-group">
+                  <span className="quick-contact-badge-dot" />
+                  <div>
+                    <h3>TYPHON Machinery Support</h3>
+                    <p>Live contractor sales & logistics channels</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="quick-contact-close-btn"
+                  onClick={() => setIsContactOpen(false)}
+                  aria-label="Close Contact Support"
+                >
+                  ×
+                </button>
+              </header>
 
-          <div className="assistant-conversation" aria-live="polite">
-            <div className="assistant-day">Today</div>
-            {messages.map((message) => (
-              <div className={`assistant-message ${message.from}`} key={message.id}>
-                {message.from === 'assistant' && <span className="message-mark">V</span>}
-                <p>{message.text}</p>
+              <div className="quick-contact-channels">
+                {/* Channel 1: WhatsApp Support */}
+                <a
+                  href="https://wa.me/13235325703"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="quick-contact-channel-card whatsapp"
+                >
+                  <div className="channel-icon-bubble whatsapp-bubble">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                      <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm5.79 14.07c-.24.68-1.4 1.28-1.93 1.34-.51.06-1.16.08-3.71-.97-2.18-.89-3.58-3.13-3.69-3.27-.11-.15-.89-1.18-.89-2.26 0-1.07.56-1.61.76-1.83.2-.22.44-.28.59-.28.15 0 .3 0 .43.01.14.01.32-.05.5.38.19.45.64 1.57.7 1.69.06.12.1.26.02.42-.08.16-.12.26-.24.4-.12.14-.25.31-.36.42-.12.12-.24.25-.1.5.14.24.63 1.04 1.36 1.69.94.84 1.73 1.1 1.98 1.22.25.12.39.1.53-.06.14-.17.62-.72.78-.97.17-.25.33-.21.56-.12.23.08 1.45.68 1.7.81.25.12.42.19.48.3.06.11.06.66-.18 1.34z" />
+                    </svg>
+                  </div>
+                  <div className="channel-info">
+                    <span className="channel-kicker">WhatsApp Support</span>
+                    <strong className="channel-val">United States: +1 323-532-5703</strong>
+                    <span className="channel-sub">Live chat with dispatch team &rarr;</span>
+                  </div>
+                </a>
+
+                {/* Channel 2: Phone Support */}
+                <a
+                  href="tel:+12132142203"
+                  className="quick-contact-channel-card phone"
+                >
+                  <div className="channel-icon-bubble phone-bubble">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                    </svg>
+                  </div>
+                  <div className="channel-info">
+                    <span className="channel-kicker">Phone Support</span>
+                    <strong className="channel-val">United States: +1 213-214-2203</strong>
+                    <span className="channel-sub">Toll-free contractor equipment hotline &rarr;</span>
+                  </div>
+                </a>
+
+                {/* Channel 3: Sales Enquiries */}
+                <a
+                  href="mailto:sales@typhonmachinery.com"
+                  className="quick-contact-channel-card email"
+                >
+                  <div className="channel-icon-bubble email-bubble">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect width="20" height="16" x="2" y="4" rx="2" />
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                    </svg>
+                  </div>
+                  <div className="channel-info">
+                    <span className="channel-kicker">Sales Enquiries</span>
+                    <strong className="channel-val">sales@typhonmachinery.com</strong>
+                    <span className="channel-sub">Official RFQ & pricing estimates &rarr;</span>
+                  </div>
+                </a>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
-          <div className="assistant-suggestions" aria-label="Suggested questions">
-            {starterOptions.map((option) => (
-              <button type="button" onClick={() => sendMessage(option)} key={option}>{option}</button>
-            ))}
-          </div>
-
-          <form className="assistant-compose" onSubmit={(event) => { event.preventDefault(); sendMessage(input) }}>
-            <input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask about your job or machine..."
-              aria-label="Message the V900 assistant"
-            />
-            <button type="submit" disabled={!input.trim()} aria-label="Send message">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m4 4 17 8-17 8 3-8-3-8Z"/><path d="M7 12h14"/></svg>
+          {/* Contact Circle Button with Hover Tooltip Pill (Image 3) & Radar Pulse Wave (Image 4) */}
+          <div className="floating-btn-container">
+            <span className="floating-btn-tooltip">Contact Us</span>
+            <button
+              type="button"
+              className={`floating-circle-btn contact-btn ${isContactOpen ? 'is-active' : ''}`}
+              onClick={() => {
+                setIsContactOpen((prev) => !prev)
+                if (isOpen) setIsOpen(false)
+              }}
+              aria-expanded={isContactOpen}
+              aria-label={isContactOpen ? 'Close contact channels' : 'Open contact channels'}
+            >
+              <span className="radar-wave-ring ring-1" aria-hidden="true" />
+              <span className="radar-wave-ring ring-2" aria-hidden="true" />
+              {isContactOpen ? (
+                <span className="floating-close-cross">×</span>
+              ) : (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+              )}
             </button>
-          </form>
-          <div className="assistant-footer">
-            <span>Need a person?</span><a href="/contact">Get a quote →</a>
           </div>
         </div>
       )}
 
-      <button
-        type="button"
-        className="assistant-launcher"
-        onClick={() => setIsOpen((current) => !current)}
-        aria-expanded={isOpen}
-        aria-label={isOpen ? 'Close equipment assistant' : 'Open equipment assistant'}
-      >
-        {isOpen ? <span className="launcher-close">×</span> : (
-          <>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/></svg>
-            <span><strong>Need help choosing?</strong><small>Ask our equipment assistant</small></span>
-          </>
+      {/* 2. Need Help Choosing Assistant Widget - Circle UI with Hover Tooltip Pill & Radar Pulse Wave */}
+      <div className="floating-widget-wrapper assistant-widget-wrapper">
+        {isOpen && (
+          <div className="assistant-panel">
+            <header className="assistant-header">
+              <div className="assistant-identity">
+                <span className="assistant-avatar" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M12 3a7 7 0 0 0-7 7v2a3 3 0 0 0 3 3h1v-5H5m14 0v2a3 3 0 0 1-3 3h-1v-5h4" />
+                    <path d="M9 19h4a3 3 0 0 0 3-3v-1" />
+                  </svg>
+                </span>
+                <span><strong>Equipment Assistant</strong><small><i></i> Online · Equipment guide</small></span>
+              </div>
+              <button type="button" className="assistant-close" onClick={() => setIsOpen(false)} aria-label="Close equipment assistant">×</button>
+            </header>
+
+            <div className="assistant-conversation" aria-live="polite">
+              <div className="assistant-day">Today</div>
+              {messages.map((message) => (
+                <div className={`assistant-message ${message.from}`} key={message.id}>
+                  {message.from === 'assistant' && <span className="message-mark">V</span>}
+                  <p>{message.text}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="assistant-suggestions" aria-label="Suggested questions">
+              {starterOptions.map((option) => (
+                <button type="button" onClick={() => sendMessage(option)} key={option}>{option}</button>
+              ))}
+            </div>
+
+            <form className="assistant-compose" onSubmit={(event) => { event.preventDefault(); sendMessage(input) }}>
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Ask about your job or machine..."
+                aria-label="Message the V900 assistant"
+              />
+              <button type="submit" disabled={!input.trim()} aria-label="Send message">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m4 4 17 8-17 8 3-8-3-8Z"/><path d="M7 12h14"/></svg>
+              </button>
+            </form>
+            <div className="assistant-footer">
+              <span>Need a person?</span><a href="/contact">Get a quote →</a>
+            </div>
+          </div>
         )}
-      </button>
+
+        <div className="floating-btn-container">
+          <span className="floating-btn-tooltip">Need help choosing?</span>
+          <button
+            type="button"
+            className={`floating-circle-btn assistant-launcher ${isOpen ? 'is-active' : ''}`}
+            onClick={() => {
+              setIsOpen((prev) => !prev)
+              if (isContactOpen) setIsContactOpen(false)
+            }}
+            aria-expanded={isOpen}
+            aria-label={isOpen ? 'Close equipment assistant' : 'Open equipment assistant'}
+          >
+            <span className="radar-wave-ring ring-1" aria-hidden="true" />
+            <span className="radar-wave-ring ring-2" aria-hidden="true" />
+            {isOpen ? (
+              <span className="floating-close-cross">×</span>
+            ) : (
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
     </aside>
   )
 }

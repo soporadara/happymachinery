@@ -68,7 +68,7 @@ export default function Seo() {
           url: `${SITE_URL}/`,
           logo: {
             '@type': 'ImageObject',
-            url: 'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp',
+            url: `${SITE_URL}/logo.png`,
           },
           email: 'support@happymachinery.com',
           brand: {

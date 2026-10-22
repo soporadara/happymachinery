@@ -34,7 +34,13 @@ const sharedContentApi = () => {
     'analytics-events',
     'site-settings',
     'site-pages',
-    'blog-categories'
+    'blog-categories',
+    'product-categories',
+    'trash-items',
+    'home-content',
+    'inquiries',
+    'orders',
+    'comments'
   ]
 
   return {
@@ -131,4 +137,8 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] })
   ],
+  server: {
+    host: true,
+    allowedHosts: true,
+  },
 })

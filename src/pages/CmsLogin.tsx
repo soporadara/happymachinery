@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { authenticateUser } from '../data/cmsAuth'
 import type { AdminUser } from '../data/cmsTypes'
+import { useSiteBranding } from '../data/siteBranding'
 import './CmsLogin.css'
 
 interface CmsLoginProps {
@@ -9,6 +10,7 @@ interface CmsLoginProps {
 }
 
 export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
+  const branding = useSiteBranding()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -73,10 +75,10 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
         <div className="cms-login-header">
           <div className="cms-login-logo-container">
             <img
-              src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
-              alt="Happy Machinery"
+              src={branding.logo || '/logo.png'}
+              alt={branding.siteName || 'Happy Machinery'}
               className="cms-login-brand-logo"
-              onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+              onError={(e) => { (e.target as HTMLImageElement).src = '/logo.png' }}
             />
           </div>
           <h1 className="cms-login-title">Sign in</h1>

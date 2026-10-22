@@ -1,21 +1,615 @@
-.equipment-assistant { position: fixed; right: 24px; bottom: 24px; z-index: 1000; font-family: Inter, system-ui, sans-serif; }
-.assistant-launcher { min-width: 196px; height: 50px; padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 999px; color: #fff; background: linear-gradient(135deg, #1683f8, #075ed7); box-shadow: 0 10px 24px rgba(7, 94, 215, .28); cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; }
-.assistant-launcher:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(7, 94, 215, .36); }
-.assistant-launcher svg { width: 20px; height: 20px; flex: 0 0 auto; }
-.assistant-launcher > span:not(.launcher-close) { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
-.assistant-launcher strong { font-size: .72rem; }.assistant-launcher small { margin-top: 2px; color: rgba(255,255,255,.78); font-size: .57rem; }
-.equipment-assistant.is-open .assistant-launcher { min-width: 48px; width: 48px; height: 48px; margin-left: auto; padding: 0; }
-.launcher-close { font-size: 1.7rem; font-weight: 300; line-height: 1; }
-.assistant-panel { width: min(390px, calc(100vw - 32px)); height: min(650px, calc(100vh - 110px)); margin-bottom: 14px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(92,164,245,.22); border-radius: 22px; background: #fff; box-shadow: 0 28px 70px rgba(2,17,39,.25); animation: assistant-in .24s ease-out; }
-@keyframes assistant-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
-.assistant-header { padding: 18px; display: flex; align-items: center; justify-content: space-between; color: #fff; background: linear-gradient(135deg, #071826, #0d3764); }
-.assistant-identity { display: flex; align-items: center; gap: 12px; }.assistant-avatar { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.18); border-radius: 13px; color: #7dd3fc; background: rgba(255,255,255,.08); }.assistant-avatar svg { width: 25px; }
-.assistant-identity > span:last-child { display: flex; flex-direction: column; }.assistant-identity strong { font-size: .9rem; }.assistant-identity small { margin-top: 4px; color: #b7c9d9; font-size: .65rem; }.assistant-identity i { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #37d67a; box-shadow: 0 0 0 3px rgba(55,214,122,.13); }
-.assistant-close { width: 34px; height: 34px; border: 0; border-radius: 50%; color: #c7d7e5; background: rgba(255,255,255,.08); font-size: 1.35rem; cursor: pointer; }
-.assistant-conversation { flex: 1; overflow-y: auto; padding: 18px 16px 10px; background: linear-gradient(180deg, #f8fbff, #fff); }.assistant-day { margin-bottom: 16px; color: #94a3b8; font-size: .62rem; text-align: center; text-transform: uppercase; letter-spacing: .09em; }
-.assistant-message { margin: 0 0 14px; display: flex; align-items: flex-end; gap: 8px; }.assistant-message.user { justify-content: flex-end; }.assistant-message p { max-width: 82%; margin: 0; padding: 12px 14px; border-radius: 15px 15px 15px 4px; color: #334155; background: #edf2f7; font-size: .78rem; line-height: 1.55; }.assistant-message.user p { color: #fff; border-radius: 15px 15px 4px 15px; background: #1d7ff3; }.message-mark { width: 25px; height: 25px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 8px; color: #fff; background: #0c2b5c; font-size: .65rem; font-weight: 900; }
-.assistant-suggestions { padding: 10px 14px; display: flex; gap: 7px; overflow-x: auto; border-top: 1px solid #e6eef6; background: #fff; }.assistant-suggestions button { flex: 0 0 auto; padding: 8px 11px; border: 1px solid rgba(29,127,243,.24); border-radius: 999px; color: #1767c5; background: #f5f9ff; font-size: .65rem; font-weight: 700; cursor: pointer; }.assistant-suggestions button:hover { color: #fff; background: #1d7ff3; }
-.assistant-compose { margin: 0 14px 10px; padding: 5px 5px 5px 13px; display: flex; align-items: center; border: 1.5px solid #b9cce0; border-radius: 14px; background: #fff; }.assistant-compose:focus-within { border-color: #1d7ff3; box-shadow: 0 0 0 3px rgba(29,127,243,.1); }.assistant-compose input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: 0; color: #0c2b5c; font-size: .76rem; }.assistant-compose button { width: 37px; height: 37px; display: grid; place-items: center; border: 0; border-radius: 10px; color: #fff; background: #1d7ff3; cursor: pointer; }.assistant-compose button:disabled { color: #94a3b8; background: #e2e8f0; cursor: default; }.assistant-compose svg { width: 18px; }
-.assistant-footer { padding: 0 16px 13px; display: flex; justify-content: center; gap: 6px; color: #94a3b8; font-size: .64rem; }.assistant-footer a { color: #1d7ff3; font-weight: 800; text-decoration: none; }
-.app-shell.dark .assistant-panel { border-color: rgba(92,164,245,.2); background: #0b1e34; }.app-shell.dark .assistant-conversation { background: linear-gradient(180deg,#0b1e34,#091827); }.app-shell.dark .assistant-message p { color: #d7e5f1; background: #17314d; }.app-shell.dark .assistant-message.user p { background: #1d7ff3; }.app-shell.dark .assistant-suggestions,.app-shell.dark .assistant-compose { border-color: #294966; background: #0b1e34; }.app-shell.dark .assistant-compose input { color: #fff; background: transparent; }.app-shell.dark .assistant-footer { background: #0b1e34; }
-@media (max-width: 560px) { .equipment-assistant { right: 12px; bottom: 12px; }.assistant-panel { width: calc(100vw - 24px); height: min(680px, calc(100vh - 76px)); border-radius: 18px; }.assistant-launcher { min-width: 48px; width: 48px; height: 48px; padding: 0; }.assistant-launcher > span:not(.launcher-close) { display: none; } }
+/* ==============================================================================
+   Happy Machinery - Floating Customer Dock
+   Circular Logo-Blue Widgets with Radar Pulse & Slide-Out Tooltips (Images 2, 3, 4)
+   ============================================================================== */
+
+.equipment-assistant-dock {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  font-family: Inter, system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.equipment-assistant-dock > * {
+  pointer-events: auto;
+}
+
+.floating-widget-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+/* --- Container for Button and Tooltip Pill --- */
+.floating-btn-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* --- Circular Floating Trigger Buttons (54px Round - Logo Blue) --- */
+.floating-circle-btn {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: linear-gradient(135deg, #0066ff 0%, #0047cc 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 102, 255, 0.45);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+  outline: none;
+}
+
+.floating-circle-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 30px rgba(0, 102, 255, 0.65);
+}
+
+.floating-circle-btn.is-active {
+  background: #07182e;
+  border-color: #38bdf8;
+  box-shadow: 0 8px 20px rgba(7, 24, 46, 0.5);
+}
+
+.floating-close-cross {
+  font-size: 1.8rem;
+  line-height: 1;
+  font-weight: 300;
+  color: #ffffff;
+}
+
+/* --- Concentric Radar Pulse Waves (Matching Screenshot 4) --- */
+.radar-wave-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 102, 255, 0.7);
+  pointer-events: none;
+  animation: radar-wave-anim 2.5s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.radar-wave-ring.ring-2 {
+  animation-delay: 1.15s;
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.floating-circle-btn.is-active .radar-wave-ring {
+  display: none;
+}
+
+@keyframes radar-wave-anim {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+/* --- Slide-Out Dark Tooltip Pill on Hover (Matching Screenshot 3) --- */
+.floating-btn-tooltip {
+  position: absolute;
+  right: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%) translateX(10px) scale(0.94);
+  white-space: nowrap;
+  background: #0b192c;
+  color: #ffffff;
+  padding: 7px 15px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10;
+}
+
+.floating-btn-container:hover .floating-btn-tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0) scale(1);
+}
+
+/* ==============================================================================
+   Quick Contact Floating Panel (Home Page Only)
+   ============================================================================== */
+.quick-contact-panel {
+  width: min(340px, calc(100vw - 32px));
+  margin-bottom: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 102, 255, 0.25);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(3, 12, 24, 0.28);
+  overflow: hidden;
+  animation: contact-panel-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes contact-panel-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.quick-contact-header {
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #07182e 0%, #0d284e 100%);
+  color: #ffffff;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.quick-contact-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quick-contact-badge-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  flex-shrink: 0;
+}
+
+.quick-contact-title-group h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.quick-contact-title-group p {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.quick-contact-close-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.quick-contact-close-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.quick-contact-channels {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.quick-contact-channel-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.quick-contact-channel-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 102, 255, 0.12);
+  border-color: #0066ff;
+}
+
+.channel-icon-bubble {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.whatsapp-bubble {
+  background: #25d366;
+  color: #ffffff;
+}
+
+.phone-bubble {
+  background: rgba(0, 102, 255, 0.1);
+  color: #0066ff;
+  border: 1px solid rgba(0, 102, 255, 0.25);
+}
+
+.email-bubble {
+  background: rgba(56, 189, 248, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.channel-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.channel-kicker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.channel-val {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-sub {
+  font-size: 0.66rem;
+  color: #0066ff;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* ==============================================================================
+   Assistant Chat Panel (Equipment Assistant)
+   ============================================================================== */
+.assistant-panel {
+  width: min(390px, calc(100vw - 32px));
+  height: min(650px, calc(100vh - 110px));
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(0, 102, 255, 0.25);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 28px 70px rgba(3, 12, 24, 0.32);
+  animation: assistant-in 0.24s ease-out;
+}
+
+@keyframes assistant-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+.assistant-header {
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #ffffff;
+  background: linear-gradient(135deg, #030c18, #07182e);
+  border-bottom: 1px solid rgba(0, 102, 255, 0.25);
+}
+
+.assistant-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.assistant-avatar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0, 102, 255, 0.35);
+  border-radius: 13px;
+  color: #38bdf8;
+  background: rgba(0, 102, 255, 0.15);
+}
+
+.assistant-avatar svg {
+  width: 25px;
+}
+
+.assistant-identity > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.assistant-identity strong {
+  font-size: 0.9rem;
+}
+
+.assistant-identity small {
+  margin-top: 4px;
+  color: #b7c9d9;
+  font-size: 0.65rem;
+}
+
+.assistant-identity i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #37d67a;
+  box-shadow: 0 0 0 3px rgba(55, 214, 122, 0.13);
+}
+
+.assistant-close {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  color: #c7d7e5;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 1.35rem;
+  cursor: pointer;
+}
+
+.assistant-conversation {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px 10px;
+  background: linear-gradient(180deg, #f8fbff, #ffffff);
+}
+
+.assistant-day {
+  margin-bottom: 16px;
+  color: #94a3b8;
+  font-size: 0.62rem;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.assistant-message {
+  margin: 0 0 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.assistant-message.user {
+  justify-content: flex-end;
+}
+
+.assistant-message p {
+  max-width: 82%;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 15px 15px 15px 4px;
+  color: #334155;
+  background: #edf2f7;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.assistant-message.user p {
+  color: #ffffff;
+  border-radius: 15px 15px 4px 15px;
+  background: #0066ff;
+  box-shadow: 0 3px 10px rgba(0, 102, 255, 0.3);
+}
+
+.message-mark {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #07182e;
+  font-size: 0.65rem;
+  font-weight: 900;
+}
+
+.assistant-suggestions {
+  padding: 10px 14px;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  border-top: 1px solid #e6eef6;
+  background: #ffffff;
+}
+
+.assistant-suggestions button {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border: 1px solid rgba(0, 102, 255, 0.25);
+  border-radius: 999px;
+  color: #0052cc;
+  background: #f0f6ff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.assistant-suggestions button:hover {
+  color: #ffffff;
+  background: #0066ff;
+}
+
+.assistant-compose {
+  margin: 0 14px 10px;
+  padding: 5px 5px 5px 13px;
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #b9cce0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.assistant-compose:focus-within {
+  border-color: #0066ff;
+  box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.15);
+}
+
+.assistant-compose input {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 0;
+  border: 0;
+  outline: 0;
+  color: #07182e;
+  font-size: 0.76rem;
+}
+
+.assistant-compose button {
+  width: 37px;
+  height: 37px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+  background: #0066ff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.assistant-compose button:hover:not(:disabled) {
+  background: #0052cc;
+}
+
+.assistant-compose button:disabled {
+  color: #94a3b8;
+  background: #e2e8f0;
+  cursor: default;
+}
+
+.assistant-compose svg {
+  width: 18px;
+}
+
+.assistant-footer {
+  padding: 0 16px 13px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 0.64rem;
+}
+
+.assistant-footer a {
+  color: #0066ff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+/* --- Dark Mode Styles --- */
+.app-shell.dark .assistant-panel,
+html.dark .assistant-panel,
+.app-shell.dark .quick-contact-panel,
+html.dark .quick-contact-panel {
+  border-color: rgba(0, 102, 255, 0.35);
+  background: #07182e;
+}
+
+.app-shell.dark .quick-contact-channels,
+html.dark .quick-contact-channels {
+  background: #0a1e38;
+}
+
+.app-shell.dark .quick-contact-channel-card,
+html.dark .quick-contact-channel-card {
+  background: #0f284e;
+  border-color: #1e3a66;
+}
+
+.app-shell.dark .channel-val,
+html.dark .channel-val {
+  color: #f1f5f9;
+}
+
+.app-shell.dark .assistant-conversation,
+html.dark .assistant-conversation {
+  background: linear-gradient(180deg, #07182e, #030c18);
+}
+
+.app-shell.dark .assistant-message p,
+html.dark .assistant-message p {
+  color: #d7e5f1;
+  background: #0f2748;
+}
+
+.app-shell.dark .assistant-suggestions,
+.app-shell.dark .assistant-compose,
+html.dark .assistant-suggestions,
+html.dark .assistant-compose {
+  border-color: #17365d;
+  background: #07182e;
+}
+
+.app-shell.dark .assistant-compose input,
+html.dark .assistant-compose input {
+  color: #ffffff;
+  background: transparent;
+}
+
+.app-shell.dark .assistant-footer,
+html.dark .assistant-footer {
+  background: #07182e;
+}
+
+@media (max-width: 560px) {
+  .equipment-assistant-dock {
+    right: 14px;
+    bottom: 14px;
+    gap: 12px;
+  }
+  .floating-circle-btn {
+    width: 48px;
+    height: 48px;
+  }
+  .assistant-panel,
+  .quick-contact-panel {
+    width: calc(100vw - 28px);
+    border-radius: 18px;
+  }
+  .floating-btn-tooltip {
+    display: none;
+  }
+}

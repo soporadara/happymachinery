@@ -12,12 +12,12 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
-  background-color: #070d1a;
+  background-color: #030c18;
   background-image: 
-    radial-gradient(circle at 15% 20%, rgba(37, 99, 235, 0.45) 0%, transparent 45%),
-    radial-gradient(circle at 85% 75%, rgba(29, 78, 216, 0.40) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.85) 0%, transparent 100%),
-    linear-gradient(135deg, #050a14 0%, #0c162d 50%, #050913 100%);
+    radial-gradient(circle at 15% 20%, rgba(0, 102, 255, 0.45) 0%, transparent 45%),
+    radial-gradient(circle at 85% 75%, rgba(0, 71, 204, 0.40) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(3, 12, 24, 0.85) 0%, transparent 100%),
+    linear-gradient(135deg, #030c18 0%, #07182e 50%, #030c18 100%);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #f8fafc;
   padding: 24px;
@@ -259,8 +259,8 @@
 }
 
 .cms-checkbox:checked {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: #0066ff;
+  border-color: #0066ff;
 }
 
 .cms-checkbox:checked::before {
@@ -388,26 +388,36 @@
 
 /* Recovery Modal */
 .cms-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(3, 7, 18, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(3, 7, 18, 0.78) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  z-index: 1000000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
 }
 
 .cms-recovery-modal {
   width: 100%;
-  max-width: 420px;
+  max-width: 440px;
+  margin: auto !important;
+  position: relative !important;
   background: #0f172a;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 18px;
+  border-radius: 20px;
   padding: 28px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
   color: #f1f5f9;
 }
 

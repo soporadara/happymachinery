@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { getV900ProductPath } from '../data/v900Urls'
+import { useSiteBranding } from '../data/siteBranding'
 import './Navigation.css'
 
 type NavigationProps = {
@@ -20,8 +21,10 @@ export default function Navigation({
   searchQuery,
   onSearchChange
 }: NavigationProps) {
+  const branding = useSiteBranding()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isScrolled, setIsScrolled] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const links = [
@@ -80,14 +83,23 @@ export default function Navigation({
     setIsSearchOpen(false)
   }, [location.pathname])
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20)
+    }
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   return (
-    <nav className="navbar">
+    <nav className={`navbar${isScrolled ? ' scrolled' : ''}${isMenuOpen ? ' menu-open' : ''}`}>
       <div className="nav-container">
         <NavLink to="/" className="nav-logo" aria-label="Happy Machinery home">
           <img
-            src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
-            alt="Happy Machinery"
-            onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+            src={(branding.logo && branding.logo !== '/logo.png') ? branding.logo : '/images/header-logo.webp'}
+            alt={branding.siteName || 'Happy Machinery'}
+            onError={(e) => { (e.target as HTMLImageElement).src = '/images/header-logo.png' }}
           />
         </NavLink>
 

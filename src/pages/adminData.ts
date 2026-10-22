@@ -21,6 +21,7 @@ export interface MediaItem {
   url: string
   dateAdded: string
   size?: string
+  folder?: 'features' | 'galleries' | 'profileimg' | string
 }
 
 export interface AdminProduct {
@@ -60,9 +61,11 @@ export interface Inquiry {
 export interface BlogReply {
   id: number
   author: string
+  email?: string
   text: string
   date: string
   isSeller?: boolean
+  replyToAuthor?: string
 }
 
 export interface BlogComment {
@@ -70,6 +73,7 @@ export interface BlogComment {
   postId: number
   postTitle: string
   author: string
+  email?: string
   text: string
   date: string
   status: 'Pending' | 'Approved' | 'Spam'
@@ -332,7 +336,7 @@ const EXISTING_PRODUCTS: AdminProduct[] = [
   {
     id: 901,
     name: 'Skid Steer V900 — Crimson Red',
-    sku: 'V900-RED',
+    sku: 'TYPH-V900R',
     category: 'Equipment > Skid Steer Loaders',
     description: 'Crimson Red V900 with Kubota D1105 diesel power and standard utility bucket.',
     image: '/images/loader-red.png',
@@ -345,7 +349,7 @@ const EXISTING_PRODUCTS: AdminProduct[] = [
   {
     id: 902,
     name: 'Skid Steer V900 — Industrial Yellow',
-    sku: 'V900-YELLOW',
+    sku: 'TYPH-V900Y',
     category: 'Equipment > Skid Steer Loaders',
     description: 'Industrial Yellow V900 with Kubota D1105 diesel power and standard utility bucket.',
     image: '/images/loader-yellow.png',
@@ -358,7 +362,7 @@ const EXISTING_PRODUCTS: AdminProduct[] = [
   {
     id: 903,
     name: 'Skid Steer V900 — Cobalt Blue',
-    sku: 'V900-BLUE',
+    sku: 'TYPH-V900B',
     category: 'Equipment > Skid Steer Loaders',
     description: 'Cobalt Blue V900 with Kubota D1105 diesel power and standard utility bucket.',
     image: '/images/loader-blue.png',
@@ -389,16 +393,30 @@ export const DEFAULT_PRODUCTS: AdminProduct[] = [
   ...IMPORTED_PRODUCTS
 ]
 
-// Default Media Assets
+// Default Media Assets organized by Media Library folder tree (galleries, features, profileimg)
 export const DEFAULT_MEDIA: MediaItem[] = [
-  { id: '1', title: 'V900 Jobsite Operations', url: '/images/why-choose-v900-jobsite.png', dateAdded: '2026-07-18', size: '3.0 MB' },
-  { id: '2', title: 'V900 Red Edition Pallet Fork', url: '/images/fork-red-jobsite.png', dateAdded: '2026-07-12', size: '2.7 MB' },
-  { id: '3', title: 'V900 Blue Edition Jobsite', url: '/images/fork-blue-jobsite.png', dateAdded: '2026-07-05', size: '2.7 MB' },
-  { id: '4', title: 'V900 Yellow Edition Jobsite', url: '/images/fork-yellow-jobsite.png', dateAdded: '2026-07-01', size: '2.7 MB' },
-  { id: '5', title: 'Crimson Red Loader Studio', url: '/images/loader-red.jpg', dateAdded: '2026-06-25', size: '491 KB' },
-  { id: '6', title: 'Industrial Yellow Loader Studio', url: '/images/loader-yellow.jpg', dateAdded: '2026-06-25', size: '302 KB' },
-  { id: '7', title: 'Cobalt Blue Loader Studio', url: '/images/loader-blue.jpg', dateAdded: '2026-06-25', size: '541 KB' },
-  { id: '8', title: 'V900 Transport Delivery', url: '/images/v900-delivery.png', dateAdded: '2026-06-20', size: '2.2 MB' }
+  // galleries folder
+  { id: '1', title: 'V900 Jobsite Operations', url: '/images/why-choose-v900-jobsite.png', dateAdded: '2026-07-18', size: '3.0 MB', folder: 'galleries' },
+  { id: '2', title: 'V900 Red Edition Pallet Fork', url: '/images/fork-red-jobsite.png', dateAdded: '2026-07-12', size: '2.7 MB', folder: 'galleries' },
+  { id: '3', title: 'V900 Blue Edition Jobsite', url: '/images/fork-blue-jobsite.png', dateAdded: '2026-07-05', size: '2.7 MB', folder: 'galleries' },
+  { id: '4', title: 'V900 Yellow Edition Jobsite', url: '/images/fork-yellow-jobsite.png', dateAdded: '2026-07-01', size: '2.7 MB', folder: 'galleries' },
+  { id: '5', title: 'Crimson Red Loader Studio', url: '/images/loader-red.jpg', dateAdded: '2026-06-25', size: '491 KB', folder: 'galleries' },
+  { id: '6', title: 'Industrial Yellow Loader Studio', url: '/images/loader-yellow.jpg', dateAdded: '2026-06-25', size: '302 KB', folder: 'galleries' },
+  { id: '7', title: 'Cobalt Blue Loader Studio', url: '/images/loader-blue.jpg', dateAdded: '2026-06-25', size: '541 KB', folder: 'galleries' },
+  { id: '8', title: 'V900 Transport Delivery', url: '/images/v900-delivery.png', dateAdded: '2026-06-20', size: '2.2 MB', folder: 'galleries' },
+  { id: '9', title: 'V900 Equipment Layout Overview', url: '/images/v900-equipment-layout.png', dateAdded: '2026-06-15', size: '2.6 MB', folder: 'galleries' },
+  { id: '10', title: 'Hero V900 Three Colors Lineup', url: '/images/hero-v900-three-colors.png', dateAdded: '2026-06-10', size: '2.8 MB', folder: 'galleries' },
+
+  // features folder
+  { id: '11', title: 'Happy Machinery Brand Logo', url: '/logo.png', dateAdded: '2026-10-20', size: '1.65 MB', folder: 'features' },
+  { id: '12', title: 'V900 Promotional Graphic', url: '/images/v900-promo.webp', dateAdded: '2026-07-15', size: '108 KB', folder: 'features' },
+  { id: '13', title: 'Why Choose Equipment Collage', url: '/images/why-choose-collage.jpg', dateAdded: '2026-07-08', size: '477 KB', folder: 'features' },
+
+  // profileimg folder
+  { id: '14', title: 'Executive Operations Specialist', url: '/images/about-team-1.png', dateAdded: '2026-07-16', size: '608 KB', folder: 'profileimg' },
+  { id: '15', title: 'Chief Field Engineer', url: '/images/about-team-2.jpg', dateAdded: '2026-07-14', size: '350 KB', folder: 'profileimg' },
+  { id: '16', title: 'Client Logistics Manager', url: '/images/about-team-3.png', dateAdded: '2026-07-10', size: '672 KB', folder: 'profileimg' },
+  { id: '17', title: 'Verified Customer Feedback Portraits', url: '/images/customer-feedback-portraits.png', dateAdded: '2026-07-02', size: '2.1 MB', folder: 'profileimg' }
 ]
 
 // Default inquiries
@@ -411,7 +429,54 @@ export const DEFAULT_INQUIRIES: Inquiry[] = [
 
 // Default comments
 export const DEFAULT_COMMENTS: BlogComment[] = [
-  { id: 1, postId: 1, postTitle: 'How to Choose the Right Mini Track Loader', author: 'Markus T.', text: 'Very detailed breakdown. The 12.7 GPM flow on the D1105 makes a massive difference for high-speed drilling.', date: '2026-07-22', status: 'Pending' },
-  { id: 2, postId: 2, postTitle: 'Stand-On Track Loaders vs. Wheeled Skid Steers', author: 'Alisha Ramirez', text: 'We replaced two of our older skid steers with stand-on tracks and saved a lot of yard clean-up repair time.', date: '2026-07-21', status: 'Approved' },
-  { id: 3, postId: 1, postTitle: 'How to Choose the Right Mini Track Loader', author: 'Anonymous Vendor', text: 'Check out cheap equipment deals on this link! spam-link.xyz', date: '2026-07-20', status: 'Spam' }
+  {
+    id: 1,
+    postId: 1,
+    postTitle: 'How to Choose the Right Mini Track Loader',
+    author: 'Markus T.',
+    email: 'markus.t@constructionpro.com',
+    text: 'Very detailed breakdown. The 12.7 GPM flow on the D1105 makes a massive difference for high-speed drilling.',
+    date: '2026-07-22',
+    status: 'Approved',
+    likes: 4,
+    replies: [
+      {
+        id: 101,
+        author: 'Happy Machinery Support',
+        email: 'support@happymachinery.com',
+        text: 'Glad you found it useful Markus! The high auxiliary hydraulic flow on the Kubota D1105 engine is definitely an industry highlight for demanding attachments.',
+        date: '2026-07-22',
+        isSeller: true
+      },
+      {
+        id: 102,
+        author: 'David Rodriguez',
+        email: 'david@rodriguezlandscaping.com',
+        text: 'Agree with Markus! We run an auger and trencher on ours every week and never experience hydraulic pressure drops.',
+        date: '2026-07-23',
+        replyToAuthor: 'Markus T.'
+      }
+    ]
+  },
+  {
+    id: 2,
+    postId: 2,
+    postTitle: 'Stand-On Track Loaders vs. Wheeled Skid Steers',
+    author: 'Alisha Ramirez',
+    email: 'alisha@ramirezlandscape.com',
+    text: 'We replaced two of our older skid steers with stand-on tracks and saved a lot of yard clean-up repair time.',
+    date: '2026-07-21',
+    status: 'Approved',
+    likes: 2
+  },
+  {
+    id: 3,
+    postId: 1,
+    postTitle: 'How to Choose the Right Mini Track Loader',
+    author: 'Anonymous Vendor',
+    email: 'vendor@spam.xyz',
+    text: 'Check out cheap equipment deals on this link! spam-link.xyz',
+    date: '2026-07-20',
+    status: 'Spam'
+  }
 ]

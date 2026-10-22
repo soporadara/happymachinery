@@ -93,7 +93,12 @@ export const IMPORTED_PRODUCTS: AdminProduct[] = csvRows.map((row, index) => {
   return {
     id: 100_000 + index,
     name: row.Name.trim(),
-    sku: row.SKU.trim() || `CSV-${index + 1}`,
+    sku: (() => {
+      const trimmed = row.SKU.trim()
+      if (!trimmed) return `TYPH-CSV-${index + 1}`
+      if (/^typh/i.test(trimmed)) return trimmed.replace(/^typh/i, 'TYPH')
+      return `TYPH-${trimmed.toUpperCase()}`
+    })(),
     category: row.Categories.trim() || 'Uncategorized',
     description: plainText(row.Description),
     shortDescription: plainText(row['Short description']),

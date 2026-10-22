@@ -14,8 +14,13 @@ import Blog from './pages/Blog'
 import ProductDetail from './pages/ProductDetail'
 import AdminDashboard from './pages/AdminDashboard'
 import Checkout from './pages/Checkout'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
+import Faq from './pages/Faq'
 import { recordCartActivity } from './data/cartActivity'
 import { usePageTracking } from './data/analyticsTracker'
+import { getMaintenanceConfig, isRouteUnderMaintenance, type MaintenanceConfig } from './data/maintenanceConfig'
+import MaintenanceSplash from './components/MaintenanceSplash'
 import './App.css'
 
 type Theme = 'light' | 'dark'
@@ -38,6 +43,37 @@ function AppContent({
   usePageTracking()
   const isAdminPage = location.pathname === ADMIN_PATH || location.pathname === '/hm-ops-7f3a9c2e8b41'
   const totalCartCount = cartItems.reduce((acc: number, item: any) => acc + item.quantity, 0)
+
+  // Maintenance Guardian State & Real-time Synchronization
+  const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>(() => getMaintenanceConfig())
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setMaintenanceConfig(getMaintenanceConfig())
+    }
+    window.addEventListener('hm-maintenance-updated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+    return () => {
+      window.removeEventListener('hm-maintenance-updated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [])
+
+  // Check if current user is an authenticated admin who can bypass maintenance
+  const hasAdminSession = Boolean(
+    localStorage.getItem('hm_cms_session') ||
+    localStorage.getItem('hm_admin_logged_in') ||
+    localStorage.getItem('currentUser')
+  )
+
+  const isUnderMaintenance =
+    !isAdminPage &&
+    !hasAdminSession &&
+    isRouteUnderMaintenance(location.pathname, maintenanceConfig)
+
+  if (isUnderMaintenance) {
+    return <MaintenanceSplash config={maintenanceConfig} />
+  }
 
   return (
     <div className={`app-shell ${theme} ${isAdminPage ? 'admin-console-mode' : ''}`}>
@@ -65,6 +101,10 @@ function AppContent({
           <Route path="/contact" element={<ContactUs />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/blog/:slug" element={<Blog />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/cookie-policy" element={<Navigate to="/privacy-policy#cookies" replace />} />
           <Route path="/hm-ops-7f3a9c2e8b41" element={<Navigate to={ADMIN_PATH} replace />} />
           <Route path={ADMIN_PATH} element={<AdminDashboard />} />
         </Routes>
@@ -96,6 +136,13 @@ function App() {
   useEffect(() => {
     localStorage.setItem('nova-theme', theme)
     localStorage.setItem('happy-theme', theme)
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+      document.body.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      document.body.classList.remove('dark')
+    }
   }, [theme])
 
   const toggleTheme = () => {

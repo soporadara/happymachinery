@@ -78,7 +78,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
     flow: '12.7 GPM (48 L/min) / 2,321 psi (16 MPa)',
     tracks: '180mm x 72mm x 45mm Reinforced Anti-Slip Rubber Tracks',
     width: '35.9 inches (911 mm)',
-    purchaseSku: 'TyPH-V900R',
+    purchaseSku: 'TYPH-V900R',
     purchaseUrl: '/store/Brand-New-TYPHON-STOMP-V900-1-4-Ton-Mini-Track-Loader-Featuring-Dual-Auxiliary-Hydraulics-%26-Kubota-D1105-25HP-USA-Engine-p849053936',
     fullDesc: 'The Crimson Red V900 mini skid steer is engineered for worksite visibility and continuous heavy-duty operation. Driven by a premium Kubota D1105 naturally aspirated 3-cylinder diesel engine, this tracked skid steer delivers 25 HP and 71.5 N·m torque. Featuring a rated pressure of 16 MPa and 12.7 GPM flow, it is optimized for efficient grading, lifting, and excavation with minimal site impact.'
   },
@@ -99,7 +99,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
     flow: '12.7 GPM (48 L/min) / 2,321 psi (16 MPa)',
     tracks: '180mm x 72mm x 45mm Reinforced Anti-Slip Rubber Tracks',
     width: '35.9 inches (911 mm)',
-    purchaseSku: 'TyPH-V900Y',
+    purchaseSku: 'TYPH-V900Y',
     purchaseUrl: '/store/Brand-New-TYPHON-STOMP-V900-1-4-Ton-Compact-Track-Loader-with-25HP-Kubota-Diesel-Engine-1-102-lb-Max-Load-p849060904',
     fullDesc: 'The classic construction Yellow V900 loader combines maximum site visibility with premium Kubota diesel reliability. Fitted with a 25 HP D1105 engine and low ground-pressure rubber tracks, it excels at trenching, municipal utility grading, and compact landscaping work.'
   },
@@ -120,7 +120,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
     flow: '12.7 GPM (48 L/min) / 2,321 psi (16 MPa)',
     tracks: '180mm x 72mm x 45mm Reinforced Anti-Slip Rubber Tracks',
     width: '35.9 inches (911 mm)',
-    purchaseSku: 'TyPH-V900B',
+    purchaseSku: 'TYPH-V900B',
     purchaseUrl: '/store/Brand-New-TYPHON-STOMP-V900-Mini-Track-Loader-Kubota-D1105-25HP-Diesel-Stand-On-Skid-Steer-EPA-EU-Stage-V-p849057653',
     fullDesc: 'The Cobalt Blue V900 package unites modern heavy equipment aesthetics with commercial Kubota diesel performance. Delivering 12.7 GPM auxiliary flow and 1,014 lbs rated capacity, the unit manages heavy material lifts and grading passes with ease.'
   }
@@ -145,6 +145,24 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
   const [isVideoActive, setIsVideoActive] = useState(false)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [zoomScale, setZoomScale] = useState(1)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const [isWheeling, setIsWheeling] = useState(false)
+  const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lightboxOpenTimeRef = useRef<number>(0)
+
+  const lightboxStageRef = useRef<HTMLDivElement>(null)
+  const lightboxThumbStripRef = useRef<HTMLDivElement>(null)
+  const touchStartRef = useRef<{
+    x: number
+    y: number
+    dist: number
+    midX: number
+    midY: number
+    initialZoom: number
+  } | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'specifications' | 'reviews' | 'shipping'>('overview')
   const [quantity, setQuantity] = useState(1)
   const thumbnailStripRef = useRef<HTMLDivElement>(null)
@@ -183,6 +201,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
 
   const product: LoaderProduct | null = baseProduct ? {
     ...baseProduct,
+    purchaseSku: (adminProduct?.sku ? adminProduct.sku.replace(/^typh/i, 'TYPH') : baseProduct.purchaseSku),
     name: adminProduct?.name || baseProduct.name,
     description: adminProduct?.description || baseProduct.description,
     fullDesc: adminProduct?.description || baseProduct.fullDesc,
@@ -220,40 +239,389 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
     }
   }, [id, navigate, productKey])
 
+  const handleResetView = useCallback(() => {
+    setZoomScale(1)
+    setPanOffset({ x: 0, y: 0 })
+    setIsDragging(false)
+  }, [])
+
+  const handleOpenLightbox = useCallback((index?: number) => {
+    if (typeof index === 'number') {
+      setActiveImageIndex(index)
+    }
+    handleResetView()
+    lightboxOpenTimeRef.current = Date.now()
+    setIsLightboxOpen(true)
+  }, [handleResetView])
+
   const handlePrevImage = useCallback(() => {
     setIsVideoActive(false)
     setActiveImageIndex((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1))
-    setZoomScale(1)
-  }, [galleryImages.length])
+    handleResetView()
+  }, [galleryImages.length, handleResetView])
 
   const handleNextImage = useCallback(() => {
     setIsVideoActive(false)
     setActiveImageIndex((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1))
-    setZoomScale(1)
-  }, [galleryImages.length])
+    handleResetView()
+  }, [galleryImages.length, handleResetView])
 
-  // Keyboard controls for lightbox
+  // Mouse Wheel Zoom (Safe, slow, bounded cursor-anchored zoom; min zoom 100% Fit)
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    // 1. Guard against trailing momentum wheel events immediately after modal opens
+    if (Date.now() - lightboxOpenTimeRef.current < 400) {
+      return
+    }
+
+    // 2. Distinguish pinch-to-zoom (ctrlKey) from accidental 2-finger page scroll
+    const isPinchOrCtrl = e.ctrlKey || e.metaKey
+    const isMouseWheelNotch = e.deltaMode !== 0
+    if (!isPinchOrCtrl && !isMouseWheelNotch && zoomScale <= 1) {
+      return
+    }
+
+    const stage = lightboxStageRef.current
+    if (!stage) return
+
+    const rect = stage.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left - rect.width / 2
+    const mouseY = e.clientY - rect.top - rect.height / 2
+
+    let delta = e.deltaY
+    if (e.deltaMode === 1) delta *= 16
+    else if (e.deltaMode === 2) delta *= 100
+
+    const zoomDelta = -delta * 0.0012
+    const zoomFactor = Math.min(1.15, Math.max(0.85, Math.exp(zoomDelta)))
+
+    setIsWheeling(true)
+    if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current)
+    wheelTimeoutRef.current = setTimeout(() => {
+      setIsWheeling(false)
+    }, 120)
+
+    setZoomScale((prevZoom) => {
+      let nextZoom = prevZoom * zoomFactor
+      // CLAMP: Minimum zoom is 1.0 (100% Fit). Never zoom out below 100%!
+      nextZoom = Math.min(8, Math.max(1, Number(nextZoom.toFixed(3))))
+      if (Math.abs(nextZoom - prevZoom) < 0.001) return prevZoom
+
+      if (nextZoom <= 1.02) {
+        setPanOffset({ x: 0, y: 0 })
+        return 1
+      }
+
+      setPanOffset((prevPan) => {
+        const ratio = nextZoom / prevZoom
+        const newX = mouseX - (mouseX - prevPan.x) * ratio
+        const newY = mouseY - (mouseY - prevPan.y) * ratio
+        const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
+        const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
+        const clampedX = Math.max(-maxPanX, Math.min(maxPanX, newX))
+        const clampedY = Math.max(-maxPanY, Math.min(maxPanY, newY))
+        return { x: Math.round(clampedX), y: Math.round(clampedY) }
+      })
+
+      return nextZoom
+    })
+  }, [zoomScale])
+
+  // Mouse Drag to Pan (Move Canvas)
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.button !== 1) return
+
+    if (zoomScale > 1 || isSpacePressed || e.button === 1) {
+      e.preventDefault()
+      setIsDragging(true)
+      setDragStart({
+        x: e.clientX - panOffset.x,
+        y: e.clientY - panOffset.y
+      })
+    }
+  }, [zoomScale, isSpacePressed, panOffset])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || zoomScale <= 1) return
+    e.preventDefault()
+    const stage = lightboxStageRef.current
+    const rawX = e.clientX - dragStart.x
+    const rawY = e.clientY - dragStart.y
+    if (stage) {
+      const rect = stage.getBoundingClientRect()
+      const maxPanX = Math.max(0, (rect.width * zoomScale - rect.width) / 2)
+      const maxPanY = Math.max(0, (rect.height * zoomScale - rect.height) / 2)
+      setPanOffset({
+        x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, rawX))),
+        y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, rawY)))
+      })
+    } else {
+      setPanOffset({
+        x: Math.round(rawX),
+        y: Math.round(rawY)
+      })
+    }
+  }, [isDragging, dragStart, zoomScale])
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  // Double Click: Toggle between 100% Fit and 2.0x Zoom at cursor
+  const handleStageDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoomScale > 1.1) {
+      handleResetView()
+    } else {
+      const stage = lightboxStageRef.current
+      if (stage) {
+        const rect = stage.getBoundingClientRect()
+        const mouseX = e.clientX - rect.left - rect.width / 2
+        const mouseY = e.clientY - rect.top - rect.height / 2
+        const targetZoom = 2.0
+        const ratio = targetZoom / 1
+        const rawX = mouseX - mouseX * ratio
+        const rawY = mouseY - mouseY * ratio
+        const maxPanX = Math.max(0, (rect.width * targetZoom - rect.width) / 2)
+        const maxPanY = Math.max(0, (rect.height * targetZoom - rect.height) / 2)
+        setPanOffset({
+          x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, rawX))),
+          y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, rawY)))
+        })
+        setZoomScale(targetZoom)
+      } else {
+        setZoomScale(2)
+      }
+    }
+  }, [zoomScale, handleResetView])
+
+  // Touch Support (Two-finger pinch-to-zoom & single-finger pan like Canva)
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      touchStartRef.current = {
+        x: touch.clientX - panOffset.x,
+        y: touch.clientY - panOffset.y,
+        dist: 0,
+        midX: touch.clientX,
+        midY: touch.clientY,
+        initialZoom: zoomScale,
+      }
+      if (zoomScale > 1) {
+        setIsDragging(true)
+      }
+    } else if (e.touches.length === 2) {
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      const midX = (t1.clientX + t2.clientX) / 2
+      const midY = (t1.clientY + t2.clientY) / 2
+      touchStartRef.current = {
+        x: panOffset.x,
+        y: panOffset.y,
+        dist,
+        midX,
+        midY,
+        initialZoom: zoomScale,
+      }
+      setIsDragging(false)
+    }
+  }, [panOffset, zoomScale])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current) return
+
+    if (e.touches.length === 1 && (zoomScale > 1 || isDragging)) {
+      const touch = e.touches[0]
+      setPanOffset({
+        x: Math.round(touch.clientX - touchStartRef.current.x),
+        y: Math.round(touch.clientY - touchStartRef.current.y)
+      })
+    } else if (e.touches.length === 2 && touchStartRef.current.dist > 0) {
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      const midX = (t1.clientX + t2.clientX) / 2
+      const midY = (t1.clientY + t2.clientY) / 2
+
+      const scaleDelta = dist / touchStartRef.current.dist
+      const newZoom = Math.min(8, Math.max(1, Number((touchStartRef.current.initialZoom * scaleDelta).toFixed(3))))
+
+      const stage = lightboxStageRef.current
+      if (stage) {
+        const rect = stage.getBoundingClientRect()
+        const pinchCenterX = touchStartRef.current.midX - rect.left - rect.width / 2
+        const pinchCenterY = touchStartRef.current.midY - rect.top - rect.height / 2
+        const panDeltaX = midX - touchStartRef.current.midX
+        const panDeltaY = midY - touchStartRef.current.midY
+        const ratio = newZoom / touchStartRef.current.initialZoom
+
+        const newPanX = pinchCenterX - (pinchCenterX - touchStartRef.current.x) * ratio + panDeltaX
+        const newPanY = pinchCenterY - (pinchCenterY - touchStartRef.current.y) * ratio + panDeltaY
+
+        setZoomScale(newZoom)
+        if (newZoom <= 1) {
+          setPanOffset({ x: 0, y: 0 })
+        } else {
+          const maxPanX = Math.max(0, (rect.width * newZoom - rect.width) / 2)
+          const maxPanY = Math.max(0, (rect.height * newZoom - rect.height) / 2)
+          setPanOffset({
+            x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newPanX))),
+            y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newPanY)))
+          })
+        }
+      } else {
+        setZoomScale(newZoom)
+      }
+    }
+  }, [zoomScale, isDragging])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 0) {
+      touchStartRef.current = null
+      setIsDragging(false)
+      if (zoomScale < 1) {
+        setZoomScale(1)
+        setPanOffset({ x: 0, y: 0 })
+      }
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      touchStartRef.current = {
+        x: touch.clientX - panOffset.x,
+        y: touch.clientY - panOffset.y,
+        dist: 0,
+        midX: touch.clientX,
+        midY: touch.clientY,
+        initialZoom: zoomScale,
+      }
+      if (zoomScale > 1) {
+        setIsDragging(true)
+      }
+    }
+  }, [zoomScale, panOffset])
+
+  // Keyboard Shortcuts
   useEffect(() => {
     if (!isLightboxOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsLightboxOpen(false)
-        setZoomScale(1)
-      } else if (e.key === 'ArrowLeft') {
-        handlePrevImage()
-      } else if (e.key === 'ArrowRight') {
-        handleNextImage()
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return
+      }
+
+      switch (e.key) {
+        case 'Escape':
+          e.preventDefault()
+          setIsLightboxOpen(false)
+          handleResetView()
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          handlePrevImage()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          handleNextImage()
+          break
+        case '+':
+        case '=':
+          e.preventDefault()
+          setZoomScale((prev) => Math.min(8, Number((prev * 1.25).toFixed(2))))
+          break
+        case '-':
+        case '_':
+          e.preventDefault()
+          setZoomScale((prev) => {
+            const next = Math.max(1, Number((prev / 1.25).toFixed(2)))
+            if (next <= 1) setPanOffset({ x: 0, y: 0 })
+            return next
+          })
+          break
+        case '0':
+          e.preventDefault()
+          handleResetView()
+          break
+        case '1':
+          e.preventDefault()
+          setZoomScale(1)
+          setPanOffset({ x: 0, y: 0 })
+          break
+        case '2':
+          e.preventDefault()
+          setZoomScale(2)
+          break
+        case ' ':
+          if (!e.repeat) {
+            e.preventDefault()
+            setIsSpacePressed(true)
+          }
+          break
+        case 'f':
+        case 'F':
+          e.preventDefault()
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen?.().catch(() => {})
+          } else {
+            document.exitFullscreen?.().catch(() => {})
+          }
+          break
+        default:
+          break
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        setIsSpacePressed(false)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
     document.body.style.overflow = 'hidden'
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
       document.body.style.overflow = ''
     }
-  }, [isLightboxOpen, handlePrevImage, handleNextImage])
+  }, [isLightboxOpen, handlePrevImage, handleNextImage, handleResetView])
+
+  // Thumbnail Strip Horizontal Scroll Controls
+  const scrollThumbStrip = (direction: 'left' | 'right') => {
+    if (!lightboxThumbStripRef.current) return
+    const scrollAmount = 360
+    lightboxThumbStripRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    })
+  }
+
+  const handleThumbWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!lightboxThumbStripRef.current) return
+    if (e.deltaY !== 0) {
+      lightboxThumbStripRef.current.scrollLeft += e.deltaY * 0.9
+    }
+  }
+
+  // Auto-scroll active thumbnail into view
+  useEffect(() => {
+    if (!isLightboxOpen || !lightboxThumbStripRef.current) return
+    const container = lightboxThumbStripRef.current
+    const activeChip = container.querySelector<HTMLElement>(`.lb-thumb-chip[data-index="${activeImageIndex}"]`)
+    if (activeChip) {
+      const chipLeft = activeChip.offsetLeft
+      const chipWidth = activeChip.offsetWidth
+      const containerWidth = container.clientWidth
+      const targetScrollLeft = chipLeft - (containerWidth / 2) + (chipWidth / 2)
+
+      container.scrollTo({
+        left: targetScrollLeft,
+        behavior: 'smooth'
+      })
+    }
+  }, [activeImageIndex, isLightboxOpen])
 
   const getShareUrl = () => {
     if (!product) return ''
@@ -318,7 +686,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
             <button
               type="button"
               className="pdp-gallery-expand-btn"
-              onClick={() => setIsLightboxOpen(true)}
+              onClick={() => handleOpenLightbox()}
               title="Expand full screen"
               aria-label="Expand image"
             >
@@ -348,7 +716,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
             {/* Main Stage: Image or Video */}
             <div
               className="pdp-main-image-viewport"
-              onDoubleClick={() => setIsLightboxOpen(true)}
+              onDoubleClick={() => handleOpenLightbox()}
               title="Double click to expand full screen"
             >
               {isVideoActive ? (
@@ -387,20 +755,36 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
 
           {/* Thumbnails Row (6 Thumbnails with Red Border for Active & Video Overlay) */}
           <div className="pdp-thumbnails-strip" ref={thumbnailStripRef}>
-            {galleryImages.slice(0, 5).map((img, idx) => (
-              <button
-                key={`${img}-${idx}`}
-                type="button"
-                className={`pdp-thumb-chip ${!isVideoActive && activeImageIndex === idx ? 'active' : ''}`}
-                onClick={() => {
-                  setIsVideoActive(false)
-                  setActiveImageIndex(idx)
-                }}
-                title={`View angle ${idx + 1}`}
-              >
-                <img src={img} alt={`Thumbnail ${idx + 1}`} />
-              </button>
-            ))}
+            {galleryImages.slice(0, 5).map((img, idx) => {
+              const isLastImageSlot = idx === 4 && galleryImages.length > 5
+              const remainingCount = galleryImages.length - 5
+              const isChipActive = !isVideoActive && (activeImageIndex === idx || (idx === 4 && activeImageIndex >= 4))
+              const displayImg = isLastImageSlot && activeImageIndex >= 4 ? galleryImages[activeImageIndex] : img
+
+              return (
+                <button
+                  key={`${img}-${idx}`}
+                  type="button"
+                  className={`pdp-thumb-chip ${isChipActive ? 'active' : ''} ${isLastImageSlot ? 'has-more-chip' : ''}`}
+                  onClick={() => {
+                    setIsVideoActive(false)
+                    setActiveImageIndex(isLastImageSlot && activeImageIndex >= 4 ? activeImageIndex : idx)
+                    if (isLastImageSlot) {
+                      handleOpenLightbox(isLastImageSlot && activeImageIndex >= 4 ? activeImageIndex : idx)
+                    }
+                  }}
+                  title={isLastImageSlot ? `View all ${galleryImages.length} images (+${remainingCount} more)` : `View angle ${idx + 1}`}
+                >
+                  <img src={displayImg} alt={`Thumbnail ${idx + 1}`} />
+                  {isLastImageSlot && (
+                    <div className="pdp-thumb-more-overlay">
+                      <span className="pdp-thumb-more-count">+{remainingCount}</span>
+                      <span className="pdp-thumb-more-label">MORE</span>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
 
             {/* Thumbnail 6: Video Demo with Play Overlay (Matches Screenshot Image 1) */}
             <button
@@ -580,6 +964,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                         "The Kubota D1105 diesel engine has incredible torque. Fits right through narrow 36-inch gates on our residential grading contracts. The hydraulic control response is silky smooth."
                       </p>
                     </div>
+
                     <div className="pdp-rev-card">
                       <div className="pdp-rev-head">
                         <strong>Kevin Miller</strong>
@@ -588,6 +973,116 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                       </div>
                       <p className="pdp-rev-quote">
                         "We purchased the {product.colorName} package with the TYPH-5005M pallet fork. Moving 1,000 lb paver pallets in tight backyards has cut our job times in half. Excellent machine!"
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Dave Hendrickson</strong>
+                        <span className="pdp-rev-company">Lone Star Grading &amp; Excavation, Texas</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Solid heavy-gauge steel chassis, reliable hydraulics, and fast cold-start performance. Has logged over 420 hours without a hitch."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Robert Sanchez</strong>
+                        <span className="pdp-rev-company">Apex Concrete &amp; Paving, Arizona</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "High ground clearance and balanced counterweight make trench backfilling fast and safe. Very impressive build quality."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Jason Tremblay</strong>
+                        <span className="pdp-rev-company">Northwoods Forestry &amp; Clearing, Minnesota</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Great auxiliary hydraulic flow rate for running post-hole augers and grapple buckets. Handles rocky soil easily."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Bryan Kowalski</strong>
+                        <span className="pdp-rev-company">Midwest Utility &amp; Pipeline, Illinois</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Universal SAE J2513 plate fits all our standard skid steer attachments. Ergonomic joystick controls reduce operator fatigue."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Anthony Vitale</strong>
+                        <span className="pdp-rev-company">Coastal Site Prep &amp; Masonry, Florida</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "The rubber track footprint provides low ground disturbance on manicured lawns while offering excellent pushing power."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Derek Van Dyke</strong>
+                        <span className="pdp-rev-company">Mountain View Hardscaping, Colorado</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Reliable power delivery on steep hillside driveways. Lift geometry and visibility from the standing platform are superior."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Greg Campbell</strong>
+                        <span className="pdp-rev-company">Blue Ridge Tree &amp; Excavation, Virginia</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Smooth throttle modulation and prompt nationwide delivery to our depot. Outstanding value compared to larger brand names."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Travis Sterling</strong>
+                        <span className="pdp-rev-company">Cascade Trenching &amp; Utilities, Washington</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Compact footprint makes city utility trenching effortless. High-output LED work lights make dawn and dusk work easy."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Marcus Brody</strong>
+                        <span className="pdp-rev-company">Brody Bros. Demolition &amp; Hauling, Pennsylvania</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Heavy-duty boom cylinders and rugged steel body withstand tough indoor demo environments with zero issues."
+                      </p>
+                    </div>
+
+                    <div className="pdp-rev-card">
+                      <div className="pdp-rev-head">
+                        <strong>Eric Lindstrom</strong>
+                        <span className="pdp-rev-company">Great Lakes Foundation &amp; Earthmoving, Michigan</span>
+                        <span className="pdp-rev-stars-small">★★★★★</span>
+                      </div>
+                      <p className="pdp-rev-quote">
+                        "Genuine Kubota engine parts are easily accessible for servicing. Outstanding dealer support and prompt technical answers."
                       </p>
                     </div>
                   </div>
@@ -631,7 +1126,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
 
           {/* SKU Code */}
           <p className="pdp-sku-row">
-            SKU: <strong>{product.purchaseSku}</strong>
+            SKU: <strong>{product.purchaseSku.replace(/^typh/i, 'TYPH')}</strong>
           </p>
 
           {/* Pricing Row: Original Strikethrough, Sale Price, SALE! Tag */}
@@ -754,12 +1249,16 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
             <a
               href={product.purchaseUrl}
               className="pdp-btn-buy-now"
-              aria-label={`Buy ${product.name} now`}
+              aria-label={`Buy ${product.name} in Store`}
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#dc2626" stroke="#dc2626" strokeWidth="1">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 0 1-8 0" />
               </svg>
-              <span>Buy Now</span>
+              <span>Buy in Store</span>
             </a>
           </div>
 
@@ -778,20 +1277,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
               </div>
             </div>
 
-            <div className="pdp-trust-badge">
-              <div className="pdp-trust-icon-box">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="2">
-                  <rect x="1" y="3" width="15" height="13" />
-                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                  <circle cx="5.5" cy="18.5" r="2.5" />
-                  <circle cx="18.5" cy="18.5" r="2.5" />
-                </svg>
-              </div>
-              <div className="pdp-trust-copy">
-                <strong>Fast Delivery</strong>
-                <span>Within 3-7 Days</span>
-              </div>
-            </div>
+
 
             <div className="pdp-trust-badge">
               <div className="pdp-trust-icon-box">
@@ -907,20 +1393,7 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
             </div>
           </div>
 
-          {/* Special Offer Promo Banner (Matches Image 1) */}
-          <div className="pdp-promo-card-banner">
-            <div className="pdp-promo-copy">
-              <span className="pdp-promo-kicker">SPECIAL OFFER</span>
-              <h3 className="pdp-promo-headline">Get the Best Deal<br />on Heavy Machinery</h3>
-              <p className="pdp-promo-subtext">Professional equipment for your business.</p>
-              <Link to="/store" className="pdp-promo-link-btn">
-                View All Products &rarr;
-              </Link>
-            </div>
-            <div className="pdp-promo-image-box">
-              <img src="/images/loader-red.png" alt="Happy Machinery Special Offer" />
-            </div>
-          </div>
+
         </div>
       </div>
 
@@ -932,54 +1405,99 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
           className="product-lightbox-modal"
           onClick={() => {
             setIsLightboxOpen(false)
-            setZoomScale(1)
+            handleResetView()
           }}
           role="dialog"
           aria-modal="true"
-          aria-label="Full screen image viewer"
+          aria-label="Full screen professional image viewer"
         >
           <div className="lightbox-content-box" onClick={(e) => e.stopPropagation()}>
+            {/* Top Bar Header & Controls */}
             <div className="lightbox-top-bar">
               <div className="lightbox-meta">
-                <h3>{product.name}</h3>
-                <span className="lightbox-count">Angle {activeImageIndex + 1} of {galleryImages.length}</span>
+                <div className="lightbox-title-row">
+                  <h3>{product.name}</h3>
+                  <span className="lb-pro-badge">PRO CANVAS</span>
+                </div>
+                <div className="lightbox-sub-meta">
+                  <span className="lightbox-count">Angle {activeImageIndex + 1} of {galleryImages.length}</span>
+                  <span className="lb-meta-dot">&bull;</span>
+                  <span className="lb-resolution-tag">High-Resolution Equipment View</span>
+                </div>
               </div>
+
               <div className="lightbox-zoom-actions">
+                {/* Zoom Out Button */}
                 <button
                   type="button"
                   className="lb-tool-btn"
-                  onClick={() => setZoomScale((prev) => Math.max(0.5, Number((prev - 0.25).toFixed(2))))}
-                  disabled={zoomScale <= 0.5}
-                  title="Zoom Out"
+                  onClick={() => setZoomScale((prev) => {
+                    const next = Math.max(1, Number((prev - 0.25).toFixed(2)))
+                    if (next <= 1) setPanOffset({ x: 0, y: 0 })
+                    return next
+                  })}
+                  disabled={zoomScale <= 1}
+                  title="Zoom Out (-)"
+                  aria-label="Zoom Out"
                 >
                   &minus;
                 </button>
-                <span className="lb-zoom-level">{Math.round(zoomScale * 100)}%</span>
+
+                {/* Preset Zoom Selector */}
+                <div className="lb-zoom-dropdown-wrap">
+                  <select
+                    className="lb-zoom-select"
+                    value={Math.round(zoomScale * 100)}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) / 100
+                      setZoomScale(val)
+                      if (val <= 1) setPanOffset({ x: 0, y: 0 })
+                    }}
+                    title="Choose Zoom Level"
+                  >
+                    <option value="100">100% (Fit)</option>
+                    <option value="125">125%</option>
+                    <option value="150">150%</option>
+                    <option value="200">200%</option>
+                    <option value="300">300%</option>
+                    <option value="400">400%</option>
+                    <option value="600">600%</option>
+                    <option value="800">800%</option>
+                  </select>
+                  <span className="lb-zoom-caret">&#9662;</span>
+                </div>
+
+                {/* Zoom In Button */}
                 <button
                   type="button"
                   className="lb-tool-btn"
-                  onClick={() => setZoomScale((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
-                  disabled={zoomScale >= 3}
-                  title="Zoom In"
+                  onClick={() => setZoomScale((prev) => Math.min(8, Number((prev + 0.25).toFixed(2))))}
+                  disabled={zoomScale >= 8}
+                  title="Zoom In (+)"
+                  aria-label="Zoom In"
                 >
                   +
                 </button>
+
+                {/* Reset / Fit to Screen Button */}
                 <button
                   type="button"
                   className="lb-tool-btn reset"
-                  onClick={() => setZoomScale(1)}
-                  title="Reset Zoom"
+                  onClick={handleResetView}
+                  title="Reset to Fit Screen (0)"
                 >
                   Reset
                 </button>
+
+                {/* Close Button */}
                 <button
                   type="button"
                   className="lb-close-btn"
                   onClick={() => {
                     setIsLightboxOpen(false)
-                    setZoomScale(1)
+                    handleResetView()
                   }}
-                  title="Close viewer"
+                  title="Close viewer (Esc)"
                   aria-label="Close viewer"
                 >
                   &times;
@@ -987,42 +1505,117 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
               </div>
             </div>
 
-            <div className="lightbox-main-stage">
+            {/* Main Stage Viewport */}
+            <div
+              className={`lightbox-main-stage ${isDragging ? 'is-dragging' : ''} ${isSpacePressed ? 'space-held' : ''}`}
+              ref={lightboxStageRef}
+              onWheel={handleWheelZoom}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onDoubleClick={handleStageDoubleClick}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {/* Previous Image Stage Arrow */}
               <button
                 type="button"
                 className="lightbox-stage-arrow prev"
-                onClick={handlePrevImage}
-                aria-label="Previous image"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handlePrevImage()
+                }}
+                aria-label="Previous image (Left Arrow)"
+                title="Previous image (←)"
               >
                 &lsaquo;
               </button>
-              <div className="lightbox-img-wrapper" style={{ transform: `scale(${zoomScale})` }}>
-                <img src={activeImage} alt={product.name} className="lightbox-zoom-img" />
+
+              {/* Transform Canvas Wrapper */}
+              <div
+                className="lightbox-img-wrapper"
+                style={{
+                  transform: `translate3d(${zoomScale <= 1 ? 0 : panOffset.x}px, ${zoomScale <= 1 ? 0 : panOffset.y}px, 0) scale(${zoomScale})`,
+                  transition: (isDragging || isWheeling) ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  cursor: isDragging
+                    ? 'grabbing'
+                    : (zoomScale > 1 || isSpacePressed)
+                      ? 'grab'
+                      : 'zoom-in'
+                }}
+              >
+                <img
+                  src={activeImage}
+                  alt={`${product.name} - Angle ${activeImageIndex + 1}`}
+                  className="lightbox-zoom-img"
+                  draggable={false}
+                />
               </div>
+
+              {/* Next Image Stage Arrow */}
               <button
                 type="button"
                 className="lightbox-stage-arrow next"
-                onClick={handleNextImage}
-                aria-label="Next image"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleNextImage()
+                }}
+                aria-label="Next image (Right Arrow)"
+                title="Next image (→)"
               >
                 &rsaquo;
               </button>
             </div>
 
-            <div className="lightbox-bottom-strip">
-              {galleryImages.map((img, idx) => (
-                <button
-                  key={`lb-${img}-${idx}`}
-                  type="button"
-                  className={`lb-thumb-chip ${activeImageIndex === idx ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveImageIndex(idx)
-                    setZoomScale(1)
-                  }}
-                >
-                  <img src={img} alt={`Angle ${idx + 1}`} />
-                </button>
-              ))}
+            {/* Bottom Sub-Images Strip with Left & Right Horizontal Scroll Controls */}
+            <div className="lightbox-bottom-container">
+              {/* Left Scroll Chevron Button */}
+              <button
+                type="button"
+                className="lightbox-thumb-scroll-btn left"
+                onClick={() => scrollThumbStrip('left')}
+                title="Scroll thumbnails left"
+                aria-label="Scroll thumbnails left"
+              >
+                &lsaquo;
+              </button>
+
+              {/* Scrollable Thumbnails Strip */}
+              <div
+                className="lightbox-bottom-strip"
+                ref={lightboxThumbStripRef}
+                onWheel={handleThumbWheel}
+              >
+                {galleryImages.map((img, idx) => (
+                  <button
+                    key={`lb-${img}-${idx}`}
+                    type="button"
+                    data-index={idx}
+                    className={`lb-thumb-chip ${activeImageIndex === idx ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveImageIndex(idx)
+                      handleResetView()
+                    }}
+                    title={`Angle ${idx + 1} of ${galleryImages.length}`}
+                  >
+                    <img src={img} alt={`Angle ${idx + 1}`} loading="lazy" />
+                    <span className="lb-thumb-number">#{idx + 1}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Right Scroll Chevron Button */}
+              <button
+                type="button"
+                className="lightbox-thumb-scroll-btn right"
+                onClick={() => scrollThumbStrip('right')}
+                title="Scroll thumbnails right"
+                aria-label="Scroll thumbnails right"
+              >
+                &rsaquo;
+              </button>
             </div>
           </div>
         </div>

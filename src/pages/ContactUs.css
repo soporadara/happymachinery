@@ -44,7 +44,7 @@
 
 .info-detail-row:hover {
   transform: translateY(-2px);
-  border-color: rgba(29, 127, 243, 0.28);
+  border-color: rgba(0, 102, 255, 0.28);
   box-shadow: 0 12px 28px rgba(12, 43, 92, 0.07);
 }
 
@@ -56,17 +56,17 @@
   height: 46px;
   border-radius: 50%;
   color: #fff;
-  background: #1d7ff3;
+  background: linear-gradient(135deg, #0066ff, #0047cc);
   font-size: 1.25rem;
   line-height: 1;
-  box-shadow: 0 8px 20px rgba(29, 127, 243, 0.2);
+  box-shadow: 0 8px 20px rgba(0, 102, 255, 0.3);
 }
 
 .info-detail-row h3 {
   font-size: 1.05rem;
   font-weight: 800;
   margin: 0 0 10px;
-  color: #0c2b5c;
+  color: #07182e;
 }
 
 .info-detail-row p {
@@ -92,13 +92,13 @@
 .office-addresses address {
   padding: 11px 12px;
   border-radius: 9px;
-  background: rgba(29, 127, 243, 0.045);
+  background: rgba(0, 102, 255, 0.05);
 }
 
 .info-detail-row address strong {
   display: block;
   margin-bottom: 2px;
-  color: #0c2b5c;
+  color: #07182e;
 }
 
 .contact-channel-list {
@@ -116,7 +116,7 @@
 }
 
 .contact-channel-list strong {
-  color: #0c2b5c;
+  color: #07182e;
   font-size: 0.8rem;
 }
 
@@ -141,23 +141,24 @@
 }
 
 .info-detail-row a {
-  color: #1d7ff3;
+  color: #0066ff;
   text-decoration: none;
   font-weight: 750;
 }
 
 .info-detail-row a:hover {
   text-decoration: underline;
+  color: #0052cc;
 }
 
 .contact-form {
   align-self: start;
   background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(92, 164, 245, 0.2);
+  border: 1px solid rgba(0, 102, 255, 0.18);
   border-radius: 18px;
   padding: 30px;
   backdrop-filter: blur(14px);
-  box-shadow: 0 16px 44px rgba(12, 43, 92, 0.08);
+  box-shadow: 0 16px 44px rgba(7, 24, 46, 0.08);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -165,12 +166,12 @@
 
 .contact-form-heading {
   padding-bottom: 18px;
-  border-bottom: 1px solid rgba(92, 164, 245, 0.16);
+  border-bottom: 1px solid rgba(0, 102, 255, 0.14);
 }
 
 .contact-form-heading .eyebrow {
   margin: 0 0 6px;
-  color: #1d7ff3;
+  color: #0066ff;
   font-size: 0.68rem;
   font-weight: 850;
   letter-spacing: 0.1em;
@@ -179,13 +180,13 @@
 
 .contact-form-heading h2 {
   margin: 0 0 6px;
-  color: #0c2b5c;
+  color: #07182e;
   font-size: 1.35rem;
 }
 
 .contact-form-heading span {
   display: block;
-  color: #52708a;
+  color: #64748b;
   font-size: 0.78rem;
   line-height: 1.55;
 }
@@ -199,19 +200,19 @@
 .form-group label {
   font-size: 0.88rem;
   font-weight: 800;
-  color: #0c2b5c;
+  color: #07182e;
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
   padding: 12px 16px;
-  border: 1px solid rgba(92, 164, 245, 0.24);
+  border: 1px solid rgba(0, 102, 255, 0.22);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.6);
   font-family: inherit;
   font-size: 0.95rem;
-  color: #0c2b5c;
+  color: #07182e;
   outline: none;
   transition: all 180ms ease;
 }
@@ -219,13 +220,14 @@
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  border-color: #5ca4f5;
+  border-color: #0066ff;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(92, 164, 245, 0.14);
+  box-shadow: 0 0 0 4px rgba(0, 102, 255, 0.16);
 }
 
 .submit-btn {
-  background: #0c2b5c;
+  background: linear-gradient(135deg, #0066ff 0%, #0047cc 100%);
+  box-shadow: 0 4px 16px rgba(0, 102, 255, 0.35);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -237,13 +239,15 @@
 }
 
 .submit-btn:hover {
-  background: #1d7ff3;
+  background: linear-gradient(135deg, #1a75ff 0%, #005ce6 100%);
+  box-shadow: 0 6px 22px rgba(0, 102, 255, 0.5);
   transform: translateY(-1px);
 }
 
 .submit-btn:disabled {
   background: #52708a;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .contact-location {
@@ -260,7 +264,7 @@
 
 .location-heading .eyebrow {
   margin: 0 0 8px;
-  color: #1d7ff3;
+  color: #0066ff;
   font-size: 0.72rem;
   font-weight: 850;
   letter-spacing: 0.1em;
@@ -269,7 +273,7 @@
 
 .location-heading h2 {
   margin: 0;
-  color: #0c2b5c;
+  color: #07182e;
   font-size: clamp(1.45rem, 2.5vw, 2rem);
   line-height: 1.15;
 }
@@ -277,7 +281,7 @@
 .location-heading > p {
   max-width: 440px;
   margin: 0;
-  color: #52708a;
+  color: #64748b;
   font-size: 0.82rem;
   line-height: 1.65;
 }
@@ -287,10 +291,10 @@
   grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.65fr);
   min-height: 440px;
   overflow: hidden;
-  border: 1px solid rgba(92, 164, 245, 0.2);
+  border: 1px solid rgba(0, 102, 255, 0.18);
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 18px 50px rgba(12, 43, 92, 0.1);
+  box-shadow: 0 18px 50px rgba(7, 24, 46, 0.1);
 }
 
 .location-map {
@@ -313,7 +317,7 @@
   flex-direction: column;
   justify-content: center;
   color: #fff;
-  background: linear-gradient(145deg, #071826, #0c3764);
+  background: linear-gradient(145deg, #07182e, #0052cc);
 }
 
 .location-pin {
@@ -322,16 +326,16 @@
   display: grid;
   place-items: center;
   margin-bottom: 28px;
-  border: 1px solid rgba(125, 211, 252, 0.24);
+  border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 13px;
-  color: #7dd3fc;
-  background: rgba(29, 127, 243, 0.14);
+  color: #38bdf8;
+  background: rgba(0, 102, 255, 0.18);
   font-size: 1.35rem;
 }
 
 .location-label {
   margin: 0 0 8px;
-  color: #7dd3fc;
+  color: #38bdf8;
   font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 0.11em;
@@ -386,18 +390,20 @@
   align-items: center;
   align-self: flex-start;
   gap: 10px;
-  padding: 11px 17px;
+  padding: 11px 18px;
   border-radius: 999px;
   color: #fff;
-  background: #1d7ff3;
+  background: linear-gradient(135deg, #0066ff 0%, #0047cc 100%);
+  box-shadow: 0 4px 14px rgba(0, 102, 255, 0.35);
   font-size: 0.76rem;
   font-weight: 800;
   text-decoration: none;
-  transition: transform 180ms ease, background 180ms ease;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .directions-link:hover {
-  background: #3990f5;
+  background: linear-gradient(135deg, #1a75ff 0%, #005ce6 100%);
+  box-shadow: 0 6px 18px rgba(0, 102, 255, 0.5);
   transform: translateY(-2px);
 }
 
@@ -488,7 +494,7 @@
 
 .app-shell.dark .submit-btn {
   background: #5ca4f5;
-  color: #0c2b5c;
+  color: #07182e;
 }
 
 .app-shell.dark .submit-btn:hover {

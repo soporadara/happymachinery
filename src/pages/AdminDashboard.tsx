@@ -33,10 +33,26 @@ import {
   DEFAULT_COMMENTS,
   DEFAULT_CART_ORDERS
 } from './adminData'
-import { IMPORTED_CATEGORY_PATHS } from '../data/importedProducts'
 import { readSharedContent, writeSharedContent } from '../data/sharedContentStorage'
 import { getBlogPostPath } from '../data/blogUrls'
+import { DEFAULT_HOME_CONTENT, HomePageContent } from '../data/homeContent'
+import HomePageCmsEditor from '../components/HomePageCmsEditor'
+import TopBlogsManager from '../components/TopBlogsManager'
+import { getMaintenanceConfig, saveMaintenanceConfig } from '../data/maintenanceConfig'
+import { cacheSiteSettings, updateBrowserFavicon } from '../data/siteBranding'
 import './AdminDashboard.css'
+
+export interface TrashItem {
+  id: string
+  originalId: string | number
+  type: 'article' | 'product' | 'blog-category' | 'product-category'
+  title: string
+  subtitle?: string
+  image?: string
+  deletedAt: string
+  deletedTimestamp: number
+  data: any
+}
 
 type CmsTab = 
   | 'dashboard' 
@@ -47,10 +63,22 @@ type CmsTab =
   | 'inquiries'
   | 'comments'
   | 'pages' 
+  | 'trash'
   | 'security' 
   | 'admins' 
   | 'settings'
   | 'maintenance'
+
+export interface AdminNotificationItem {
+  id: string
+  title: string
+  message: string
+  time: string
+  timestamp: number
+  read: boolean
+  type: 'inquiry' | 'product' | 'security' | 'system'
+  targetTab?: CmsTab
+}
 
 type SecuritySubTab = 
   | 'overview' 
@@ -61,6 +89,257 @@ type SecuritySubTab =
   | 'settings'
 
 type CmsTheme = 'dark' | 'light' | 'neon'
+
+export interface VisualBlock {
+  id: string
+  type: 'image' | 'video' | 'text'
+  url?: string
+  alt?: string
+  caption?: string
+  videoId?: string
+  videoTitle?: string
+  text?: string
+}
+
+export function parseContentToVisualBlocks(raw: string): VisualBlock[] {
+  if (!raw || !raw.trim()) {
+    return [{ id: 'blk-' + Date.now() + '-0', type: 'text', text: '' }]
+  }
+
+  const normalized = raw.replace(/\r\n/g, '\n')
+  // Match images: ![alt](url) with optional caption on next line *caption*
+  // Match videos: [Watch Video: title](url) or standalone YouTube URLs
+  const mediaRegex = /(!\[(.*?)\]\(([^\)]+)\)(?:\s*\n\s*[*_](.*?)[*_])?)|(\[(?:Watch Video(?::\s*(.*?))?|Video:\s*(.*?))\]\((https?:\/\/[^\s\)]+)\))|((?:^|\n)(https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?[^\s]+|embed\/[^\s]+|shorts\/[^\s]+)|youtu\.be\/[a-zA-Z0-9_-]+))(?:\n|$))/g
+
+  const blocks: VisualBlock[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = mediaRegex.exec(normalized)) !== null) {
+    const matchStart = match.index
+    const matchEnd = mediaRegex.lastIndex
+
+    const textBefore = normalized.substring(lastIndex, matchStart).trim()
+    if (textBefore) {
+      blocks.push({
+        id: 'blk-' + Math.random().toString(36).substring(2, 9),
+        type: 'text',
+        text: textBefore
+      })
+    }
+
+    if (match[1]) {
+      blocks.push({
+        id: 'blk-' + Math.random().toString(36).substring(2, 9),
+        type: 'image',
+        alt: (match[2] || '').trim(),
+        url: (match[3] || '').trim(),
+        caption: (match[4] || '').trim()
+      })
+    } else if (match[5]) {
+      const title = (match[6] || match[7] || 'Jobsite Equipment Video').trim()
+      const url = (match[8] || '').trim()
+      const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/)
+      blocks.push({
+        id: 'blk-' + Math.random().toString(36).substring(2, 9),
+        type: 'video',
+        videoTitle: title,
+        url,
+        videoId: ytMatch ? ytMatch[1] : ''
+      })
+    } else if (match[9] && match[10]) {
+      const url = match[10].trim()
+      const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/)
+      blocks.push({
+        id: 'blk-' + Math.random().toString(36).substring(2, 9),
+        type: 'video',
+        videoTitle: 'Jobsite Equipment Video',
+        url,
+        videoId: ytMatch ? ytMatch[1] : ''
+      })
+    }
+
+    lastIndex = matchEnd
+  }
+
+  const remainingText = normalized.substring(lastIndex).trim()
+  if (remainingText) {
+    blocks.push({
+      id: 'blk-' + Math.random().toString(36).substring(2, 9),
+      type: 'text',
+      text: remainingText
+    })
+  }
+
+  if (blocks.length === 0) {
+    blocks.push({ id: 'blk-' + Date.now() + '-0', type: 'text', text: '' })
+  }
+
+  return blocks
+}
+
+export function serializeVisualBlocksToContent(blocks: VisualBlock[]): string {
+  return blocks
+    .map((b) => {
+      if (b.type === 'image') {
+        const alt = (b.alt || 'Jobsite Equipment Image').trim()
+        const url = (b.url || '').trim()
+        if (!url) return ''
+        let res = `![${alt}](${url})`
+        if (b.caption && b.caption.trim()) {
+          res += `\n*${b.caption.trim()}*`
+        }
+        return res
+      } else if (b.type === 'video') {
+        const title = (b.videoTitle || 'Jobsite Equipment Video').trim()
+        const url = (b.url || '').trim()
+        if (!url) return ''
+        return `[Watch Video: ${title}](${url})`
+      } else {
+        return (b.text || '').trim()
+      }
+    })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+export function convertMarkdownToVisualHtml(md: string): string {
+  if (!md || !md.trim()) return ''
+
+  const lines = md.replace(/\r\n/g, '\n').split('\n')
+  const out: string[] = []
+
+  let inUl = false
+  let inOl = false
+  let inTable = false
+  let tableRows: string[][] = []
+
+  const closeLists = () => {
+    if (inUl) { out.push('</ul>'); inUl = false }
+    if (inOl) { out.push('</ol>'); inOl = false }
+  }
+
+  const flushTable = () => {
+    if (inTable && tableRows.length > 0) {
+      let tHtml = '<div class="cms-rendered-table-wrap"><table class="cms-rendered-table">'
+      tableRows.forEach((row, rIdx) => {
+        if (rIdx === 0) {
+          tHtml += '<thead><tr>' + row.map((c) => `<th>${formatInline(c)}</th>`).join('') + '</tr></thead><tbody>'
+        } else {
+          tHtml += '<tr>' + row.map((c) => `<td>${formatInline(c)}</td>`).join('') + '</tr>'
+        }
+      })
+      tHtml += '</tbody></table></div>'
+      out.push(tHtml)
+      inTable = false
+      tableRows = []
+    }
+  }
+
+  const formatInline = (str: string): string => {
+    let s = str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+
+    // Preserve and sanitize safe tags
+    s = s.replace(/&lt;u&gt;(.*?)&lt;\/u&gt;/gi, '<u>$1</u>')
+
+    // Inline Code: `code`
+    s = s.replace(/`([^`]+)`/g, '<code class="cms-inline-code">$1</code>')
+
+    // Bold: **text** or __text__
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>')
+
+    // Strikethrough: ~~text~~
+    s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>')
+
+    // Italic: *text* or _text_
+    s = s.replace(/(^|[^\*])\*([^\*]+)\*([^\*]|$)/g, '$1<em>$2</em>$3')
+    s = s.replace(/(^|[^_])_([^_]+)_([^_]|$)/g, '$1<em>$2</em>$3')
+
+    // Links: [text](url)
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="cms-inline-link">$1</a>')
+
+    return s
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i]
+    const trimmed = rawLine.trim()
+
+    if (!trimmed) {
+      closeLists()
+      flushTable()
+      continue
+    }
+
+    if (/^(---|___|\*\*\*)$/.test(trimmed)) {
+      closeLists()
+      flushTable()
+      out.push('<hr class="cms-rendered-hr" />')
+      continue
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.*)$/)
+    if (headingMatch) {
+      closeLists()
+      flushTable()
+      const level = headingMatch[1].length
+      const text = formatInline(headingMatch[2])
+      out.push(`<h${level} class="cms-rendered-h${level}">${text}</h${level}>`)
+      continue
+    }
+
+    const bulletMatch = trimmed.match(/^[-*•]\s+(.*)$/)
+    if (bulletMatch) {
+      flushTable()
+      if (inOl) { out.push('</ol>'); inOl = false }
+      if (!inUl) { out.push('<ul class="cms-rendered-ul">'); inUl = true }
+      out.push(`<li class="cms-rendered-li">${formatInline(bulletMatch[1])}</li>`)
+      continue
+    }
+
+    const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/)
+    if (numMatch) {
+      flushTable()
+      if (inUl) { out.push('</ul>'); inUl = false }
+      if (!inOl) { out.push('<ol class="cms-rendered-ol">'); inOl = true }
+      out.push(`<li class="cms-rendered-li">${formatInline(numMatch[2])}</li>`)
+      continue
+    }
+
+    const bqMatch = trimmed.match(/^>\s*(.*)$/)
+    if (bqMatch) {
+      closeLists()
+      flushTable()
+      out.push(`<blockquote class="cms-rendered-blockquote">${formatInline(bqMatch[1])}</blockquote>`)
+      continue
+    }
+
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      closeLists()
+      if (/^\|[\s\-:|]+\|$/.test(trimmed)) {
+        continue
+      }
+      const cells = trimmed.slice(1, -1).split('|').map((c) => c.trim())
+      inTable = true
+      tableRows.push(cells)
+      continue
+    }
+
+    closeLists()
+    flushTable()
+    out.push(`<p class="cms-rendered-p">${formatInline(trimmed)}</p>`)
+  }
+
+  closeLists()
+  flushTable()
+
+  return out.join('\n')
+}
 
 export type ArticleSectionType = 'heading' | 'text' | 'image' | 'video' | 'table'
 
@@ -244,28 +523,244 @@ export default function AdminDashboard() {
     return (localStorage.getItem('hm_cms_theme') as CmsTheme) || 'dark'
   })
 
-  // Navigation State
+  // Navigation State & Collapsible Sidebar
   const [activeTab, setActiveTab] = useState<CmsTab>('dashboard')
   const [securitySubTab, setSecuritySubTab] = useState<SecuritySubTab>('overview')
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('hm_cms_sidebar_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('hm_cms_sidebar_collapsed', String(next))
+      } catch {}
+      return next
+    })
+  }
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false)
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all')
+  const notificationRef = useRef<HTMLDivElement | null>(null)
+  const profileRef = useRef<HTMLDivElement | null>(null)
   const [globalSearch, setGlobalSearch] = useState('')
+  const mainContentRef = useRef<HTMLDivElement | null>(null)
+
+  // System & User Notifications State
+  const [notifications, setNotifications] = useState<AdminNotificationItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-admin-notifications')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return [
+      {
+        id: 'notif-1',
+        title: 'New Customer Inquiry',
+        message: 'Jason Miller submitted a quote request for TYPHON V900 Mini Track Loader.',
+        time: '10m ago',
+        timestamp: Date.now() - 10 * 60 * 1000,
+        read: false,
+        type: 'inquiry',
+        targetTab: 'inquiries'
+      },
+      {
+        id: 'notif-2',
+        title: 'Machinery Status Update',
+        message: 'TYPHON V900 Mini Track Loader status was changed to "In Stock".',
+        time: '45m ago',
+        timestamp: Date.now() - 45 * 60 * 1000,
+        read: false,
+        type: 'product',
+        targetTab: 'products'
+      },
+      {
+        id: 'notif-3',
+        title: 'Security System Notice',
+        message: 'Automated firewall integrity scan passed with 0 suspicious events.',
+        time: '2h ago',
+        timestamp: Date.now() - 2 * 3600 * 1000,
+        read: false,
+        type: 'security',
+        targetTab: 'security'
+      },
+      {
+        id: 'notif-4',
+        title: 'Cloud Backup Complete',
+        message: 'Automated snapshot backup completed for database & media storage.',
+        time: '1d ago',
+        timestamp: Date.now() - 24 * 3600 * 1000,
+        read: true,
+        type: 'system',
+        targetTab: 'maintenance'
+      }
+    ]
+  })
+
+  const saveNotifications = (updated: AdminNotificationItem[]) => {
+    setNotifications(updated)
+    try {
+      localStorage.setItem('happy-machinery-admin-notifications', JSON.stringify(updated))
+    } catch {}
+  }
+
+  const unreadNotificationCount = notifications.filter((n) => !n.read).length
+
+  const handleMarkAllNotificationsRead = () => {
+    const updated = notifications.map((n) => ({ ...n, read: true }))
+    saveNotifications(updated)
+    showToast('All notifications marked as read.', 'success' as any)
+  }
+
+  const handleNotificationClick = (item: AdminNotificationItem) => {
+    const updated = notifications.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+    saveNotifications(updated)
+    if (item.targetTab) {
+      setActiveTab(item.targetTab)
+    }
+    setIsNotificationOpen(false)
+  }
+
+  const handleDeleteNotification = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const updated = notifications.filter((n) => n.id !== id)
+    saveNotifications(updated)
+  }
+
+  const handleClearAllNotifications = () => {
+    saveNotifications([])
+    showToast('All notifications cleared.', 'info' as any)
+  }
+
+  const displayedNotifications = notifications.filter((item) => {
+    if (notificationFilter === 'unread') return !item.read
+    return true
+  })
 
   // Toast Notification State
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null)
 
   // Primary CMS Collections Data
-  const [posts, setPosts] = useState<BlogPost[]>([])
-  const [products, setProducts] = useState<AdminProduct[]>([])
-  const [mediaList, setMediaList] = useState<MediaItem[]>([])
-  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [posts, setPosts] = useState<BlogPost[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-blog-posts')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return DEFAULT_POSTS
+  })
+  const [products, setProducts] = useState<AdminProduct[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-products')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return DEFAULT_PRODUCTS
+  })
+  const [mediaList, setMediaList] = useState<MediaItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-media')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const defaultFolderMap: Record<string, 'features' | 'galleries' | 'profileimg'> = {
+            'logo.png': 'features',
+            'v900-promo.webp': 'features',
+            'why-choose-collage.jpg': 'features',
+            'about-team-1.png': 'profileimg',
+            'about-team-2.jpg': 'profileimg',
+            'about-team-3.png': 'profileimg',
+            'customer-feedback-portraits.png': 'profileimg',
+          }
+          // Only keep real website photos, discard old dummy ebay files
+          const validWebsiteItems = parsed.filter((item: MediaItem) => {
+            if (!item.url) return false
+            const isEbayDummy = item.url.includes('/ebay/') || item.url.includes('1801') || item.title?.includes('1801')
+            return !isEbayDummy
+          })
+          if (validWebsiteItems.length > 0) {
+            return validWebsiteItems.map((item: MediaItem) => {
+              if (!item.folder) {
+                const matchedKey = Object.keys(defaultFolderMap).find((k) => item.url?.includes(k))
+                return { ...item, folder: matchedKey ? defaultFolderMap[matchedKey] : 'galleries' }
+              }
+              return item
+            })
+          }
+        }
+      }
+    } catch {}
+    return DEFAULT_MEDIA
+  })
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => DEFAULT_ADMIN_USERS)
   const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
   const [bannedIps, setBannedIps] = useState<BannedIp[]>([])
   const [failedLogins, setFailedLogins] = useState<FailedLoginAttempt[]>([])
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>(DEFAULT_SECURITY_SETTINGS)
   const [, setAnalyticsEvents] = useState<AnalyticsViewEvent[]>([])
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS)
-  const [sitePages, setSitePages] = useState<SitePage[]>(DEFAULT_SITE_PAGES)
+  const logoFileInputRef = useRef<HTMLInputElement>(null)
+  const faviconFileInputRef = useRef<HTMLInputElement>(null)
+  const [logoPreviewBg, setLogoPreviewBg] = useState<'dark' | 'light'>('dark')
+
+  const handleLogoUpload = (file: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file (PNG, JPG, SVG, WebP, GIF)', 'error')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo file size must be less than 5MB', 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      if (dataUrl) {
+        setSiteSettings((prev) => ({ ...prev, logo: dataUrl }))
+        showToast('Logo loaded! Click "Save Global Settings & Brand Assets" to apply.', 'success')
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleFaviconUpload = (file: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/') && !file.name.endsWith('.ico')) {
+      showToast('Please select an icon or image file (.png, .ico, .webp, .svg)', 'error')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Favicon file size must be less than 2MB', 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      if (dataUrl) {
+        setSiteSettings((prev) => ({ ...prev, favicon: dataUrl }))
+        updateBrowserFavicon(dataUrl)
+        showToast('Favicon loaded and browser tab updated! Click "Save Global Settings & Brand Assets" to apply.', 'success')
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const [, setSitePages] = useState<SitePage[]>(DEFAULT_SITE_PAGES)
+  const [homeContent, setHomeContent] = useState<HomePageContent>(DEFAULT_HOME_CONTENT)
+  const [isSavingHome, setIsSavingHome] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // Modals & Sub-forms State
@@ -277,11 +772,26 @@ export default function AdminDashboard() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null)
   const [mediaZoom, setMediaZoom] = useState<number>(100)
   const [mediaRotation, setMediaRotation] = useState<number>(0)
+  const [mediaPan, setMediaPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [initialPan, setInitialPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [copiedMediaUrl, setCopiedMediaUrl] = useState(false)
+
+  // Upload Progress & WebP Conversion States
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStatusText, setUploadStatusText] = useState('')
+  const [convertedWebpInfo, setConvertedWebpInfo] = useState<{ originalSize: string; webpSize: string; savings: string } | null>(null)
+  const [isDragOverUpload, setIsDragOverUpload] = useState(false)
 
   const handleOpenMedia = (item: MediaItem) => {
     setSelectedMedia(item)
     setMediaZoom(100)
     setMediaRotation(0)
+    setMediaPan({ x: 0, y: 0 })
+    setIsPanning(false)
+    setCopiedMediaUrl(false)
   }
 
   const handlePrevMedia = () => {
@@ -291,6 +801,9 @@ export default function AdminDashboard() {
     setSelectedMedia(mediaList[prevIdx])
     setMediaZoom(100)
     setMediaRotation(0)
+    setMediaPan({ x: 0, y: 0 })
+    setIsPanning(false)
+    setCopiedMediaUrl(false)
   }
 
   const handleNextMedia = () => {
@@ -300,10 +813,13 @@ export default function AdminDashboard() {
     setSelectedMedia(mediaList[nextIdx])
     setMediaZoom(100)
     setMediaRotation(0)
+    setMediaPan({ x: 0, y: 0 })
+    setIsPanning(false)
+    setCopiedMediaUrl(false)
   }
 
   const handleZoomIn = () => {
-    setMediaZoom((prev) => Math.min(300, prev + 25))
+    setMediaZoom((prev) => Math.min(500, prev + 25))
   }
 
   const handleZoomOut = () => {
@@ -313,10 +829,194 @@ export default function AdminDashboard() {
   const handleResetZoom = () => {
     setMediaZoom(100)
     setMediaRotation(0)
+    setMediaPan({ x: 0, y: 0 })
+    setIsPanning(false)
   }
 
   const handleRotate = () => {
     setMediaRotation((prev) => (prev + 90) % 360)
+  }
+
+  // Canva-like Mouse Wheel Zoom (Zooms in / out smoothly)
+  const handleLightboxWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const zoomDelta = e.deltaY < 0 ? 15 : -15
+    setMediaZoom((prev) => Math.min(500, Math.max(25, prev + zoomDelta)))
+  }
+
+  // Canva-like Pan & Move (Mouse Drag to move left, right, up, down)
+  const handleLightboxMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    setIsPanning(true)
+    setPanStart({ x: e.clientX, y: e.clientY })
+    setInitialPan({ x: mediaPan.x, y: mediaPan.y })
+  }
+
+  const handleLightboxMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return
+    const dx = e.clientX - panStart.x
+    const dy = e.clientY - panStart.y
+    setMediaPan({
+      x: initialPan.x + dx,
+      y: initialPan.y + dy,
+    })
+  }
+
+  const handleLightboxMouseUp = (e: React.MouseEvent) => {
+    if (!isPanning) return
+    setIsPanning(false)
+    // If at normal scale (<= 115%) and user swiped horizontally > 75px, navigate next/prev
+    if (mediaZoom <= 115) {
+      const dx = e.clientX - panStart.x
+      if (dx < -75) {
+        handleNextMedia()
+      } else if (dx > 75) {
+        handlePrevMedia()
+      } else {
+        setMediaPan({ x: 0, y: 0 })
+      }
+    }
+  }
+
+  // Double Click toggles zoom like Canva/Figma
+  const handleLightboxDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (mediaZoom !== 100 || mediaPan.x !== 0 || mediaPan.y !== 0) {
+      setMediaZoom(100)
+      setMediaPan({ x: 0, y: 0 })
+    } else {
+      setMediaZoom(200)
+    }
+  }
+
+  // Copy URL with instant visual feedback and full origin resolution
+  const handleCopySelectedUrl = async (url: string) => {
+    try {
+      const fullUrl = url.startsWith('http')
+        ? url
+        : window.location.origin + (url.startsWith('/') ? url : '/' + url)
+      await navigator.clipboard.writeText(fullUrl)
+      setCopiedMediaUrl(true)
+      showToast('Image URL copied to clipboard!', 'success')
+      setTimeout(() => setCopiedMediaUrl(false), 2200)
+    } catch {
+      navigator.clipboard.writeText(url)
+      setCopiedMediaUrl(true)
+      showToast('Image URL copied!', 'success')
+      setTimeout(() => setCopiedMediaUrl(false), 2200)
+    }
+  }
+
+  // Fast Client-Side WebP Converter (100% Quality, preserving original resolution)
+  const processImageToWebP = (file: File): Promise<{ dataUrl: string; webpName: string; originalSize: string; webpSize: string; savings: string }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth || img.width
+          canvas.height = img.naturalHeight || img.height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Canvas context not available'))
+            return
+          }
+          ctx.imageSmoothingEnabled = true
+          ctx.imageSmoothingQuality = 'high'
+          ctx.drawImage(img, 0, 0)
+
+          const baseName = file.name.replace(/\.[^/.]+$/, '').trim() || 'image'
+          const webpName = `${baseName}.webp`
+
+          // Export at 100% lossless/ultra-high quality WebP
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                const dataUrl = canvas.toDataURL('image/webp', 0.98)
+                const origKb = (file.size / 1024).toFixed(1) + ' KB'
+                resolve({
+                  dataUrl,
+                  webpName,
+                  originalSize: origKb,
+                  webpSize: origKb,
+                  savings: '100% Quality WebP',
+                })
+                return
+              }
+              const dataUrl = canvas.toDataURL('image/webp', 0.98)
+              const origKb = (file.size / 1024).toFixed(1) + ' KB'
+              const webpKb = (blob.size / 1024).toFixed(1) + ' KB'
+              const savingsPct = file.size > blob.size
+                ? Math.round(((file.size - blob.size) / file.size) * 100) + '% smaller'
+                : '100% Quality WebP'
+
+              resolve({
+                dataUrl,
+                webpName,
+                originalSize: origKb,
+                webpSize: webpKb,
+                savings: savingsPct,
+              })
+            },
+            'image/webp',
+            0.98
+          )
+        }
+        img.onerror = () => reject(new Error('Failed to parse image file'))
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleUploadFiles = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return
+    const file = files[0]
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, JPEG, WEBP, GIF).', 'warning')
+      return
+    }
+
+    setIsUploadingMedia(true)
+    setUploadProgress(15)
+    setUploadStatusText('Reading image file...')
+    setConvertedWebpInfo(null)
+
+    try {
+      setUploadProgress(45)
+      setUploadStatusText('Converting to WebP (100% High Quality)...')
+
+      const result = await processImageToWebP(file)
+
+      setUploadProgress(85)
+      setUploadStatusText('Finalizing WebP asset...')
+      setUploadMediaUrl(result.dataUrl)
+      if (!uploadMediaTitle.trim()) {
+        const cleanTitle = file.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase())
+        setUploadMediaTitle(cleanTitle)
+      }
+
+      setConvertedWebpInfo({
+        originalSize: result.originalSize,
+        webpSize: result.webpSize,
+        savings: result.savings,
+      })
+
+      setUploadProgress(100)
+      setUploadStatusText('Converted to WebP successfully!')
+      showToast(`Auto-converted "${file.name}" to WebP with 100% quality!`, 'success')
+    } catch (err) {
+      console.error('WebP conversion failed:', err)
+      showToast('Failed to convert image. Please try again.', 'error')
+    } finally {
+      setIsUploadingMedia(false)
+    }
   }
 
   // Products Management States (Screenshots 1, 2, 3)
@@ -329,6 +1029,96 @@ export default function AdminDashboard() {
   const [prodCurrentPage, setProdCurrentPage] = useState(1)
   const prodItemsPerPage = 20
 
+  // Product Categories Taxonomy States
+  const [productCategories, setProductCategories] = useState<{
+    id: string
+    name: string
+    slug: string
+    parent?: string
+    description?: string
+    coverImage?: string
+  }[]>(() => {
+    try {
+      const saved = localStorage.getItem('hm_cms_product_categories')
+      if (saved) return JSON.parse(saved)
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: 'pcat-1',
+        name: 'Skid Steer Loaders',
+        slug: 'skid-steer-loaders',
+        parent: 'Equipment',
+        description: 'Tracked and wheeled compact skid steer loaders, stand-on machinery, and diesel utility tractors.',
+        coverImage: '/images/loader-red.png'
+      },
+      {
+        id: 'pcat-2',
+        name: 'Mini Excavators',
+        slug: 'mini-excavators',
+        parent: 'Equipment',
+        description: 'Compact hydraulic excavators from 1 to 3.5 tons for trenching, earthmoving, and tight-access digging.',
+        coverImage: '/images/why-choose-v900-jobsite.png'
+      },
+      {
+        id: 'pcat-3',
+        name: 'Wheel Loaders',
+        slug: 'wheel-loaders',
+        parent: 'Equipment',
+        description: 'Electric and diesel articulated compact wheel loaders for material handling and bulk loading.',
+        coverImage: '/images/loader-yellow.png'
+      },
+      {
+        id: 'pcat-4',
+        name: 'Skid Steer Attachments',
+        slug: 'skid-steer-attachments',
+        parent: 'Attachments & Parts',
+        description: 'Pallet forks, hydraulic hammers, earth augers, rotary tillers, snow blowers, and grapple buckets.',
+        coverImage: '/images/fork-red-jobsite.png'
+      },
+      {
+        id: 'pcat-5',
+        name: 'Mini Excavator Attachments',
+        slug: 'mini-excavator-attachments',
+        parent: 'Attachments & Parts',
+        description: 'Tilting buckets, rippers, hydraulic thumb clips, rakes, quick hitches, and tree diggers.',
+        coverImage: '/images/fork-blue-jobsite.png'
+      },
+      {
+        id: 'pcat-6',
+        name: 'Compact Series (501–507)',
+        slug: 'compact-series-501-507',
+        parent: 'Attachments & Parts > Skid Steer Attachments',
+        description: 'Specialized quick-tach implements for sub-compact utility loaders.',
+        coverImage: '/images/fork-yellow-jobsite.png'
+      },
+      {
+        id: 'pcat-7',
+        name: 'Attachments for Mini Excavators (2 Tons and Below)',
+        slug: 'attachments-mini-excavators-under-2-tons',
+        parent: 'Attachments & Parts > Mini Excavator Attachments',
+        description: 'Lightweight high-durability tools tailored for 1-2 ton mini diggers.',
+        coverImage: '/images/why-choose-v900-jobsite.png'
+      }
+    ]
+  })
+
+  const [editingProductCat, setEditingProductCat] = useState<{
+    id: string
+    name: string
+    slug: string
+    parent?: string
+    description?: string
+    coverImage?: string
+  } | null>(null)
+  const [pcatName, setPcatName] = useState('')
+  const [pcatSlug, setPcatSlug] = useState('')
+  const [pcatParent, setPcatParent] = useState('')
+  const [pcatDesc, setPcatDesc] = useState('')
+  const [pcatCover, setPcatCover] = useState('')
+  const [pcatSearch, setPcatSearch] = useState('')
+
   // Product Editor Form States (Screenshots 1 & 3)
   const [prodEditorId, setProdEditorId] = useState<number | null>(null)
   const [prodEditorName, setProdEditorName] = useState('')
@@ -336,24 +1126,18 @@ export default function AdminDashboard() {
   const [prodEditorShortDesc, setProdEditorShortDesc] = useState('')
   const [prodEditorDesc, setProdEditorDesc] = useState('')
   const [prodEditorSku, setProdEditorSku] = useState('')
-  const [prodEditorCategory, setProdEditorCategory] = useState('Equipment > Skid Steer Loaders')
-  const [prodEditorBrand, setProdEditorBrand] = useState('TYPHON')
-  const [prodEditorPrice, setProdEditorPrice] = useState<number>(11999)
-  const [prodEditorSalePrice, setProdEditorSalePrice] = useState<number | undefined>(undefined)
-  const [prodEditorStock, setProdEditorStock] = useState<number>(4)
+  const [prodEditorCategory, setProdEditorCategory] = useState('')
+  const [prodEditorBrand, setProdEditorBrand] = useState('')
+  const [prodEditorPrice, setProdEditorPrice] = useState<number | ''>('')
+  const [prodEditorSalePrice, setProdEditorSalePrice] = useState<number | ''>('')
+  const [prodEditorStock, setProdEditorStock] = useState<number | ''>('')
   const [prodEditorStatus, setProdEditorStatus] = useState<'Published' | 'Draft'>('Published')
   const [prodEditorBuyUrl, setProdEditorBuyUrl] = useState('')
   const [prodEditorFeatured, setProdEditorFeatured] = useState(false)
   const [prodEditorAddToCart, setProdEditorAddToCart] = useState(true)
-  const [prodEditorImage, setProdEditorImage] = useState('/images/loader-red.png')
-  const [prodEditorGallery, setProdEditorGallery] = useState('/images/loader-yellow.jpg\n/images/loader-blue.jpg')
-  const [prodEditorSpecs, setProdEditorSpecs] = useState<{ name: string; value: string }[]>([
-    { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine (Tier 4 / Stage V)' },
-    { name: 'Operating Weight', value: '2,150 lbs (975 kg)' },
-    { name: 'Rated Operating Capacity', value: '900 lbs (408 kg)' },
-    { name: 'Hydraulic Flow', value: '12.7 GPM @ 2,321 psi' },
-    { name: 'Width', value: '35.5 in (Fits Standard Backyard Gates)' }
-  ])
+  const [prodEditorImage, setProdEditorImage] = useState('')
+  const [prodEditorGallery, setProdEditorGallery] = useState('')
+  const [prodEditorSpecs, setProdEditorSpecs] = useState<{ name: string; value: string }[]>([])
 
   // Inquiries & Leads States
   const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => DEFAULT_INQUIRIES)
@@ -368,7 +1152,7 @@ export default function AdminDashboard() {
   const [commentFilter, setCommentFilter] = useState<'all' | 'Pending' | 'Approved' | 'Spam'>('all')
 
   // Articles Sub-view & Editorial States
-  const [articlesSubView, setArticlesSubView] = useState<'list' | 'editor' | 'categories'>('list')
+  const [articlesSubView, setArticlesSubView] = useState<'list' | 'editor' | 'categories' | 'topBlogs'>('list')
   const [editorTitle, setEditorTitle] = useState('')
   const [editorSlug, setEditorSlug] = useState('')
   const [editorExcerpt, setEditorExcerpt] = useState('')
@@ -378,10 +1162,43 @@ export default function AdminDashboard() {
   const [linkModalInternalUrl, setLinkModalInternalUrl] = useState('/store')
   const [linkModalExternalUrl, setLinkModalExternalUrl] = useState('https://')
   const [linkModalText, setLinkModalText] = useState('')
+  // Live Visual WYSIWYG vs Markdown Code Mode
+  const [editorMode, setEditorMode] = useState<'visual' | 'code'>('visual')
+  const [editorBlocks, setEditorBlocks] = useState<VisualBlock[]>([{ id: 'blk-init', type: 'text', text: '' }])
+  const [activeVisualBlockIndex, setActiveVisualBlockIndex] = useState<number | null>(null)
+  const [editingBlockIndex, setEditingBlockIndex] = useState<number | null>(null)
+  const [blockViewModes, setBlockViewModes] = useState<{ [blockId: string]: 'preview' | 'edit' | 'split' }>({})
+  const [globalBlockViewMode, setGlobalBlockViewMode] = useState<'preview' | 'split' | 'edit'>('preview')
+  const visualBlockTextareaRefs = useRef<{ [index: number]: HTMLTextAreaElement | null }>({})
+
+  const getBlockViewMode = (blockId: string, hasText: boolean): 'preview' | 'edit' | 'split' => {
+    if (blockViewModes[blockId]) return blockViewModes[blockId]
+    if (!hasText) return 'edit'
+    return globalBlockViewMode
+  }
+
+  const setBlockMode = (blockId: string, mode: 'preview' | 'edit' | 'split') => {
+    setBlockViewModes((prev) => ({ ...prev, [blockId]: mode }))
+  }
+
+  // Image & YouTube Media Insertion Modals with Live Preview & Media Library
+  const [imageModalOpen, setImageModalOpen] = useState(false)
+  const [imageModalTab, setImageModalTab] = useState<'library' | 'upload' | 'url'>('library')
+  const [imageModalSearch, setImageModalSearch] = useState('')
+  const [selectedLibraryItem, setSelectedLibraryItem] = useState<MediaItem | null>(null)
+  const [modalUploadProgress, setModalUploadProgress] = useState<number | null>(null)
+  const [modalUploadStatus, setModalUploadStatus] = useState<string>('')
+  const [imageModalUrl, setImageModalUrl] = useState('')
+  const [imageModalAlt, setImageModalAlt] = useState('')
+  const [imageModalCaption, setImageModalCaption] = useState('')
+  const [youtubeModalOpen, setYoutubeModalOpen] = useState(false)
+  const [youtubeModalUrl, setYoutubeModalUrl] = useState('')
+  const [youtubeModalTitle, setYoutubeModalTitle] = useState('')
+  const [savedCursorPos, setSavedCursorPos] = useState<{ start: number; end: number } | null>(null)
   const [editorCategory, setEditorCategory] = useState('Jobsite Productivity')
   const [editorAuthor, setEditorAuthor] = useState('Happy Machinery')
   const [editorStatus, setEditorStatus] = useState<'Published' | 'Draft' | 'Scheduled'>('Draft')
-  const [editorCoverImage, setEditorCoverImage] = useState('/images/why-choose-v900-jobsite.png')
+  const [editorCoverImage, setEditorCoverImage] = useState('')
   const [editorCoverAlt, setEditorCoverAlt] = useState('')
   const [editorVideoUrl, setEditorVideoUrl] = useState('')
   const [editorSeoTitle, setEditorSeoTitle] = useState('')
@@ -389,26 +1206,55 @@ export default function AdminDashboard() {
 
   // Rich WYSIWYG & Media Editor States (Matches Image 2)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const dashboardTableRef = useRef<HTMLDivElement>(null)
+
+  const scrollDashboardTable = (direction: 'left' | 'right') => {
+    if (dashboardTableRef.current) {
+      dashboardTableRef.current.scrollBy({
+        left: direction === 'left' ? -380 : 380,
+        behavior: 'smooth'
+      })
+    }
+  }
+
   const [contentHistory, setContentHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
-  const [showStylesMenu, setShowStylesMenu] = useState(false)
-  const [showTableMenu, setShowTableMenu] = useState(false)
   const [assignedSeries, setAssignedSeries] = useState('None (Standalone Article)')
 
   // Categories Taxonomy State (Screenshot 5)
-  const [blogCategories, setBlogCategories] = useState<{ name: string; slug: string; desc?: string; cover?: string }[]>([
-    { name: 'Jobsite Productivity', slug: 'jobsite-productivity', desc: 'Efficiency strategies on residential and tight job sites.' },
-    { name: 'Equipment Maintenance', slug: 'equipment-maintenance', desc: 'Hydraulic checks, oil intervals, and rubber track care.' },
-    { name: 'Attachments & Tools', slug: 'attachments-tools', desc: 'Augers, trenchers, pallet forks, and hydraulic breakers.' },
-    { name: 'Compact Loaders', slug: 'compact-loaders', desc: 'Mini skid steer walkthroughs and stand-on machinery.' },
-    { name: 'Skid Steer Comparisons', slug: 'skid-steer-comparisons', desc: 'Wheeled vs tracked loaders, gas vs diesel options.' },
-    { name: 'Hydraulic Systems', slug: 'hydraulic-systems', desc: 'Pressure testing, auxiliary circuits, and pump diagnostics.' }
-  ])
+  const [blogCategories, setBlogCategories] = useState<{ name: string; slug: string; desc?: string; cover?: string; parent?: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-blog-categories')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return [
+      { name: 'Jobsite Productivity', slug: 'jobsite-productivity', desc: 'Efficiency strategies on residential and tight job sites.' },
+      { name: 'Equipment Maintenance', slug: 'equipment-maintenance', desc: 'Hydraulic checks, oil intervals, and rubber track care.' },
+      { name: 'Attachments & Tools', slug: 'attachments-tools', desc: 'Augers, trenchers, pallet forks, and hydraulic breakers.' },
+      { name: 'Compact Loaders', slug: 'compact-loaders', desc: 'Mini skid steer walkthroughs and stand-on machinery.' },
+      { name: 'Skid Steer Comparisons', slug: 'skid-steer-comparisons', desc: 'Wheeled vs tracked loaders, gas vs diesel options.' },
+      { name: 'Hydraulic Systems', slug: 'hydraulic-systems', desc: 'Pressure testing, auxiliary circuits, and pump diagnostics.' }
+    ]
+  })
+  const [editingBlogCat, setEditingBlogCat] = useState<{ name: string; slug: string; desc?: string; cover?: string; parent?: string } | null>(null)
   const [newCatName, setNewCatName] = useState('')
   const [newCatSlug, setNewCatSlug] = useState('')
   const [newCatDesc, setNewCatDesc] = useState('')
   const [newCatCover, setNewCatCover] = useState('')
+  const [newCatParent, setNewCatParent] = useState('')
   const [categorySearch, setCategorySearch] = useState('')
+
+  // Trash & Recovery Vault State
+  const [trashItems, setTrashItems] = useState<TrashItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-trash')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [trashFilter, setTrashFilter] = useState<'all' | 'article' | 'product' | 'category'>('all')
+  const [trashSearch, setTrashSearch] = useState('')
 
   // Form Temp States
   const [newIpAddress, setNewIpAddress] = useState('')
@@ -440,20 +1286,138 @@ export default function AdminDashboard() {
   const [profileEmail, setProfileEmail] = useState('')
   const [profileAvatar, setProfileAvatar] = useState('')
   const [newPasswordInput, setNewPasswordInput] = useState('')
+  const [showProfilePassword, setShowProfilePassword] = useState(false)
 
   // Maintenance Mode States (Screenshot 5)
-  const [maintenanceGlobal, setMaintenanceGlobal] = useState(false)
-  const [maintenanceTitle, setMaintenanceTitle] = useState("We'll Be Right Back")
-  const [maintenanceMessage, setMaintenanceMessage] = useState("We're performing scheduled maintenance. Please check back soon.")
-  const [maintenanceEta, setMaintenanceEta] = useState('')
-  const [maintenanceProgress, setMaintenanceProgress] = useState(90)
-  const [maintenanceRoutes, setMaintenanceRoutes] = useState<string[]>(['/blog/*', '/equipment/*'])
+  const [maintenanceGlobal, setMaintenanceGlobal] = useState(() => getMaintenanceConfig().global)
+  const [maintenanceTitle, setMaintenanceTitle] = useState(() => getMaintenanceConfig().title)
+  const [maintenanceMessage, setMaintenanceMessage] = useState(() => getMaintenanceConfig().message)
+  const [maintenanceEta, setMaintenanceEta] = useState(() => getMaintenanceConfig().eta || '')
+  const [maintenanceProgress, setMaintenanceProgress] = useState(() => getMaintenanceConfig().progress)
+  const [maintenanceRoutes, setMaintenanceRoutes] = useState<string[]>(() => getMaintenanceConfig().routes)
   const [newCustomRoute, setNewCustomRoute] = useState('')
 
-  // Media Library Enhanced States (Screenshots 2 & 3)
-  const [mediaPath, setMediaPath] = useState('blog / equipment / attachments')
+  // Media Library Enhanced States & Folder Tree Navigation (File Manager-KiuQ)
+  interface MediaFolderItem {
+    name: string
+    isPinned?: boolean
+    size: string
+    date: string
+  }
+  const DEFAULT_KIUQ_FOLDERS: MediaFolderItem[] = [
+    { name: 'galleries', isPinned: true, size: '20.6 MB', date: '2026-10-20' },
+    { name: 'features', isPinned: true, size: '2.23 MB', date: '2026-10-20' },
+    { name: 'profileimg', isPinned: true, size: '3.72 MB', date: '2026-10-20' },
+  ]
+  const [mediaFolders, setMediaFolders] = useState<MediaFolderItem[]>(DEFAULT_KIUQ_FOLDERS)
+  const [selectedFolder, setSelectedFolder] = useState<string>('galleries')
+  const [uploadTargetFolder, setUploadTargetFolder] = useState<string>('galleries')
+  const [articleModalFolder, setArticleModalFolder] = useState<string>('all')
   const [mediaSearchTerm, setMediaSearchTerm] = useState('')
   const [mediaSortOrder, setMediaSortOrder] = useState<'A-Z' | 'Z-A' | 'Newest'>('A-Z')
+  const [mediaActiveView, setMediaActiveView] = useState<'files' | 'urls' | 'previews'>('files')
+  const [isMediaSidebarCollapsed, setIsMediaSidebarCollapsed] = useState(false)
+  const mediaBaseUrl = 'https://img.miniexcavator.org/'
+
+  const handleMoveMediaFolder = (itemId: string, newFolder: string) => {
+    const updated = mediaList.map((m) => (m.id === itemId ? { ...m, folder: newFolder } : m))
+    setMediaList(updated)
+    void writeSharedContent('media-library', updated)
+    showToast(`Asset moved to "${newFolder}".`, 'success')
+  }
+
+  // Media Library Fullscreen & Multi-Select States
+  const [isMediaFullScreen, setIsMediaFullScreen] = useState(false)
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([])
+  const mediaStandaloneUrl = typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}${window.location.port && window.location.port !== '5173' && window.location.port !== '5174' && window.location.port !== '5175' ? `:${window.location.port}` : ''}/happymachinery/Media_Library/medialibrary.php`
+    : 'http://localhost/happymachinery/Media_Library/medialibrary.php'
+
+  const handleSelectAllMedia = (e: React.ChangeEvent<HTMLInputElement>, list: MediaItem[]) => {
+    if (e.target.checked) {
+      setSelectedMediaIds(list.map((m) => m.id))
+    } else {
+      setSelectedMediaIds([])
+    }
+  }
+
+  const handleToggleSelectMedia = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedMediaIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
+  const handleDuplicateMedia = (item: MediaItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newItem: MediaItem = {
+      ...item,
+      id: String(Date.now() + Math.random()),
+      title: `${item.title} (Copy)`,
+      dateAdded: new Date().toISOString().split('T')[0]
+    }
+    const updated = [newItem, ...mediaList]
+    setMediaList(updated)
+    void writeSharedContent('media-library', updated)
+    showToast(`Duplicated "${item.title}".`, 'success')
+  }
+
+  const handleRenameMedia = (item: MediaItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const newName = prompt('Enter new asset title:', item.title)
+    if (newName && newName.trim() && newName !== item.title) {
+      const updated = mediaList.map((m) =>
+        m.id === item.id ? { ...m, title: newName.trim() } : m
+      )
+      setMediaList(updated)
+      void writeSharedContent('media-library', updated)
+      showToast(`Renamed to "${newName.trim()}".`, 'success')
+    }
+  }
+
+  const handleDeleteSingleMedia = (item: MediaItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
+      const updated = mediaList.filter((m) => m.id !== item.id)
+      setMediaList(updated)
+      void writeSharedContent('media-library', updated)
+      showToast(`Asset "${item.title}" deleted.`, 'success')
+    }
+  }
+
+  const handleBatchDeleteMedia = () => {
+    if (selectedMediaIds.length === 0) {
+      showToast('No items selected.', 'warning')
+      return
+    }
+    if (window.confirm(`Delete ${selectedMediaIds.length} selected asset(s)?`)) {
+      const updated = mediaList.filter((m) => !selectedMediaIds.includes(m.id))
+      setMediaList(updated)
+      setSelectedMediaIds([])
+      void writeSharedContent('media-library', updated)
+      showToast(`Deleted ${selectedMediaIds.length} items.`, 'success')
+    }
+  }
+
+  const handleCopySelectedUrls = () => {
+    const targetList = selectedMediaIds.length > 0
+      ? mediaList.filter((m) => selectedMediaIds.includes(m.id))
+      : mediaList
+    const urls = targetList.map((m) => m.url).join('\n')
+    navigator.clipboard.writeText(urls)
+    showToast(`${targetList.length} URL(s) copied to clipboard!`, 'success')
+  }
+
+  // Keyboard shortcut: Esc exits full screen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMediaFullScreen) {
+        setIsMediaFullScreen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isMediaFullScreen])
 
 
   // Navigation Submenu States
@@ -475,6 +1439,15 @@ export default function AdminDashboard() {
   // Load All Collections from Backend
   const loadAllData = async () => {
     setIsLoadingData(true)
+    const safeRead = async <T,>(key: string): Promise<T | undefined> => {
+      try {
+        return await readSharedContent<T>(key)
+      } catch (e) {
+        console.warn(`[CMS Storage] Could not read collection '${key}':`, e)
+        return undefined
+      }
+    }
+
     try {
       const [
         fetchedPosts,
@@ -487,32 +1460,113 @@ export default function AdminDashboard() {
         fetchedSecSettings,
         fetchedAnalytics,
         fetchedSiteSettings,
-        fetchedPages
+        fetchedPages,
+        fetchedBlogCats,
+        fetchedTrash,
+        fetchedHomeContent,
+        fetchedInquiries,
+        fetchedOrders,
+        fetchedComments
       ] = await Promise.all([
-        readSharedContent<BlogPost[]>('blog-posts'),
-        readSharedContent<AdminProduct[]>('products'),
-        readSharedContent<MediaItem[]>('media-library'),
-        readSharedContent<AdminUser[]>('admin-users'),
-        readSharedContent<SecurityLog[]>('security-logs'),
-        readSharedContent<BannedIp[]>('banned-ips'),
-        readSharedContent<FailedLoginAttempt[]>('failed-logins'),
-        readSharedContent<SecuritySettings>('security-settings'),
-        readSharedContent<AnalyticsViewEvent[]>('analytics-events'),
-        readSharedContent<SiteSettings>('site-settings'),
-        readSharedContent<SitePage[]>('site-pages')
+        safeRead<BlogPost[]>('blog-posts'),
+        safeRead<AdminProduct[]>('products'),
+        safeRead<MediaItem[]>('media-library'),
+        safeRead<AdminUser[]>('admin-users'),
+        safeRead<SecurityLog[]>('security-logs'),
+        safeRead<BannedIp[]>('banned-ips'),
+        safeRead<FailedLoginAttempt[]>('failed-logins'),
+        safeRead<SecuritySettings>('security-settings'),
+        safeRead<AnalyticsViewEvent[]>('analytics-events'),
+        safeRead<SiteSettings>('site-settings'),
+        safeRead<SitePage[]>('site-pages'),
+        safeRead<{ name: string; slug: string; desc?: string; cover?: string; parent?: string }[]>('blog-categories'),
+        safeRead<TrashItem[]>('trash-items'),
+        safeRead<HomePageContent>('home-content'),
+        safeRead<Inquiry[]>('inquiries'),
+        safeRead<CartOrder[]>('orders'),
+        safeRead<BlogComment[]>('comments')
       ])
 
-      setPosts(fetchedPosts || DEFAULT_POSTS)
-      setProducts(fetchedProducts || DEFAULT_PRODUCTS)
-      setMediaList(fetchedMedia || DEFAULT_MEDIA)
-      setAdminUsers(fetchedUsers || DEFAULT_ADMIN_USERS)
-      setSecurityLogs(fetchedLogs || [])
-      setBannedIps(fetchedBans || [])
-      setFailedLogins(fetchedFails || [])
-      setSecuritySettings(fetchedSecSettings || DEFAULT_SECURITY_SETTINGS)
-      setAnalyticsEvents(fetchedAnalytics || [])
-      setSiteSettings(fetchedSiteSettings || DEFAULT_SITE_SETTINGS)
-      setSitePages(fetchedPages || DEFAULT_SITE_PAGES)
+      if (fetchedPosts && Array.isArray(fetchedPosts) && fetchedPosts.length > 0) {
+        setPosts(fetchedPosts)
+        try { localStorage.setItem('happy-machinery-blog-posts', JSON.stringify(fetchedPosts)) } catch {}
+      } else {
+        setPosts((prev) => (prev.length > 0 ? prev : DEFAULT_POSTS))
+      }
+
+      if (fetchedProducts && Array.isArray(fetchedProducts) && fetchedProducts.length > 0) {
+        setProducts(fetchedProducts)
+        try { localStorage.setItem('happy-machinery-products', JSON.stringify(fetchedProducts)) } catch {}
+      } else {
+        setProducts((prev) => (prev.length > 0 ? prev : DEFAULT_PRODUCTS))
+      }
+
+      if (fetchedMedia && Array.isArray(fetchedMedia) && fetchedMedia.length > 0) {
+        setMediaList(fetchedMedia)
+        try { localStorage.setItem('happy-machinery-media', JSON.stringify(fetchedMedia)) } catch {}
+      } else {
+        setMediaList((prev) => (prev.length > 0 ? prev : DEFAULT_MEDIA))
+      }
+
+      if (fetchedUsers && Array.isArray(fetchedUsers) && fetchedUsers.length > 0) {
+        setAdminUsers(fetchedUsers)
+      } else {
+        setAdminUsers((prev) => (prev.length > 0 ? prev : DEFAULT_ADMIN_USERS))
+      }
+
+      if (fetchedLogs && Array.isArray(fetchedLogs)) setSecurityLogs(fetchedLogs)
+      if (fetchedBans && Array.isArray(fetchedBans)) setBannedIps(fetchedBans)
+      if (fetchedFails && Array.isArray(fetchedFails)) setFailedLogins(fetchedFails)
+      if (fetchedSecSettings) setSecuritySettings(fetchedSecSettings)
+      if (fetchedAnalytics && Array.isArray(fetchedAnalytics)) setAnalyticsEvents(fetchedAnalytics)
+      if (fetchedSiteSettings) {
+        const normalized: SiteSettings = {
+          ...DEFAULT_SITE_SETTINGS,
+          ...fetchedSiteSettings,
+          logo: (!fetchedSiteSettings.logo || fetchedSiteSettings.logo.includes('Happy_Machinery_Logo.webp')) ? '/logo.png' : fetchedSiteSettings.logo,
+          favicon: (!fetchedSiteSettings.favicon || fetchedSiteSettings.favicon === '/logo.png' || fetchedSiteSettings.favicon.includes('Happy_Machinery_Logo.webp')) ? '/favicon.png' : fetchedSiteSettings.favicon
+        }
+        setSiteSettings(normalized)
+        cacheSiteSettings(normalized)
+      } else {
+        cacheSiteSettings(DEFAULT_SITE_SETTINGS)
+      }
+      if (fetchedPages && Array.isArray(fetchedPages)) setSitePages(fetchedPages)
+      if (fetchedBlogCats && Array.isArray(fetchedBlogCats) && fetchedBlogCats.length > 0) {
+        setBlogCategories(fetchedBlogCats)
+      }
+      if (fetchedTrash && Array.isArray(fetchedTrash)) {
+        setTrashItems(fetchedTrash)
+      }
+      if (fetchedInquiries && Array.isArray(fetchedInquiries) && fetchedInquiries.length > 0) {
+        setInquiriesList(fetchedInquiries)
+      }
+      if (fetchedOrders && Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
+        setOrdersList(fetchedOrders)
+      }
+      if (fetchedComments && Array.isArray(fetchedComments) && fetchedComments.length > 0) {
+        setCommentsData(fetchedComments)
+      }
+
+      if (fetchedHomeContent) {
+        setHomeContent((prev) => ({
+          ...prev,
+          ...fetchedHomeContent,
+          hero: { ...prev.hero, ...(fetchedHomeContent.hero || {}) },
+          featuresOverview: { ...prev.featuresOverview, ...(fetchedHomeContent.featuresOverview || {}) },
+          promo: { ...prev.promo, ...(fetchedHomeContent.promo || {}) },
+          featuredFleet: { ...prev.featuredFleet, ...(fetchedHomeContent.featuredFleet || {}) },
+          forkShowcase: { ...prev.forkShowcase, ...(fetchedHomeContent.forkShowcase || {}) },
+          why: { ...prev.why, ...(fetchedHomeContent.why || {}) },
+          performance: { ...prev.performance, ...(fetchedHomeContent.performance || {}) },
+          faq: { ...prev.faq, ...(fetchedHomeContent.faq || {}) },
+          advantages: { ...prev.advantages, ...(fetchedHomeContent.advantages || {}) },
+          delivery: { ...prev.delivery, ...(fetchedHomeContent.delivery || {}) },
+          youtube: { ...prev.youtube, ...(fetchedHomeContent.youtube || {}) },
+          feedback: { ...prev.feedback, ...(fetchedHomeContent.feedback || {}) },
+          ctaStrip: { ...prev.ctaStrip, ...(fetchedHomeContent.ctaStrip || {}) }
+        }))
+      }
     } catch (err) {
       console.error('Failed to load CMS data:', err)
       showToast('Error syncing with server storage.', 'error')
@@ -536,6 +1590,22 @@ export default function AdminDashboard() {
     }
   }, [currentUser, showProfileModal])
 
+  // Lock body scroll in CMS mode so no outer window scrollbar cuts into the header
+  useEffect(() => {
+    document.body.classList.add('cms-mode')
+    return () => {
+      document.body.classList.remove('cms-mode')
+    }
+  }, [])
+
+  // Auto-close mobile sidebar and reset scroll position when changing views
+  useEffect(() => {
+    setIsMobileSidebarOpen(false)
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollTop = 0
+    }
+  }, [activeTab, articlesSubView, productsSubView])
+
   // Authentication Handlers
   useEffect(() => {
     if (!selectedMedia) return
@@ -547,17 +1617,43 @@ export default function AdminDashboard() {
       } else if (e.key === 'ArrowRight') {
         handleNextMedia()
       } else if (e.key === '+' || e.key === '=') {
-        setMediaZoom((prev) => Math.min(300, prev + 25))
+        setMediaZoom((prev) => Math.min(500, prev + 25))
       } else if (e.key === '-') {
         setMediaZoom((prev) => Math.max(25, prev - 25))
       } else if (e.key === '0') {
         setMediaZoom(100)
         setMediaRotation(0)
+        setMediaPan({ x: 0, y: 0 })
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedMedia, mediaList])
+
+  // Handle outside clicks and Escape key to close Notification & Profile Dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (notificationRef.current && !notificationRef.current.contains(target)) {
+        setIsNotificationOpen(false)
+      }
+      if (profileRef.current && !profileRef.current.contains(target)) {
+        setIsProfileDropdownOpen(false)
+      }
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsNotificationOpen(false)
+        setIsProfileDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   const handleLoginSuccess = (user: AdminUser) => {
     setCurrentUser(user)
@@ -697,18 +1793,22 @@ export default function AdminDashboard() {
     setEditorTitle('')
     setEditorSlug('')
     setEditorExcerpt('')
-    const starterTemplate = '# 1. Overview & Applications\n\nOperating compact skid steers on residential job sites requires balancing high performance with strict noise, space, and turf protection requirements.\n\n## Key Operating Metrics\n\n- Rated Operating Capacity: 900 lbs (408 kg)\n- Auxiliary Hydraulic Flow: 12.7 GPM @ 2,321 psi\n- Machine Width: 35.5 in (900 mm)\n\n> [!TIP]\n> Always inspect quick-disconnect auxiliary hydraulic couplers for dust or debris before attaching high-flow augers or trenchers.\n\n| Equipment Specification | V900 Standard | Pro Series |\n|---|---|---|\n| Operating Weight | 2,050 lbs | 2,250 lbs |\n| Engine Horsepower | Briggs & Stratton 23 HP | 25 HP EFI |\n| Track Width | 7.1 in (180mm) | 7.9 in (200mm) |\n'
-    setEditorContent(starterTemplate)
-    setContentHistory([starterTemplate])
+    setEditorContent('')
+    setContentHistory([''])
     setHistoryIndex(0)
+    setEditorBlocks([{ id: 'blk-' + Date.now(), type: 'text', text: '' }])
+    setEditorMode('visual')
+    setActiveVisualBlockIndex(null)
+    setEditingBlockIndex(null)
     setEditorCategory(blogCategories[0]?.name || 'Jobsite Productivity')
     setEditorAuthor(currentUser?.name || 'Happy Machinery')
     setEditorStatus('Draft')
-    setEditorCoverImage('/images/why-choose-v900-jobsite.png')
+    setEditorCoverImage('')
     setEditorCoverAlt('')
     setEditorVideoUrl('')
     setEditorSeoTitle('')
     setEditorSeoDesc('')
+    setAssignedSeries('None (Standalone Article)')
     setArticlesSubView('editor')
   }
 
@@ -722,6 +1822,10 @@ export default function AdminDashboard() {
     setEditorContent(contentText)
     setContentHistory([contentText])
     setHistoryIndex(0)
+    setEditorBlocks(parseContentToVisualBlocks(contentText))
+    setEditorMode('visual')
+    setActiveVisualBlockIndex(null)
+    setEditingBlockIndex(null)
     setEditorCategory(post.category)
     setEditorAuthor(post.author || 'Happy Machinery')
     setEditorStatus('Published')
@@ -733,6 +1837,122 @@ export default function AdminDashboard() {
     setArticlesSubView('editor')
   }
 
+  const toggleEditorMode = (newMode: 'visual' | 'code') => {
+    if (newMode === 'visual' && editorMode === 'code') {
+      setEditorBlocks(parseContentToVisualBlocks(editorContent))
+    } else if (newMode === 'code' && editorMode === 'visual') {
+      const serialized = serializeVisualBlocksToContent(editorBlocks)
+      setEditorContent(serialized)
+    }
+    setEditorMode(newMode)
+  }
+
+  const handleUpdateBlockText = (index: number, newText: string) => {
+    setEditorBlocks((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], text: newText }
+      const serialized = serializeVisualBlocksToContent(next)
+      setEditorContent(serialized)
+      return next
+    })
+  }
+
+  const handleUpdateImageDetails = (index: number, alt: string, caption: string) => {
+    setEditorBlocks((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], alt, caption }
+      const serialized = serializeVisualBlocksToContent(next)
+      setEditorContent(serialized)
+      pushContentHistory(serialized)
+      return next
+    })
+  }
+
+  const handleDeleteBlock = (index: number) => {
+    setEditorBlocks((prev) => {
+      const next = prev.filter((_, idx) => idx !== index)
+      if (next.length === 0) {
+        next.push({ id: 'blk-' + Date.now(), type: 'text', text: '' })
+      }
+      const serialized = serializeVisualBlocksToContent(next)
+      setEditorContent(serialized)
+      pushContentHistory(serialized)
+      return next
+    })
+    showToast('Block removed from article.', 'warning')
+  }
+
+  const handleMoveBlock = (index: number, direction: 'up' | 'down') => {
+    setEditorBlocks((prev) => {
+      const targetIdx = direction === 'up' ? index - 1 : index + 1
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev
+      const next = [...prev]
+      const temp = next[index]
+      next[index] = next[targetIdx]
+      next[targetIdx] = temp
+      const serialized = serializeVisualBlocksToContent(next)
+      setEditorContent(serialized)
+      pushContentHistory(serialized)
+      return next
+    })
+  }
+
+  const handleAddTextBlock = (afterIndex?: number) => {
+    const insertAt = typeof afterIndex === 'number' ? afterIndex + 1 : editorBlocks.length
+    const newBlock: VisualBlock = {
+      id: 'blk-' + Date.now(),
+      type: 'text',
+      text: ''
+    }
+    setEditorBlocks((prev) => {
+      const next = [...prev]
+      next.splice(insertAt, 0, newBlock)
+      const serialized = serializeVisualBlocksToContent(next)
+      setEditorContent(serialized)
+      return next
+    })
+    setActiveVisualBlockIndex(insertAt)
+  }
+
+  const handleModalUploadFile = async (file: File) => {
+    if (!file) return
+    try {
+      setModalUploadStatus(`Converting ${file.name} to 100% WebP...`)
+      setModalUploadProgress(35)
+      const res = await processImageToWebP(file)
+      setModalUploadProgress(85)
+
+      const newMedia: MediaItem = {
+        id: `media-${Date.now()}`,
+        title: res.webpName.replace(/\.webp$/i, ''),
+        url: res.dataUrl,
+        dateAdded: new Date().toISOString().split('T')[0],
+        size: res.webpSize
+      }
+
+      const updated = [newMedia, ...mediaList]
+      setMediaList(updated)
+      await writeSharedContent('media-library', updated)
+      setSelectedLibraryItem(newMedia)
+      setImageModalUrl(res.dataUrl)
+      setImageModalAlt(newMedia.title)
+      setModalUploadProgress(100)
+      setModalUploadStatus('Upload & conversion complete!')
+
+      setTimeout(() => {
+        setModalUploadProgress(null)
+        setModalUploadStatus('')
+        setImageModalTab('library')
+      }, 500)
+
+      showToast(`"${newMedia.title}" saved to Media Library (galleries)!`, 'success')
+    } catch (err: any) {
+      setModalUploadProgress(null)
+      setModalUploadStatus('')
+      showToast(err.message || 'Failed to upload image', 'error')
+    }
+  }
+
   const handleInsertLinkIntoSection = () => {
     const url = linkModalType === 'internal' ? linkModalInternalUrl : linkModalExternalUrl
     const text = linkModalText.trim() || (linkModalType === 'internal' ? linkModalInternalUrl : 'Link')
@@ -740,6 +1960,145 @@ export default function AdminDashboard() {
     insertTextAtCursor(mdSnippet, '', '')
     setLinkModalOpen(false)
     showToast('Link inserted into article.', 'success')
+  }
+
+  const extractYouTubeId = (url: string): string => {
+    if (!url) return ''
+    const trimmed = url.trim()
+    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/)
+    if (match && match[1]) return match[1]
+    if (/^[\w-]{11}$/.test(trimmed)) return trimmed
+    return ''
+  }
+
+  const insertMediaAtSavedCursor = (snippet: string) => {
+    const textarea = contentTextareaRef.current
+    const start = savedCursorPos?.start ?? (textarea ? textarea.selectionStart : editorContent.length)
+    const end = savedCursorPos?.end ?? (textarea ? textarea.selectionEnd : editorContent.length)
+
+    const before = editorContent.substring(0, start)
+    const after = editorContent.substring(end)
+
+    const prefix = before.length > 0 && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : ''
+    const suffix = after.length > 0 && !after.startsWith('\n\n') ? (after.startsWith('\n') ? '\n' : '\n\n') : ''
+
+    const insertion = `${prefix}${snippet}${suffix}`
+    const newContent = before + insertion + after
+
+    setEditorContent(newContent)
+    pushContentHistory(newContent)
+
+    setTimeout(() => {
+      if (textarea) {
+        textarea.focus()
+        const newPos = start + insertion.length
+        textarea.setSelectionRange(newPos, newPos)
+      }
+    }, 60)
+  }
+
+  const handleInsertImageIntoSection = () => {
+    if (!imageModalUrl.trim()) {
+      showToast('Please select or enter an image URL', 'error')
+      return
+    }
+    const url = imageModalUrl.trim()
+    const alt = imageModalAlt.trim() || 'Jobsite Equipment Image'
+    const caption = imageModalCaption.trim()
+
+    if (editorMode === 'visual') {
+      if (editingBlockIndex !== null && editingBlockIndex >= 0 && editingBlockIndex < editorBlocks.length) {
+        // Replace existing block
+        setEditorBlocks((prev) => {
+          const next = [...prev]
+          next[editingBlockIndex] = {
+            id: next[editingBlockIndex].id || 'blk-' + Date.now(),
+            type: 'image',
+            url,
+            alt,
+            caption
+          }
+          const serialized = serializeVisualBlocksToContent(next)
+          setEditorContent(serialized)
+          pushContentHistory(serialized)
+          return next
+        })
+        showToast('Image updated in article', 'success')
+      } else {
+        // Insert new image block
+        const insertAt = activeVisualBlockIndex !== null ? activeVisualBlockIndex + 1 : editorBlocks.length
+        const newBlock: VisualBlock = {
+          id: 'blk-' + Date.now(),
+          type: 'image',
+          url,
+          alt,
+          caption
+        }
+        setEditorBlocks((prev) => {
+          const next = [...prev]
+          next.splice(insertAt, 0, newBlock)
+          if (insertAt === next.length - 1 || next[insertAt + 1]?.type !== 'text') {
+            next.splice(insertAt + 1, 0, { id: 'blk-' + (Date.now() + 1), type: 'text', text: '' })
+          }
+          const serialized = serializeVisualBlocksToContent(next)
+          setEditorContent(serialized)
+          pushContentHistory(serialized)
+          return next
+        })
+        showToast('Image inserted into article', 'success')
+      }
+    } else {
+      let snippet = `![${alt}](${url})`
+      if (caption) {
+        snippet += `\n*${caption}*`
+      }
+      insertMediaAtSavedCursor(snippet)
+      showToast('Image inserted into article section', 'success')
+    }
+
+    setImageModalOpen(false)
+    setEditingBlockIndex(null)
+    setActiveVisualBlockIndex(null)
+  }
+
+  const handleInsertYouTubeIntoSection = () => {
+    const videoId = extractYouTubeId(youtubeModalUrl)
+    if (!videoId) {
+      showToast('Please enter a valid YouTube video URL or ID', 'error')
+      return
+    }
+    const title = youtubeModalTitle.trim() || 'Jobsite Equipment Video'
+    const fullUrl = `https://www.youtube.com/watch?v=${videoId}`
+
+    if (editorMode === 'visual') {
+      const insertAt = activeVisualBlockIndex !== null ? activeVisualBlockIndex + 1 : editorBlocks.length
+      const newBlock: VisualBlock = {
+        id: 'blk-' + Date.now(),
+        type: 'video',
+        url: fullUrl,
+        videoId,
+        videoTitle: title
+      }
+      setEditorBlocks((prev) => {
+        const next = [...prev]
+        next.splice(insertAt, 0, newBlock)
+        if (insertAt === next.length - 1 || next[insertAt + 1]?.type !== 'text') {
+          next.splice(insertAt + 1, 0, { id: 'blk-' + (Date.now() + 1), type: 'text', text: '' })
+        }
+        const serialized = serializeVisualBlocksToContent(next)
+        setEditorContent(serialized)
+        pushContentHistory(serialized)
+        return next
+      })
+      showToast('YouTube video embedded into article', 'success')
+    } else {
+      const snippet = `[Watch Video: ${title}](${fullUrl})`
+      insertMediaAtSavedCursor(snippet)
+      showToast('YouTube video embedded into article section', 'success')
+    }
+
+    setYoutubeModalOpen(false)
+    setActiveVisualBlockIndex(null)
   }
 
 
@@ -753,6 +2112,9 @@ export default function AdminDashboard() {
       const prevVal = contentHistory[historyIndex - 1]
       setHistoryIndex((prev) => prev - 1)
       setEditorContent(prevVal)
+      if (editorMode === 'visual') {
+        setEditorBlocks(parseContentToVisualBlocks(prevVal))
+      }
     }
   }
 
@@ -761,10 +2123,91 @@ export default function AdminDashboard() {
       const nextVal = contentHistory[historyIndex + 1]
       setHistoryIndex((prev) => prev + 1)
       setEditorContent(nextVal)
+      if (editorMode === 'visual') {
+        setEditorBlocks(parseContentToVisualBlocks(nextVal))
+      }
     }
   }
 
   const insertTextAtCursor = (prefix: string, suffix: string = '', defaultText: string = '') => {
+    if (editorMode === 'visual') {
+      let targetIdx = activeVisualBlockIndex !== null && editorBlocks[activeVisualBlockIndex]?.type === 'text'
+        ? activeVisualBlockIndex
+        : -1
+      
+      if (targetIdx === -1) {
+        for (let i = editorBlocks.length - 1; i >= 0; i--) {
+          if (editorBlocks[i].type === 'text') {
+            targetIdx = i
+            break
+          }
+        }
+      }
+
+      if (targetIdx === -1) {
+        const newBlockId = 'blk-' + Date.now()
+        const newBlock: VisualBlock = {
+          id: newBlockId,
+          type: 'text',
+          text: `${prefix}${defaultText}${suffix}`
+        }
+        const updated = [...editorBlocks, newBlock]
+        setEditorBlocks(updated)
+        setBlockMode(newBlockId, 'edit')
+        const serialized = serializeVisualBlocksToContent(updated)
+        setEditorContent(serialized)
+        pushContentHistory(serialized)
+        return
+      }
+
+      const curBlock = editorBlocks[targetIdx]
+      const curText = curBlock.text || ''
+      const ta = visualBlockTextareaRefs.current[targetIdx]
+
+      let textToInsert = defaultText
+      let start = curText.length
+      let end = curText.length
+
+      if (ta && typeof ta.selectionStart === 'number' && typeof ta.selectionEnd === 'number' && ta.selectionStart !== ta.selectionEnd) {
+        start = ta.selectionStart
+        end = ta.selectionEnd
+        const selected = curText.substring(start, end)
+        if (selected) {
+          textToInsert = selected
+        }
+      } else if (ta && typeof ta.selectionStart === 'number') {
+        start = ta.selectionStart
+        end = ta.selectionStart
+      }
+
+      const replacement = `${prefix}${textToInsert}${suffix}`
+      let newText = ''
+      if (start === curText.length && end === curText.length && curText.trim()) {
+        newText = `${curText}\n\n${replacement}`
+      } else {
+        newText = curText.substring(0, start) + replacement + curText.substring(end)
+      }
+
+      const updated = [...editorBlocks]
+      updated[targetIdx] = { ...curBlock, text: newText }
+      setEditorBlocks(updated)
+      const serialized = serializeVisualBlocksToContent(updated)
+      setEditorContent(serialized)
+      pushContentHistory(serialized)
+
+      const blockId = curBlock.id || `blk-${targetIdx}`
+      if (getBlockViewMode(blockId, true) === 'edit') {
+        setTimeout(() => {
+          if (ta) {
+            ta.focus()
+            const newPos = start + prefix.length + textToInsert.length + suffix.length
+            ta.setSelectionRange(newPos, newPos)
+          }
+        }, 0)
+      }
+      return
+    }
+
     const textarea = contentTextareaRef.current
     if (!textarea) return
 
@@ -852,29 +2295,421 @@ export default function AdminDashboard() {
     setArticlesSubView('list')
   }
 
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleSaveBlogCategory = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newCatName.trim()) return
-    const slug = newCatSlug.trim() || newCatName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    const newCat = {
+
+    const slug = (newCatSlug.trim() || newCatName.trim())
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+
+    const catData = {
       name: newCatName.trim(),
       slug,
       desc: newCatDesc.trim(),
-      cover: newCatCover.trim() || '/images/why-choose-v900-jobsite.png'
+      cover: newCatCover.trim() || '/images/why-choose-v900-jobsite.png',
+      parent: newCatParent.trim() || undefined
     }
-    const updated = [...blogCategories, newCat]
-    setBlogCategories(updated)
+
+    if (editingBlogCat) {
+      const oldName = editingBlogCat.name
+      const updated = blogCategories.map((c) => (c.name === oldName ? catData : c))
+      setBlogCategories(updated)
+      localStorage.setItem('happy-machinery-blog-categories', JSON.stringify(updated))
+      void writeSharedContent('blog-categories', updated)
+
+      // Update linked posts if name changed
+      if (oldName !== catData.name) {
+        const updatedPosts = posts.map((p) => (p.category === oldName ? { ...p, category: catData.name } : p))
+        setPosts(updatedPosts)
+        void writeSharedContent('blog-posts', updatedPosts)
+      }
+
+      showToast(`Category "${catData.name}" updated successfully!`, 'success')
+      setEditingBlogCat(null)
+    } else {
+      const exists = blogCategories.some((c) => c.name.toLowerCase() === catData.name.toLowerCase())
+      if (exists) {
+        showToast(`Category "${catData.name}" already exists.`, 'warning')
+        return
+      }
+      const updated = [...blogCategories, catData]
+      setBlogCategories(updated)
+      localStorage.setItem('happy-machinery-blog-categories', JSON.stringify(updated))
+      void writeSharedContent('blog-categories', updated)
+      showToast(`Category "${catData.name}" created successfully!`, 'success')
+    }
+
     setNewCatName('')
     setNewCatSlug('')
     setNewCatDesc('')
     setNewCatCover('')
-    showToast(`Category "${newCat.name}" added successfully!`, 'success')
+    setNewCatParent('')
+  }
+
+  const startEditBlogCategory = (cat: { name: string; slug: string; desc?: string; cover?: string; parent?: string }) => {
+    setEditingBlogCat(cat)
+    setNewCatName(cat.name)
+    setNewCatSlug(cat.slug)
+    setNewCatDesc(cat.desc || '')
+    setNewCatCover(cat.cover || '')
+    setNewCatParent(cat.parent || '')
+  }
+
+  const cancelEditBlogCategory = () => {
+    setEditingBlogCat(null)
+    setNewCatName('')
+    setNewCatSlug('')
+    setNewCatDesc('')
+    setNewCatCover('')
+    setNewCatParent('')
   }
 
   const handleDeleteCategory = (catName: string) => {
-    const remaining = blogCategories.filter((c) => c.name !== catName)
-    setBlogCategories(remaining)
-    showToast(`Category "${catName}" removed.`, 'warning')
+    const cat = blogCategories.find((c) => c.name === catName)
+    if (!cat) return
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Move Category to Trash?',
+      message: `Move category "${cat.name}" to Trash? You can restore it anytime from the Trash & Recovery menu.`,
+      confirmLabel: 'Move to Trash',
+      onConfirm: async () => {
+        const trashRecord: TrashItem = {
+          id: `blog-cat-${cat.slug || Date.now()}`,
+          originalId: cat.slug,
+          type: 'blog-category',
+          title: cat.name,
+          subtitle: `/category/${cat.slug} · Editorial Category`,
+          image: cat.cover,
+          deletedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          deletedTimestamp: Date.now(),
+          data: cat
+        }
+        const updatedTrash = [trashRecord, ...trashItems]
+        const remaining = blogCategories.filter((c) => c.name !== catName)
+
+        setTrashItems(updatedTrash)
+        setBlogCategories(remaining)
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
+        localStorage.setItem('happy-machinery-blog-categories', JSON.stringify(remaining))
+        await writeSharedContent('trash-items', updatedTrash)
+        await writeSharedContent('blog-categories', remaining)
+        await logSecurityEvent('CONTENT_DELETED', `Category "${cat.name}" moved to Trash.`, 'warning', currentUser?.username)
+
+        showToast(`Category "${cat.name}" moved to Trash.`, 'warning')
+        setConfirmDialog(null)
+        if (editingBlogCat?.name === catName) {
+          cancelEditBlogCategory()
+        }
+      }
+    })
+  }
+
+  const handleMoveArticleToTrash = (post: BlogPost) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Move Article to Trash?',
+      message: `Move "${post.title}" to Trash? You can easily restore it anytime from the Trash & Recovery vault.`,
+      confirmLabel: 'Move to Trash',
+      onConfirm: async () => {
+        const trashRecord: TrashItem = {
+          id: `article-${post.id}`,
+          originalId: post.id,
+          type: 'article',
+          title: post.title,
+          subtitle: `Category: ${post.category} · Author: ${post.author || 'Super Admin'}`,
+          image: post.image,
+          deletedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          deletedTimestamp: Date.now(),
+          data: post
+        }
+        const updatedTrash = [trashRecord, ...trashItems]
+        const updatedPosts = posts.filter((p) => p.id !== post.id)
+
+        setTrashItems(updatedTrash)
+        setPosts(updatedPosts)
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
+        await writeSharedContent('trash-items', updatedTrash)
+        await writeSharedContent('blog-posts', updatedPosts)
+        await logSecurityEvent('CONTENT_DELETED', `Article "${post.title}" moved to Trash.`, 'warning', currentUser?.username)
+
+        showToast(`Article "${post.title}" moved to Trash.`, 'warning')
+        setConfirmDialog(null)
+        if (articlesSubView === 'editor') setArticlesSubView('list')
+      }
+    })
+  }
+
+  const handleRestoreTrashItem = async (item: TrashItem) => {
+    if (item.type === 'article') {
+      const restoredPost = item.data as BlogPost
+      const exists = posts.some((p) => p.id === restoredPost.id)
+      const updatedPosts = exists ? posts : [restoredPost, ...posts]
+      setPosts(updatedPosts)
+      await writeSharedContent('blog-posts', updatedPosts)
+    } else if (item.type === 'product') {
+      const restoredProd = item.data as AdminProduct
+      const exists = products.some((p) => p.id === restoredProd.id)
+      const updatedProducts = exists ? products : [restoredProd, ...products]
+      setProducts(updatedProducts)
+      await writeSharedContent('products', updatedProducts)
+    } else if (item.type === 'blog-category') {
+      const restoredCat = item.data
+      const exists = blogCategories.some((c) => c.name === restoredCat.name)
+      const updated = exists ? blogCategories : [...blogCategories, restoredCat]
+      setBlogCategories(updated)
+      localStorage.setItem('happy-machinery-blog-categories', JSON.stringify(updated))
+      await writeSharedContent('blog-categories', updated)
+    } else if (item.type === 'product-category') {
+      const restoredCat = item.data
+      const exists = productCategories.some((c) => c.id === restoredCat.id)
+      const updated = exists ? productCategories : [...productCategories, restoredCat]
+      setProductCategories(updated)
+      await writeSharedContent('product-categories', updated)
+    }
+
+    const remaining = trashItems.filter((t) => t.id !== item.id)
+    setTrashItems(remaining)
+    localStorage.setItem('happy-machinery-trash', JSON.stringify(remaining))
+    await writeSharedContent('trash-items', remaining)
+    await logSecurityEvent('CONTENT_PUBLISHED', `Restored ${item.type} "${item.title}" from Trash.`, 'info', currentUser?.username)
+    showToast(`"${item.title}" restored successfully!`, 'success')
+  }
+
+  const handlePermanentlyDeleteTrashItem = (item: TrashItem) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Permanently Erase Item?',
+      message: `Permanently erase "${item.title}"? This cannot be undone.`,
+      confirmLabel: 'Permanently Delete',
+      onConfirm: async () => {
+        const remaining = trashItems.filter((t) => t.id !== item.id)
+        setTrashItems(remaining)
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(remaining))
+        await writeSharedContent('trash-items', remaining)
+        await logSecurityEvent('CONTENT_DELETED', `Purged ${item.type} "${item.title}".`, 'warning', currentUser?.username)
+        showToast(`"${item.title}" permanently erased.`, 'warning')
+        setConfirmDialog(null)
+      }
+    })
+  }
+
+  const handleRestoreAllTrash = () => {
+    if (trashItems.length === 0) return
+    setConfirmDialog({
+      isOpen: true,
+      title: `Restore All ${trashItems.length} Trashed Items?`,
+      message: 'This will recover all deleted articles, products, and categories back to their active sections.',
+      confirmLabel: 'Restore All',
+      onConfirm: async () => {
+        let newPosts = [...posts]
+        let newProds = [...products]
+        let newBlogCats = [...blogCategories]
+        let newProdCats = [...productCategories]
+
+        for (const item of trashItems) {
+          if (item.type === 'article' && !newPosts.some((p) => p.id === item.data.id)) {
+            newPosts.unshift(item.data)
+          } else if (item.type === 'product' && !newProds.some((p) => p.id === item.data.id)) {
+            newProds.unshift(item.data)
+          } else if (item.type === 'blog-category' && !newBlogCats.some((c) => c.name === item.data.name)) {
+            newBlogCats.push(item.data)
+          } else if (item.type === 'product-category' && !newProdCats.some((c) => c.id === item.data.id)) {
+            newProdCats.push(item.data)
+          }
+        }
+
+        setPosts(newPosts)
+        setProducts(newProds)
+        setBlogCategories(newBlogCats)
+        setProductCategories(newProdCats)
+        setTrashItems([])
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify([]))
+        localStorage.setItem('happy-machinery-blog-categories', JSON.stringify(newBlogCats))
+        await writeSharedContent('trash-items', [])
+        await writeSharedContent('blog-posts', newPosts)
+        await writeSharedContent('products', newProds)
+        await writeSharedContent('blog-categories', newBlogCats)
+        await writeSharedContent('product-categories', newProdCats)
+
+        showToast(`All ${trashItems.length} items restored!`, 'success')
+        setConfirmDialog(null)
+      }
+    })
+  }
+
+  const handleEmptyAllTrash = () => {
+    if (trashItems.length === 0) return
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Empty Trash Vault?',
+      message: `Permanently delete all ${trashItems.length} items in Trash? They cannot be recovered after this.`,
+      confirmLabel: 'Empty Trash',
+      onConfirm: async () => {
+        const count = trashItems.length
+        setTrashItems([])
+        localStorage.setItem('happy-machinery-trash', JSON.stringify([]))
+        await writeSharedContent('trash-items', [])
+        await logSecurityEvent('CONTENT_DELETED', `Purged entire trash (${count} items).`, 'warning', currentUser?.username)
+        showToast(`Trash vault emptied (${count} items removed).`, 'warning')
+        setConfirmDialog(null)
+      }
+    })
+  }
+
+  // ==============================================================================
+  // Product Categories Handlers
+  // ==============================================================================
+  const handleSaveProductCategory = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pcatName.trim()) {
+      setToast({ message: 'Category name is required', type: 'error' })
+      return
+    }
+
+    const slug = (pcatSlug.trim() || pcatName.trim())
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+
+    if (editingProductCat) {
+      // Update existing category
+      const oldName = editingProductCat.name
+      const newName = pcatName.trim()
+      const updatedList = productCategories.map((c) =>
+        c.id === editingProductCat.id
+          ? {
+              ...c,
+              name: newName,
+              slug,
+              parent: pcatParent.trim(),
+              description: pcatDesc.trim(),
+              coverImage: pcatCover.trim() || c.coverImage
+            }
+          : c
+      )
+      setProductCategories(updatedList)
+      localStorage.setItem('hm_cms_product_categories', JSON.stringify(updatedList))
+
+      // Also sync products assigned to this category if name changed
+      if (oldName !== newName) {
+        const updatedProducts = products.map((p) => {
+          if (p.category === oldName) {
+            return { ...p, category: newName }
+          }
+          if (p.category?.includes(oldName)) {
+            return { ...p, category: p.category.replace(oldName, newName) }
+          }
+          return p
+        })
+        setProducts(updatedProducts)
+        localStorage.setItem('hm_cms_products', JSON.stringify(updatedProducts))
+      }
+
+      setToast({ message: `Category "${newName}" updated successfully!`, type: 'success' })
+      setEditingProductCat(null)
+      setPcatName('')
+      setPcatSlug('')
+      setPcatParent('')
+      setPcatDesc('')
+      setPcatCover('')
+    } else {
+      // Add new category
+      const newCat = {
+        id: `pcat-${Date.now()}`,
+        name: pcatName.trim(),
+        slug,
+        parent: pcatParent.trim(),
+        description: pcatDesc.trim(),
+        coverImage: pcatCover.trim() || '/images/why-choose-v900-jobsite.png'
+      }
+      const updatedList = [newCat, ...productCategories]
+      setProductCategories(updatedList)
+      localStorage.setItem('hm_cms_product_categories', JSON.stringify(updatedList))
+
+      setToast({ message: `Category "${newCat.name}" created successfully!`, type: 'success' })
+      setPcatName('')
+      setPcatSlug('')
+      setPcatParent('')
+      setPcatDesc('')
+      setPcatCover('')
+    }
+  }
+
+  const handleStartEditProductCat = (cat: { id: string; name: string; slug: string; parent?: string; description?: string; coverImage?: string }) => {
+    setEditingProductCat(cat)
+    setPcatName(cat.name)
+    setPcatSlug(cat.slug)
+    setPcatParent(cat.parent || '')
+    setPcatDesc(cat.description || '')
+    setPcatCover(cat.coverImage || '')
+    const formElem = document.getElementById('cms-pcat-form-anchor')
+    if (formElem) {
+      formElem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+
+  const handleCancelEditProductCat = () => {
+    setEditingProductCat(null)
+    setPcatName('')
+    setPcatSlug('')
+    setPcatParent('')
+    setPcatDesc('')
+    setPcatCover('')
+  }
+
+  const handleDeleteProductCat = (catId: string, _catName?: string) => {
+    const cat = productCategories.find((c) => c.id === catId)
+    if (!cat) return
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Move Equipment Category to Trash?',
+      message: `Move category "${cat.name}" to Trash? You can restore it back anytime from the Trash & Recovery vault.`,
+      confirmLabel: 'Move to Trash',
+      onConfirm: async () => {
+        const trashRecord: TrashItem = {
+          id: `prod-cat-${cat.id}`,
+          originalId: cat.id,
+          type: 'product-category',
+          title: cat.name,
+          subtitle: `/equipment/${cat.slug} · Equipment Category`,
+          image: cat.coverImage,
+          deletedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          deletedTimestamp: Date.now(),
+          data: cat
+        }
+        const updatedTrash = [trashRecord, ...trashItems]
+        const remaining = productCategories.filter((c) => c.id !== catId)
+
+        setTrashItems(updatedTrash)
+        setProductCategories(remaining)
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
+        localStorage.setItem('hm_cms_product_categories', JSON.stringify(remaining))
+        await writeSharedContent('trash-items', updatedTrash)
+        await writeSharedContent('product-categories', remaining)
+        await logSecurityEvent('CONTENT_DELETED', `Equipment category "${cat.name}" moved to Trash.`, 'warning', currentUser?.username)
+
+        showToast(`Category "${cat.name}" moved to Trash.`, 'warning')
+        setConfirmDialog(null)
+        if (editingProductCat?.id === catId) {
+          handleCancelEditProductCat()
+        }
+      }
+    })
+  }
+
+  const getProductCountForCategory = (catName: string) => {
+    return products.filter((p) => {
+      if (!p.category) return false
+      const lowerCat = catName.toLowerCase()
+      const lowerProdCat = p.category.toLowerCase()
+      return lowerProdCat === lowerCat || lowerProdCat.includes(lowerCat)
+    }).length
   }
 
   // ==============================================================================
@@ -886,25 +2721,19 @@ export default function AdminDashboard() {
     setProdEditorSlug('')
     setProdEditorShortDesc('')
     setProdEditorDesc('')
-    setProdEditorSku(`HM-${Math.floor(1000 + Math.random() * 9000)}`)
-    setProdEditorCategory('Equipment > Skid Steer Loaders')
-    setProdEditorBrand('TYPHON')
-    setProdEditorPrice(11999)
-    setProdEditorSalePrice(undefined)
-    setProdEditorStock(4)
+    setProdEditorSku('')
+    setProdEditorCategory('')
+    setProdEditorBrand('')
+    setProdEditorPrice('')
+    setProdEditorSalePrice('')
+    setProdEditorStock('')
     setProdEditorStatus('Published')
-    setProdEditorBuyUrl('https://happymachinery.com/store')
+    setProdEditorBuyUrl('')
     setProdEditorFeatured(false)
     setProdEditorAddToCart(true)
-    setProdEditorImage('/images/loader-red.png')
-    setProdEditorGallery('/images/loader-yellow.jpg\n/images/loader-blue.jpg')
-    setProdEditorSpecs([
-      { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine (Tier 4 / Stage V)' },
-      { name: 'Operating Weight', value: '2,150 lbs (975 kg)' },
-      { name: 'Rated Operating Capacity', value: '900 lbs (408 kg)' },
-      { name: 'Hydraulic Flow', value: '12.7 GPM @ 2,321 psi' },
-      { name: 'Width', value: '35.5 in (Fits Standard Backyard Gates)' }
-    ])
+    setProdEditorImage('')
+    setProdEditorGallery('')
+    setProdEditorSpecs([])
     setProductsSubView('editor')
   }
 
@@ -914,24 +2743,19 @@ export default function AdminDashboard() {
     setProdEditorSlug(prod.slug || prod.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
     setProdEditorShortDesc(prod.shortDescription || prod.description.slice(0, 140))
     setProdEditorDesc(prod.description)
-    setProdEditorSku(prod.sku)
-    setProdEditorCategory(prod.category || 'Equipment > Skid Steer Loaders')
-    setProdEditorBrand(prod.brand || 'TYPHON')
+    setProdEditorSku(prod.sku ? prod.sku.replace(/^typh/i, 'TYPH') : '')
+    setProdEditorCategory(prod.category || '')
+    setProdEditorBrand(prod.brand || '')
     setProdEditorPrice(prod.price)
-    setProdEditorSalePrice(prod.salePrice)
+    setProdEditorSalePrice(prod.salePrice ?? '')
     setProdEditorStock(prod.stock ?? 0)
     setProdEditorStatus(prod.status || 'Draft')
     setProdEditorBuyUrl(prod.buyUrl || '')
     setProdEditorFeatured(!!prod.featured)
     setProdEditorAddToCart(prod.addToCartEnabled !== false)
-    setProdEditorImage(prod.image || '/images/loader-red.png')
+    setProdEditorImage(prod.image || '')
     setProdEditorGallery(Array.isArray(prod.galleryImages) ? prod.galleryImages.join('\n') : '')
-    setProdEditorSpecs(prod.specifications && prod.specifications.length > 0 ? prod.specifications : [
-      { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine' },
-      { name: 'Operating Weight', value: '2,150 lbs' },
-      { name: 'Rated Operating Capacity', value: '900 lbs' },
-      { name: 'Hydraulic Flow', value: '12.7 GPM' }
-    ])
+    setProdEditorSpecs(prod.specifications && prod.specifications.length > 0 ? prod.specifications : [])
     setProductsSubView('editor')
   }
 
@@ -958,7 +2782,7 @@ export default function AdminDashboard() {
               slug: finalSlug,
               shortDescription: prodEditorShortDesc,
               description: prodEditorDesc,
-              sku: prodEditorSku || p.sku,
+              sku: (prodEditorSku || p.sku).replace(/^typh/i, 'TYPH'),
               category: prodEditorCategory,
               brand: prodEditorBrand,
               price: Number(prodEditorPrice) || 0,
@@ -986,7 +2810,7 @@ export default function AdminDashboard() {
         slug: finalSlug,
         shortDescription: prodEditorShortDesc,
         description: prodEditorDesc,
-        sku: prodEditorSku || `HM-${Math.floor(1000 + Math.random() * 9000)}`,
+        sku: prodEditorSku ? prodEditorSku.replace(/^typh/i, 'TYPH') : `TYPH-${Math.floor(1000 + Math.random() * 9000)}`,
         category: prodEditorCategory,
         brand: prodEditorBrand,
         price: Number(prodEditorPrice) || 0,
@@ -1012,36 +2836,40 @@ export default function AdminDashboard() {
 
   const handleDeleteProduct = (id: number) => {
     const prod = products.find((p) => p.id === id)
+    if (!prod) return
     setConfirmDialog({
       isOpen: true,
-      title: 'Delete Equipment Listing',
-      message: `Are you sure you want to delete "${prod?.name || 'this product'}"? This will permanently remove the equipment listing from the catalog.`,
-      confirmLabel: 'Delete Product',
+      title: 'Move Equipment Listing to Trash?',
+      message: `Move "${prod.name}" to Trash? It will be safely preserved in the Trash Vault and can be recovered back to your store catalog at any time.`,
+      confirmLabel: 'Move to Trash',
       onConfirm: async () => {
+        const trashRecord: TrashItem = {
+          id: `product-${prod.id}`,
+          originalId: prod.id,
+          type: 'product',
+          title: prod.name,
+          subtitle: `SKU: ${(prod.sku || '').replace(/^typh/i, 'TYPH')} · $${prod.price?.toLocaleString()} · Status: ${prod.status}`,
+          image: prod.image,
+          deletedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          deletedTimestamp: Date.now(),
+          data: prod
+        }
+        const updatedTrash = [trashRecord, ...trashItems]
         const updated = products.filter((p) => p.id !== id)
+
+        setTrashItems(updatedTrash)
         setProducts(updated)
+
+        localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
+        await writeSharedContent('trash-items', updatedTrash)
         await writeSharedContent('products', updated)
-        await logSecurityEvent('CONTENT_DELETED', `Equipment listing #${id} deleted.`, 'warning', currentUser?.username)
-        showToast('Equipment listing deleted from catalog.', 'success')
+        await logSecurityEvent('CONTENT_DELETED', `Equipment listing #${id} ("${prod.name}") moved to Trash.`, 'warning', currentUser?.username)
+
+        showToast(`Equipment listing "${prod.name}" moved to Trash. Recover anytime from Trash.`, 'warning')
         setConfirmDialog(null)
+        if (productsSubView === 'editor') setProductsSubView('list')
       }
     })
-  }
-
-  const handleDuplicateProduct = async (prod: AdminProduct) => {
-    const duplicated: AdminProduct = {
-      ...prod,
-      id: Date.now(),
-      name: `${prod.name} (Copy)`,
-      sku: `${prod.sku}-COPY`,
-      slug: `${prod.slug || 'item'}-copy`,
-      status: 'Draft',
-      updatedAt: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    }
-    const updated = [duplicated, ...products]
-    setProducts(updated)
-    await writeSharedContent('products', updated)
-    showToast(`Duplicated ${prod.sku} as draft!`, 'success')
   }
 
   const handleToggleProductStatus = async (id: number) => {
@@ -1128,7 +2956,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className={`cms-shell cms-theme-${theme} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`cms-shell cms-theme-${theme} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''} ${(activeTab === 'articles' && articlesSubView === 'editor') || (activeTab === 'products' && productsSubView === 'editor') ? 'cms-editor-active-view' : ''}`}>
       {isLoadingData && <div className="cms-top-loader" />}
       {/* Toast Notification Container */}
       {toast && (
@@ -1139,40 +2967,75 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Mobile Backdrop Overlay */}
+      {isMobileSidebarOpen && (
+        <div
+          className="cms-sidebar-backdrop"
+          onClick={() => setIsMobileSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* ==============================================================================
-          Rafvex-Style Modern Collapsible Sidebar Navigation
+          Rafvex-Style Modern Sidebar Navigation (Always Expanded with Submenus)
           ============================================================================== */}
-      <aside className={`cms-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      <aside className={`cms-sidebar ${isSidebarCollapsed ? 'collapsed' : ''} ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
         <div className="cms-sidebar-brand">
-          <Link to="/ourcmskiuq" className="cms-brand-link">
+          <Link to="/ourcmskiuq" className="cms-brand-link" onClick={() => setIsMobileSidebarOpen(false)}>
             {isSidebarCollapsed ? (
-              <div className="cms-brand-logo-badge" data-tooltip="Happy Machinery CMS">
+              <div
+                className="cms-brand-logo-badge"
+                data-tooltip="Happy Machinery CMS"
+                title="Expand sidebar"
+                onClick={(e) => {
+                  e.preventDefault()
+                  toggleSidebar()
+                }}
+              >
                 <img
-                  src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+                  src={siteSettings.logo || '/logo.png'}
                   alt="Happy Machinery"
                   style={{ width: '28px', height: '28px', objectFit: 'contain' }}
-                  onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+                  onError={(e) => { (e.target as HTMLImageElement).src = '/logo.png' }}
                 />
               </div>
             ) : (
               <div className="cms-sidebar-logo-wrapper">
                 <img
-                  src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
+                  src={siteSettings.logo || '/logo.png'}
                   alt="Happy Machinery"
                   className="cms-sidebar-logo-img"
-                  onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+                  onError={(e) => { (e.target as HTMLImageElement).src = '/logo.png' }}
                 />
               </div>
             )}
           </Link>
+
+          {/* Sidebar Toggle Button (Collapse / Expand) */}
           <button
+            type="button"
             className="cms-sidebar-toggle-btn"
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            onClick={toggleSidebar}
             title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             data-tooltip={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            aria-label={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               {isSidebarCollapsed ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
+            </svg>
+          </button>
+
+          {/* Mobile Close Button */}
+          <button
+            type="button"
+            className="cms-sidebar-mobile-close-btn"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            title="Close navigation"
+            aria-label="Close navigation"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
@@ -1206,7 +3069,12 @@ export default function AdminDashboard() {
               className={`cms-nav-item ${activeTab === 'articles' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('articles')
-                setIsArticlesExpanded(!isArticlesExpanded)
+                if (isSidebarCollapsed) {
+                  setIsSidebarCollapsed(false)
+                  setIsArticlesExpanded(true)
+                } else {
+                  setIsArticlesExpanded(!isArticlesExpanded)
+                }
               }}
               data-tooltip="Articles & Content"
               title={isSidebarCollapsed ? 'Articles & Content' : undefined}
@@ -1221,28 +3089,26 @@ export default function AdminDashboard() {
                 </svg>
               </span>
               <span className="cms-nav-label">Articles</span>
-              {!isSidebarCollapsed && (
-                <span className="cms-nav-expand-arrow">
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    style={{
-                      transition: 'transform 0.2s ease',
-                      transform: isArticlesExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                    }}
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </span>
-              )}
+              <span className="cms-nav-expand-arrow">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  style={{
+                    transition: 'transform 0.2s ease',
+                    transform: isArticlesExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </span>
             </button>
 
             {/* Articles Submenu */}
-            {isArticlesExpanded && !isSidebarCollapsed && (
+            {!isSidebarCollapsed && isArticlesExpanded && (
               <div className="cms-nav-sub-menu">
                 <button
                   className={`cms-nav-sub-item ${activeTab === 'articles' && articlesSubView === 'list' ? 'active' : ''}`}
@@ -1295,6 +3161,22 @@ export default function AdminDashboard() {
                   <span>Categories</span>
                   <span className="cms-sub-count">{blogCategories.length}</span>
                 </button>
+
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'articles' && articlesSubView === 'topBlogs' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('articles')
+                    setArticlesSubView('topBlogs')
+                  }}
+                >
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                  </span>
+                  <span>Top Blogs</span>
+                  <span className="cms-sub-count" style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24' }}>HOT</span>
+                </button>
               </div>
             )}
           </div>
@@ -1305,7 +3187,12 @@ export default function AdminDashboard() {
               className={`cms-nav-item ${activeTab === 'products' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('products')
-                setIsProductsExpanded(!isProductsExpanded)
+                if (isSidebarCollapsed) {
+                  setIsSidebarCollapsed(false)
+                  setIsProductsExpanded(true)
+                } else {
+                  setIsProductsExpanded(!isProductsExpanded)
+                }
               }}
               data-tooltip="Equipment & Products"
               title={isSidebarCollapsed ? 'Equipment & Products' : undefined}
@@ -1318,38 +3205,37 @@ export default function AdminDashboard() {
                 </svg>
               </span>
               <span className="cms-nav-label">Products</span>
-              {!isSidebarCollapsed && (
-                <span className="cms-nav-expand-arrow">
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    style={{
-                      transition: 'transform 0.2s ease',
-                      transform: isProductsExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                    }}
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </span>
-              )}
+              <span className="cms-nav-expand-arrow">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  style={{
+                    transition: 'transform 0.2s ease',
+                    transform: isProductsExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </span>
             </button>
 
             {/* Products Submenu */}
-            {isProductsExpanded && !isSidebarCollapsed && (
+            {!isSidebarCollapsed && isProductsExpanded && (
               <div className="cms-nav-sub-menu">
                 <button
                   className={`cms-nav-sub-item ${activeTab === 'products' && productsSubView === 'list' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('products')
                     setProductsSubView('list')
+                    setProdCategoryFilter('all')
                   }}
                 >
                   <span className="cms-sub-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
                       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                       <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                       <line x1="12" y1="22.08" x2="12" y2="12" />
@@ -1367,7 +3253,7 @@ export default function AdminDashboard() {
                   }}
                 >
                   <span className="cms-sub-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="12" y1="8" x2="12" y2="16" />
                       <line x1="8" y1="12" x2="16" y2="12" />
@@ -1377,32 +3263,31 @@ export default function AdminDashboard() {
                 </button>
 
                 <button
-                  className={`cms-nav-sub-item ${activeTab === 'products' && prodCategoryFilter !== 'all' ? 'active' : ''}`}
+                  className={`cms-nav-sub-item ${activeTab === 'products' && productsSubView === 'categories' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('products')
-                    setProductsSubView('list')
-                    setProdCategoryFilter('Equipment > Skid Steer Loaders')
+                    setProductsSubView('categories')
                   }}
                 >
                   <span className="cms-sub-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
                       <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
                       <line x1="7" y1="7" x2="7.01" y2="7" />
                     </svg>
                   </span>
                   <span>Categories</span>
+                  <span className="cms-sub-count">{productCategories.length}</span>
                 </button>
 
                 <button
-                  className={`cms-nav-sub-item ${activeTab === 'products' && prodSearch === 'TYPHON' ? 'active' : ''}`}
+                  className={`cms-nav-sub-item ${activeTab === 'products' && productsSubView === 'brands' ? 'active' : ''}`}
                   onClick={() => {
                     setActiveTab('products')
-                    setProductsSubView('list')
-                    setProdSearch('TYPHON')
+                    setProductsSubView('brands')
                   }}
                 >
                   <span className="cms-sub-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
                       <path d="M3 21h18M3 7v14M21 7v14M6 7V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3M9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2" />
                     </svg>
                   </span>
@@ -1444,7 +3329,7 @@ export default function AdminDashboard() {
                 <polyline points="21 15 16 10 5 21" />
               </svg>
             </span>
-            <span className="cms-nav-label">Image Store</span>
+            <span className="cms-nav-label">Media Library</span>
             <span className="cms-nav-badge">{mediaList.length}</span>
           </button>
 
@@ -1515,6 +3400,28 @@ export default function AdminDashboard() {
             <span className="cms-nav-label">Pop-up & Banners</span>
           </button>
 
+          {/* Trash & Recovery Vault */}
+          <button
+            className={`cms-nav-item ${activeTab === 'trash' ? 'active' : ''}`}
+            onClick={() => setActiveTab('trash')}
+            data-tooltip="Trash & Recovery"
+            title={isSidebarCollapsed ? 'Trash & Recovery' : undefined}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Trash & Recovery</span>
+            {trashItems.length > 0 && (
+              <span className="cms-nav-badge warning">{trashItems.length}</span>
+            )}
+            {activeTab === 'trash' && <span className="cms-nav-active-dot" />}
+          </button>
+
           <span className="cms-nav-group-title">SETTINGS & SYSTEM</span>
 
           <button
@@ -1550,23 +3457,6 @@ export default function AdminDashboard() {
             <span className="cms-nav-badge">{adminUsers.length}</span>
           </button>
 
-          {/* Maintenance Mode Item (Screenshot 5) */}
-          <button
-            className={`cms-nav-item ${activeTab === 'maintenance' ? 'active' : ''}`}
-            onClick={() => setActiveTab('maintenance')}
-            data-tooltip="Maintenance Mode"
-            title={isSidebarCollapsed ? 'Maintenance Mode' : undefined}
-          >
-            <span className="cms-nav-icon" style={{ color: maintenanceGlobal ? 'var(--cms-warning)' : 'inherit' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-            </span>
-            <span className="cms-nav-label">Maintenance</span>
-            <span className="cms-nav-active-dot" style={{ background: maintenanceGlobal ? 'var(--cms-accent-blue)' : '#10b981' }} />
-          </button>
         </nav>
 
         {/* Sidebar Footer User Card */}
@@ -1603,14 +3493,29 @@ export default function AdminDashboard() {
         {/* Rafvex Top Header Bar */}
         <header className="cms-top-header">
           <div className="cms-header-left">
+            {/* Sidebar Collapse / Expand Toggle Button */}
+            <button
+              type="button"
+              className="cms-header-sidebar-toggle"
+              onClick={() => {
+                if (window.innerWidth <= 1024) {
+                  setIsMobileSidebarOpen(!isMobileSidebarOpen)
+                } else {
+                  toggleSidebar()
+                }
+              }}
+              title={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+              aria-label={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+
             {/* Pill Search Input */}
             <div className="cms-header-pill-search">
-              <span className="cms-header-search-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              </span>
               <input
                 type="text"
                 className="cms-pill-search-input"
@@ -1674,24 +3579,189 @@ export default function AdminDashboard() {
               <span style={{ fontSize: '13px', marginLeft: '2px' }}>↗</span>
             </a>
 
-            {/* Notification Bell with Badge */}
-            <button
-              className="cms-header-icon-btn"
-              onClick={() => showToast('You have 3 system updates and inquiries ready for review.', 'info' as any)}
-              title="Notifications"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              <span className="cms-notif-badge">3</span>
-            </button>
+            {/* Notification Bell Dropdown Container */}
+            <div className="cms-notification-menu-container" ref={notificationRef}>
+              <button
+                type="button"
+                className={`cms-header-icon-btn ${isNotificationOpen ? 'active' : ''}`}
+                onClick={() => {
+                  setIsNotificationOpen((prev) => !prev)
+                  setIsProfileDropdownOpen(false)
+                }}
+                title="Notifications"
+                aria-label="View notifications"
+                aria-expanded={isNotificationOpen}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {unreadNotificationCount > 0 && (
+                  <span className="cms-notif-badge">
+                    {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification Dropdown Menu */}
+              {isNotificationOpen && (
+                <div className="cms-notification-dropdown" onClick={(e) => e.stopPropagation()}>
+                  {/* Header */}
+                  <div className="cms-notif-header">
+                    <div className="cms-notif-header-title-row">
+                      <div className="cms-notif-header-title">
+                        <span>Notifications</span>
+                        {unreadNotificationCount > 0 && (
+                          <span className="cms-notif-unread-pill">{unreadNotificationCount} new</span>
+                        )}
+                      </div>
+                      {unreadNotificationCount > 0 && (
+                        <button
+                          type="button"
+                          className="cms-notif-action-text-btn"
+                          onClick={handleMarkAllNotificationsRead}
+                          title="Mark all as read"
+                        >
+                          Mark all as read
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter tabs */}
+                    <div className="cms-notif-filters">
+                      <button
+                        type="button"
+                        className={`cms-notif-filter-btn ${notificationFilter === 'all' ? 'active' : ''}`}
+                        onClick={() => setNotificationFilter('all')}
+                      >
+                        All ({notifications.length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`cms-notif-filter-btn ${notificationFilter === 'unread' ? 'active' : ''}`}
+                        onClick={() => setNotificationFilter('unread')}
+                      >
+                        Unread ({unreadNotificationCount})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Notification Items List */}
+                  <div className="cms-notif-list">
+                    {displayedNotifications.length === 0 ? (
+                      <div className="cms-notif-empty">
+                        <div className="cms-notif-empty-icon">
+                          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                          </svg>
+                        </div>
+                        <div className="cms-notif-empty-title">All caught up!</div>
+                        <div className="cms-notif-empty-desc">
+                          {notificationFilter === 'unread'
+                            ? 'No unread notifications at the moment.'
+                            : 'No notifications right now.'}
+                        </div>
+                      </div>
+                    ) : (
+                      displayedNotifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className={`cms-notif-item ${!notif.read ? 'unread' : ''}`}
+                          onClick={() => handleNotificationClick(notif)}
+                        >
+                          <div className={`cms-notif-item-icon ${notif.type}`}>
+                            {notif.type === 'inquiry' && (
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                              </svg>
+                            )}
+                            {notif.type === 'product' && (
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="1" y="3" width="15" height="13" />
+                                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                                <circle cx="5.5" cy="18.5" r="2.5" />
+                                <circle cx="18.5" cy="18.5" r="2.5" />
+                              </svg>
+                            )}
+                            {notif.type === 'security' && (
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                              </svg>
+                            )}
+                            {notif.type === 'system' && (
+                              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="23 4 23 10 17 10" />
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="cms-notif-item-content">
+                            <div className="cms-notif-item-title-row">
+                              <span className="cms-notif-item-title">{notif.title}</span>
+                              {!notif.read && <span className="cms-notif-dot" title="Unread" />}
+                            </div>
+                            <p className="cms-notif-item-message">{notif.message}</p>
+                            <div className="cms-notif-item-meta">
+                              <span className="cms-notif-item-time">{notif.time}</span>
+                              {notif.targetTab && (
+                                <span className="cms-notif-item-tab-link">
+                                  Go to {notif.targetTab} →
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="cms-notif-item-delete"
+                            title="Remove notification"
+                            onClick={(e) => handleDeleteNotification(notif.id, e)}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Dropdown Footer */}
+                  <div className="cms-notif-footer">
+                    <button
+                      type="button"
+                      className="cms-notif-footer-link"
+                      onClick={() => {
+                        setActiveTab('inquiries')
+                        setIsNotificationOpen(false)
+                      }}
+                    >
+                      View All Inquiries →
+                    </button>
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        className="cms-notif-footer-clear"
+                        onClick={handleClearAllNotifications}
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* User Profile Pill Dropdown Trigger */}
-            <div className="cms-profile-menu-container">
+            <div className="cms-profile-menu-container" ref={profileRef}>
               <button
+                type="button"
                 className={`cms-user-profile-pill ${isProfileDropdownOpen ? 'active' : ''}`}
-                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                onClick={() => {
+                  setIsProfileDropdownOpen((prev) => !prev)
+                  setIsNotificationOpen(false)
+                }}
               >
                 <div className="cms-avatar-badge">
                   <img
@@ -1790,7 +3860,10 @@ export default function AdminDashboard() {
         {/* ==============================================================================
             Body Views Container
             ============================================================================== */}
-        <div className="cms-main-scrollable-body">
+        <div
+          ref={mainContentRef}
+          className={`cms-main-scrollable-body ${(activeTab === 'articles' && articlesSubView === 'editor') || (activeTab === 'products' && productsSubView === 'editor') ? 'cms-editor-split-scroll-body' : ''}`}
+        >
           {/* TAB 1: DASHBOARD & EDITORIAL HUB (SCREENSHOT 1) */}
           {activeTab === 'dashboard' && (
             <div className="cms-dashboard-view-content">
@@ -1988,33 +4061,76 @@ export default function AdminDashboard() {
                         <span>Articles ({posts.length})</span>
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      className="cms-link-action-btn"
-                      onClick={() => {
-                        if (dashboardRecentTab === 'products') {
-                          setActiveTab('products')
-                          setProductsSubView('list')
-                        } else {
-                          setActiveTab('articles')
-                          setArticlesSubView('list')
-                        }
-                      }}
-                    >
-                      <span>View all</span>
-                      <span>→</span>
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Horizontal Scroll Helper Pill & Buttons */}
+                      <div className="cms-table-scroll-hint-wrapper">
+                        <span className="cms-table-scroll-hint-pill" title="Table is horizontally scrollable to view all columns">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="7 10 2 12 7 14" />
+                            <polyline points="17 10 22 12 17 14" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                          </svg>
+                          <span>Scrollable ⇄</span>
+                        </span>
+                        <div className="cms-table-scroll-controls" title="Scroll table left / right">
+                          <button
+                            type="button"
+                            className="cms-table-scroll-btn"
+                            onClick={() => scrollDashboardTable('left')}
+                            aria-label="Scroll left"
+                            title="Scroll table left"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="15 18 9 12 15 6" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-table-scroll-btn"
+                            onClick={() => scrollDashboardTable('right')}
+                            aria-label="Scroll right"
+                            title="Scroll table right"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="cms-link-action-btn"
+                        onClick={() => {
+                          if (dashboardRecentTab === 'products') {
+                            setActiveTab('products')
+                            setProductsSubView('list')
+                          } else {
+                            setActiveTab('articles')
+                            setArticlesSubView('list')
+                          }
+                        }}
+                      >
+                        <span>View all</span>
+                        <span>→</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {dashboardRecentTab === 'products' ? (
-                    <div className="cms-table-wrapper">
+                  <div className="cms-table-wrapper" ref={dashboardTableRef}>
+                    {dashboardRecentTab === 'products' ? (
                       <table className="cms-table cms-articles-table">
                         <thead>
                           <tr>
                             <th>EQUIPMENT MODEL</th>
                             <th>SKU</th>
-                            <th>PRICE</th>
+                            <th>CATEGORY</th>
+                            <th>BASE PRICE</th>
+                            <th>SALE PRICE</th>
+                            <th>STOCK LEVEL</th>
                             <th>STATUS</th>
+                            <th>STORE LINK</th>
+                            <th>LAST UPDATED</th>
                             <th style={{ textAlign: 'right' }}>ACTION</th>
                           </tr>
                         </thead>
@@ -2033,7 +4149,7 @@ export default function AdminDashboard() {
                                       {prod.name}
                                     </strong>
                                     <span className="cms-art-slug-link">
-                                      {prod.category}
+                                      {prod.sku}
                                     </span>
                                   </div>
                                 </div>
@@ -2041,44 +4157,79 @@ export default function AdminDashboard() {
                               <td>
                                 <span className="cms-sku-badge">{prod.sku}</span>
                               </td>
+                              <td>
+                                <span className="cms-category-pill" title={prod.category || 'General'}>
+                                  {(prod.category ? prod.category.split('>').pop()?.trim() : '') || prod.category || 'General'}
+                                </span>
+                              </td>
                               <td style={{ fontWeight: 800, color: 'var(--cms-text-primary)' }}>
                                 ${prod.price.toLocaleString()}
+                              </td>
+                              <td style={{ fontWeight: 700, color: prod.salePrice ? '#10b981' : 'var(--cms-text-muted)' }}>
+                                {prod.salePrice ? `$${prod.salePrice.toLocaleString()}` : '—'}
+                              </td>
+                              <td>
+                                <span className={`cms-stock-pill ${(prod.stock ?? 10) <= 2 ? 'low' : 'ok'}`}>
+                                  {(prod.stock ?? 10) > 0 ? `${prod.stock ?? 10} in stock` : 'Out of stock'}
+                                </span>
                               </td>
                               <td>
                                 <span className={`cms-status-pill ${prod.status === 'Published' ? 'published' : 'draft'}`}>
                                   {prod.status}
                                 </span>
                               </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <button
-                                  type="button"
-                                  className="cms-action-pill-btn"
-                                  onClick={() => {
-                                    setActiveTab('products')
-                                    openEditProduct(prod)
-                                  }}
+                              <td>
+                                <a
+                                  href={prod.slug ? `/product/${prod.slug}` : (prod.buyUrl || '/store')}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="cms-view-store-link"
+                                  title="View product in store"
                                 >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                  <span>Store</span>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
                                   </svg>
-                                  <span>Edit</span>
-                                </button>
+                                </a>
+                              </td>
+                              <td className="cms-date-cell">
+                                {prod.updatedAt || 'Oct 19, 2026'}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <div className="cms-row-actions">
+                                  <button
+                                    type="button"
+                                    className="cms-action-pill-btn"
+                                    onClick={() => {
+                                      setActiveTab('products')
+                                      openEditProduct(prod)
+                                    }}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                    <span>Edit</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                  ) : (
-                    <div className="cms-table-wrapper">
+                    ) : (
                       <table className="cms-table cms-articles-table">
                         <thead>
                           <tr>
                             <th>ARTICLE</th>
                             <th>CATEGORY</th>
                             <th>STATUS</th>
+                            <th>AUTHOR</th>
+                            <th>EST. READ</th>
                             <th>DATE</th>
+                            <th>LIVE PREVIEW</th>
                             <th style={{ textAlign: 'right' }}>ACTION</th>
                           </tr>
                         </thead>
@@ -2112,8 +4263,34 @@ export default function AdminDashboard() {
                                   Published
                                 </span>
                               </td>
+                              <td>
+                                <span className="cms-author-pill">
+                                  {post.author || 'Admin Team'}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="cms-readtime-pill">
+                                  ⏱️ {post.readTime || '4 min read'}
+                                </span>
+                              </td>
                               <td className="cms-date-cell">
                                 {post.date || 'Oct 15, 2026'}
+                              </td>
+                              <td>
+                                <a
+                                  href={`/${getBlogPostPath(post)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="cms-view-store-link"
+                                  title="View Live Article"
+                                >
+                                  <span>Live Article</span>
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <line x1="10" y1="14" x2="21" y2="3" />
+                                  </svg>
+                                </a>
                               </td>
                               <td style={{ textAlign: 'right' }}>
                                 <div className="cms-row-actions">
@@ -2128,27 +4305,14 @@ export default function AdminDashboard() {
                                     </svg>
                                     <span>Edit</span>
                                   </button>
-                                  <a
-                                    href={`/${getBlogPostPath(post)}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="cms-action-icon-link"
-                                    title="View Live Article"
-                                  >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                      <polyline points="15 3 21 3 21 9" />
-                                      <line x1="10" y1="14" x2="21" y2="3" />
-                                    </svg>
-                                  </a>
                                 </div>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* RIGHT COLUMN: Latest Comments & Quick Actions (Screenshot 1) */}
@@ -2263,7 +4427,7 @@ export default function AdminDashboard() {
                         className="cms-quick-action-btn"
                         onClick={() => setActiveTab('maintenance')}
                       >
-                        <div className="cms-qa-icon" style={{ background: '#f1f5f9', color: '#0c2b5c' }}>
+                        <div className="cms-qa-icon" style={{ background: '#f1f5f9', color: '#07182e' }}>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                           </svg>
@@ -2390,8 +4554,79 @@ export default function AdminDashboard() {
                       {/* Card 3: Article Content (Unified Rich WYSIWYG & Media - Image 2) */}
                       <div className="cms-editor-card cms-article-content-card">
                         <div className="cms-editor-card-header-row">
-                          <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
-                          <span className="cms-wysiwyg-badge">Rich WYSIWYG & Media</span>
+                          <div className="cms-editor-card-header-left">
+                            <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
+                            <span className="cms-wysiwyg-badge">
+                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : 'Markdown Code'}
+                            </span>
+                          </div>
+
+                          {/* Mode Switcher Buttons */}
+                          <div className="cms-editor-mode-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className={`cms-mode-toggle-btn ${editorMode === 'visual' ? 'active' : ''}`}
+                              onClick={() => toggleEditorMode('visual')}
+                              title="Visual WYSIWYG: Shows real images, playable videos, and live formatted text without raw markdown"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                              <span>Visual (Live Media)</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`cms-mode-toggle-btn ${editorMode === 'code' ? 'active' : ''}`}
+                              onClick={() => toggleEditorMode('code')}
+                              title="Markdown Code: Edit raw markdown syntax directly"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                              </svg>
+                              <span>Code (Markdown)</span>
+                            </button>
+
+                            {editorMode === 'visual' && (
+                              <div className="cms-global-view-toggle">
+                                <span className="cms-gvt-label">Text View:</span>
+                                <button
+                                  type="button"
+                                  className={`cms-gvt-btn ${globalBlockViewMode === 'preview' ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setGlobalBlockViewMode('preview')
+                                    setBlockViewModes({})
+                                  }}
+                                  title="Display all sections with real Bold, Underline, Bullet Lists, and Headings (no ** or #)"
+                                >
+                                  👁 Real Preview
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`cms-gvt-btn ${globalBlockViewMode === 'split' ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setGlobalBlockViewMode('split')
+                                    setBlockViewModes({})
+                                  }}
+                                  title="Show text editor with live formatted preview below"
+                                >
+                                  ⚡ Dual Split
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`cms-gvt-btn ${globalBlockViewMode === 'edit' ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setGlobalBlockViewMode('edit')
+                                    setBlockViewModes({})
+                                  }}
+                                  title="Edit text in all sections"
+                                >
+                                  ✏️ Edit Text
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Rich WYSIWYG Toolbar */}
@@ -2541,147 +4776,56 @@ export default function AdminDashboard() {
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                               </svg>
                             </button>
+                            {/* Image Pill Button */}
                             <button
                               type="button"
-                              className="cms-tb-btn"
-                              title="Insert Image"
-                              onClick={() => insertTextAtCursor("\n![Image Alt Description](", ")\n", "/images/v900-walkaround.png")}
+                              className="cms-tb-btn-image"
+                              title="Insert Image (from Media Library or URL)"
+                              onClick={() => {
+                                const textarea = contentTextareaRef.current
+                                let selectedText = ''
+                                if (textarea && editorMode === 'code') {
+                                  setSavedCursorPos({ start: textarea.selectionStart, end: textarea.selectionEnd })
+                                  selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd).trim()
+                                }
+                                setImageModalUrl('')
+                                setImageModalAlt(selectedText || '')
+                                setImageModalCaption('')
+                                setImageModalTab('library')
+                                setEditingBlockIndex(null)
+                                setImageModalOpen(true)
+                              }}
                             >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                                 <circle cx="8.5" cy="8.5" r="1.5" />
                                 <polyline points="21 15 16 10 5 21" />
                               </svg>
-                            </button>
-
-                            {/* Terminal Pill Button */}
-                            <button
-                              type="button"
-                              className="cms-tb-btn-terminal"
-                              title="Insert Terminal / Code Block"
-                              onClick={() => insertTextAtCursor("\n```bash\n# CLI / Diagnostics Command\n", "\n```\n", "curl -s https://api.happymachinery.com/specs")}
-                            >
-                              <span className="cms-terminal-dots">
-                                <span className="dot red" />
-                                <span className="dot yellow" />
-                                <span className="dot green" />
-                              </span>
-                              <span>&gt;_ Terminal</span>
+                              <span>Image</span>
                             </button>
 
                             {/* YouTube Pill Button */}
                             <button
                               type="button"
                               className="cms-tb-btn-youtube"
-                              title="Insert YouTube Video Embed"
-                              onClick={() => insertTextAtCursor("\n<div className=\"cms-video-embed\">\n  <iframe src=\"", "\" title=\"YouTube video player\" allowFullScreen></iframe>\n</div>\n", "https://www.youtube.com/embed/dQw4w9WgXcQ")}
+                              title="Insert YouTube Video Embed (Live Player)"
+                              onClick={() => {
+                                const textarea = contentTextareaRef.current
+                                let selectedText = ''
+                                if (textarea && editorMode === 'code') {
+                                  setSavedCursorPos({ start: textarea.selectionStart, end: textarea.selectionEnd })
+                                  selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd).trim()
+                                }
+                                setYoutubeModalUrl('')
+                                setYoutubeModalTitle(selectedText || '')
+                                setYoutubeModalOpen(true)
+                              }}
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                               </svg>
                               <span>YouTube</span>
                             </button>
-
-                            {/* Table Dropdown */}
-                            <div className="cms-tb-dropdown-rel">
-                              <button
-                                type="button"
-                                className="cms-tb-btn-pill"
-                                onClick={() => setShowTableMenu(!showTableMenu)}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                                  <line x1="3" y1="9" x2="21" y2="9" />
-                                  <line x1="3" y1="15" x2="21" y2="15" />
-                                  <line x1="9" y1="3" x2="9" y2="21" />
-                                  <line x1="15" y1="3" x2="15" y2="21" />
-                                </svg>
-                                <span>Table</span>
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
-                              </button>
-
-                              {showTableMenu && (
-                                <div className="cms-tb-dropdown-menu">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      insertTextAtCursor(
-                                        "\n| Specification | Details |\n|---|---|\n| Operating Weight | 2,050 lbs |\n| Engine | Briggs & Stratton 23HP |\n| Rated Operating Capacity | 880 lbs |\n\n"
-                                      )
-                                      setShowTableMenu(false)
-                                    }}
-                                  >
-                                    Standard 2-Column Specs Table
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      insertTextAtCursor(
-                                        "\n| Feature | Standard V900 | EPA Pro Series |\n|---|---|---|\n| Horsepower | 23 HP | 25 HP EFI |\n| Auxiliary Hydraulics | 11.2 GPM | 13.5 GPM High-Flow |\n| Track Width | 7.1 in (180mm) | 7.9 in (200mm) |\n\n"
-                                      )
-                                      setShowTableMenu(false)
-                                    }}
-                                  >
-                                    3-Column Comparison Table
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="cms-tb-sep" />
-
-                          {/* Styles Dropdown */}
-                          <div className="cms-tb-dropdown-rel">
-                            <button
-                              type="button"
-                              className="cms-tb-btn-pill"
-                              onClick={() => setShowStylesMenu(!showStylesMenu)}
-                            >
-                              <span>✨ Styles</span>
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
-                            </button>
-
-                            {showStylesMenu && (
-                              <div className="cms-tb-dropdown-menu">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    insertTextAtCursor("\n> [!NOTE]\n> ", "\n\n", "Important note or operation detail for equipment owners.")
-                                    setShowStylesMenu(false)
-                                  }}
-                                >
-                                  📘 Note Callout
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    insertTextAtCursor("\n> [!TIP]\n> ", "\n\n", "Pro tip: Always warm up the hydraulic oil for 5 minutes before heavy digging.")
-                                    setShowStylesMenu(false)
-                                  }}
-                                >
-                                  💡 Pro Tip Callout
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    insertTextAtCursor("\n> [!WARNING]\n> ", "\n\n", "Safety precaution: Never exceed the rated operating capacity on slopes.")
-                                    setShowStylesMenu(false)
-                                  }}
-                                >
-                                  ⚠️ Warning Callout
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    insertTextAtCursor("\n> [!IMPORTANT]\n> ", "\n\n", "Critical maintenance requirement: Grease all loader arm pins every 10 hours.")
-                                    setShowStylesMenu(false)
-                                  }}
-                                >
-                                  🚨 Important Callout
-                                </button>
-                              </div>
-                            )}
                           </div>
 
                           {/* Undo / Redo */}
@@ -2713,18 +4857,439 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        {/* Textarea Content */}
-                        <textarea
-                          ref={contentTextareaRef}
-                          rows={24}
-                          className="cms-wysiwyg-textarea"
-                          placeholder="Write your editorial article content here... Full support for Markdown, live media embeds, tables, callouts, and code blocks..."
-                          value={editorContent}
-                          onChange={(e) => {
-                            setEditorContent(e.target.value)
-                            pushContentHistory(e.target.value)
-                          }}
-                        />
+                        {/* Visual WYSIWYG Mode vs Markdown Code Mode */}
+                        {editorMode === 'visual' ? (
+                          <div className="cms-visual-editor-container">
+                            {editorBlocks.map((block, bIdx) => (
+                              <React.Fragment key={block.id || `blk-${bIdx}`}>
+                                {block.type === 'image' && (
+                                  <div className="cms-visual-block cms-visual-image-block">
+                                    <div className="cms-vib-header">
+                                      <div className="cms-vib-badge blue">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                          <circle cx="8.5" cy="8.5" r="1.5" />
+                                          <polyline points="21 15 16 10 5 21" />
+                                        </svg>
+                                        <span>IMAGE EMBED</span>
+                                        {block.alt && <span className="cms-vib-alt-tag">{block.alt}</span>}
+                                      </div>
+                                      <div className="cms-vib-actions">
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn replace"
+                                          title="Replace from Media Library (galleries)"
+                                          onClick={() => {
+                                            setEditingBlockIndex(bIdx)
+                                            setImageModalUrl(block.url || '')
+                                            setImageModalAlt(block.alt || '')
+                                            setImageModalCaption(block.caption || '')
+                                            setImageModalTab('library')
+                                            setImageModalOpen(true)
+                                          }}
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="1 4 1 10 7 10" />
+                                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                                          </svg>
+                                          <span>Replace from Media Library</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn move"
+                                          title="Move Up"
+                                          disabled={bIdx === 0}
+                                          onClick={() => handleMoveBlock(bIdx, 'up')}
+                                        >
+                                          ▲
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn move"
+                                          title="Move Down"
+                                          disabled={bIdx === editorBlocks.length - 1}
+                                          onClick={() => handleMoveBlock(bIdx, 'down')}
+                                        >
+                                          ▼
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn delete"
+                                          title="Delete this image"
+                                          onClick={() => handleDeleteBlock(bIdx)}
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                          </svg>
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div
+                                      className="cms-vib-media-wrapper"
+                                      title="Click to replace image from Media Library"
+                                      onClick={() => {
+                                        setEditingBlockIndex(bIdx)
+                                        setImageModalUrl(block.url || '')
+                                        setImageModalAlt(block.alt || '')
+                                        setImageModalCaption(block.caption || '')
+                                        setImageModalTab('library')
+                                        setImageModalOpen(true)
+                                      }}
+                                    >
+                                      <img
+                                        src={block.url}
+                                        alt={block.alt || 'Jobsite Equipment Image'}
+                                        className="cms-vib-img clickable-thumb"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = '/images/why-choose-v900-jobsite.png'
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="cms-vib-caption-row">
+                                      <span className="cms-vib-caption-label">Caption:</span>
+                                      <input
+                                        type="text"
+                                        className="cms-vib-caption-input"
+                                        placeholder="Add an optional caption for this image (e.g. Scissor lift operation)..."
+                                        value={block.caption || ''}
+                                        onChange={(e) => handleUpdateImageDetails(bIdx, block.alt || '', e.target.value)}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {block.type === 'video' && (
+                                  <div className="cms-visual-block cms-visual-video-block">
+                                    <div className="cms-vib-header video">
+                                      <div className="cms-vib-badge red">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                        </svg>
+                                        <span>YOUTUBE VIDEO EMBED</span>
+                                        {block.videoTitle && <span className="cms-vib-alt-tag">{block.videoTitle}</span>}
+                                      </div>
+                                      <div className="cms-vib-actions">
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn move"
+                                          title="Move Up"
+                                          disabled={bIdx === 0}
+                                          onClick={() => handleMoveBlock(bIdx, 'up')}
+                                        >
+                                          ▲
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn move"
+                                          title="Move Down"
+                                          disabled={bIdx === editorBlocks.length - 1}
+                                          onClick={() => handleMoveBlock(bIdx, 'down')}
+                                        >
+                                          ▼
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-vib-btn delete"
+                                          title="Delete this video"
+                                          onClick={() => handleDeleteBlock(bIdx)}
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                          </svg>
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="cms-vib-media-wrapper video-aspect">
+                                      <iframe
+                                        src={`https://www.youtube.com/embed/${block.videoId || extractYouTubeId(block.url || '')}`}
+                                        title={block.videoTitle || 'Jobsite Equipment Video'}
+                                        className="cms-vib-iframe"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {block.type === 'text' && (() => {
+                                  const blockId = block.id || `blk-${bIdx}`
+                                  const mode = getBlockViewMode(blockId, Boolean((block.text || '').trim()))
+                                  const renderedHtml = convertMarkdownToVisualHtml(block.text || '')
+
+                                  return (
+                                    <div className={`cms-visual-block cms-visual-text-block ${activeVisualBlockIndex === bIdx ? 'active-block' : ''}`}>
+                                      <div className="cms-vib-header text">
+                                        <div className="cms-vib-badge text">
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                                            <line x1="4" y1="6" x2="20" y2="6" />
+                                            <line x1="4" y1="12" x2="16" y2="12" />
+                                            <line x1="4" y1="18" x2="18" y2="18" />
+                                          </svg>
+                                          <span>PARAGRAPH SECTION #{bIdx + 1}</span>
+                                        </div>
+
+                                        {/* Block View Switcher */}
+                                        <div className="cms-vib-view-toggle">
+                                          <button
+                                            type="button"
+                                            className={`cms-vib-tab-btn ${mode === 'preview' ? 'active' : ''}`}
+                                            onClick={() => setBlockMode(blockId, 'preview')}
+                                            title="Real Visual Preview: Shows bold, underline, bullet lists, and headings formatted without ** or #"
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                              <circle cx="12" cy="12" r="3" />
+                                            </svg>
+                                            <span>Real Preview</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={`cms-vib-tab-btn ${mode === 'edit' ? 'active' : ''}`}
+                                            onClick={() => {
+                                              setBlockMode(blockId, 'edit')
+                                              setActiveVisualBlockIndex(bIdx)
+                                              setTimeout(() => visualBlockTextareaRefs.current[bIdx]?.focus(), 50)
+                                            }}
+                                            title="Edit text / markdown"
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                            <span>Edit Text</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={`cms-vib-tab-btn ${mode === 'split' ? 'active' : ''}`}
+                                            onClick={() => {
+                                              setBlockMode(blockId, 'split')
+                                              setActiveVisualBlockIndex(bIdx)
+                                            }}
+                                            title="Dual view: Edit text with live formatted preview below"
+                                          >
+                                            <span>⚡ Dual</span>
+                                          </button>
+                                        </div>
+
+                                        <div className="cms-vib-actions">
+                                          <button
+                                            type="button"
+                                            className="cms-vib-btn move"
+                                            title="Move Up"
+                                            disabled={bIdx === 0}
+                                            onClick={() => handleMoveBlock(bIdx, 'up')}
+                                          >
+                                            ▲
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="cms-vib-btn move"
+                                            title="Move Down"
+                                            disabled={bIdx === editorBlocks.length - 1}
+                                            onClick={() => handleMoveBlock(bIdx, 'down')}
+                                          >
+                                            ▼
+                                          </button>
+                                          {editorBlocks.length > 1 && (
+                                            <button
+                                              type="button"
+                                              className="cms-vib-btn delete"
+                                              title="Delete this text block"
+                                              onClick={() => handleDeleteBlock(bIdx)}
+                                            >
+                                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <polyline points="3 6 5 6 21 6" />
+                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                              </svg>
+                                              <span>Delete</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Real Formatted Preview: Bold is bold, underline is underlined, bullets are list, headings are styled - NO ** or # */}
+                                      {mode === 'preview' && (
+                                        <div
+                                          className="cms-visual-rendered-view"
+                                          onClick={() => {
+                                            setBlockMode(blockId, 'edit')
+                                            setActiveVisualBlockIndex(bIdx)
+                                            setTimeout(() => visualBlockTextareaRefs.current[bIdx]?.focus(), 50)
+                                          }}
+                                          title="Click anywhere to edit this section"
+                                        >
+                                          {renderedHtml ? (
+                                            <div
+                                              className="cms-rendered-content-flow"
+                                              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                                            />
+                                          ) : (
+                                            <div className="cms-rendered-empty-hint">
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                              </svg>
+                                              <span>Click to type here. Real formatting (Bold, Underline, Bullet Lists, Headings) will render live with zero ** or # syntax.</span>
+                                            </div>
+                                          )}
+                                          <div className="cms-rendered-edit-footer">
+                                            <span className="cms-rendered-edit-pill">
+                                              ✏️ Click anywhere to edit text
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Edit Text Mode */}
+                                      {(mode === 'edit' || mode === 'split') && (
+                                        <div className="cms-vib-edit-wrapper">
+                                          <textarea
+                                            ref={(el) => { visualBlockTextareaRefs.current[bIdx] = el }}
+                                            rows={Math.max(5, (block.text || '').split('\n').length + 2)}
+                                            className="cms-visual-textarea"
+                                            placeholder="Type your content here... Highlight text and click Bold (B), Underline (U), Bullet List, or Headings on the toolbar above for instant visual formatting."
+                                            value={block.text || ''}
+                                            onFocus={() => setActiveVisualBlockIndex(bIdx)}
+                                            onChange={(e) => handleUpdateBlockText(bIdx, e.target.value)}
+                                          />
+
+                                          {/* Live preview strip below textarea */}
+                                          {Boolean((block.text || '').trim()) && (
+                                            <div className="cms-vib-live-preview-box">
+                                              <div className="cms-vib-live-preview-label">
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                    <circle cx="12" cy="12" r="3" />
+                                                  </svg>
+                                                  <span>LIVE FORMATTED PREVIEW (NO ** OR #)</span>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  className="cms-preview-done-btn"
+                                                  onClick={() => setBlockMode(blockId, 'preview')}
+                                                >
+                                                  Switch to Real Preview ✓
+                                                </button>
+                                              </div>
+                                              <div
+                                                className="cms-visual-rendered-view inline-preview"
+                                                dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
+
+                                {/* Quick Add Divider Between Blocks */}
+                                <div className="cms-visual-add-divider">
+                                  <div className="cms-vad-line" />
+                                  <div className="cms-vad-buttons">
+                                    <button
+                                      type="button"
+                                      className="cms-vad-btn text"
+                                      title="Add text paragraph here"
+                                      onClick={() => handleAddTextBlock(bIdx)}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <line x1="12" y1="5" x2="12" y2="19" />
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                      </svg>
+                                      <span>+ Text</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cms-vad-btn image"
+                                      title="Insert image from Media Library here"
+                                      onClick={() => {
+                                        setActiveVisualBlockIndex(bIdx)
+                                        setEditingBlockIndex(null)
+                                        setImageModalUrl('')
+                                        setImageModalAlt('')
+                                        setImageModalCaption('')
+                                        setImageModalTab('library')
+                                        setImageModalOpen(true)
+                                      }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                        <circle cx="8.5" cy="8.5" r="1.5" />
+                                        <polyline points="21 15 16 10 5 21" />
+                                      </svg>
+                                      <span>+ Image (Media Library)</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cms-vad-btn video"
+                                      title="Insert YouTube video here"
+                                      onClick={() => {
+                                        setActiveVisualBlockIndex(bIdx)
+                                        setYoutubeModalUrl('')
+                                        setYoutubeModalTitle('')
+                                        setYoutubeModalOpen(true)
+                                      }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                      </svg>
+                                      <span>+ YouTube</span>
+                                    </button>
+                                  </div>
+                                  <div className="cms-vad-line" />
+                                </div>
+                              </React.Fragment>
+                            ))}
+
+                            {/* Bottom Add Bar if blocks are empty */}
+                            {editorBlocks.length === 0 && (
+                              <div className="cms-visual-empty-actions">
+                                <p>Your article content is currently empty.</p>
+                                <div className="cms-vad-buttons centered">
+                                  <button type="button" className="cms-vad-btn text" onClick={() => handleAddTextBlock()}>
+                                    + Add Text
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-vad-btn image"
+                                    onClick={() => {
+                                      setActiveVisualBlockIndex(null)
+                                      setEditingBlockIndex(null)
+                                      setImageModalUrl('')
+                                      setImageModalAlt('')
+                                      setImageModalCaption('')
+                                      setImageModalTab('library')
+                                      setImageModalOpen(true)
+                                    }}
+                                  >
+                                    + Insert Image from Library
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <textarea
+                            ref={contentTextareaRef}
+                            rows={24}
+                            className="cms-wysiwyg-textarea"
+                            placeholder="Write your editorial article content here... Full support for Markdown, live media embeds, tables, callouts, and code blocks..."
+                            value={editorContent}
+                            onChange={(e) => {
+                              setEditorContent(e.target.value)
+                              pushContentHistory(e.target.value)
+                            }}
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -3017,16 +5582,617 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   )}
+
+                  {/* Image Insertion Modal with Media Library (galleries), WebP Upload & Presets */}
+                  {imageModalOpen && (
+                    <div className="cms-modal-backdrop" onClick={() => setImageModalOpen(false)}>
+                      <div className="cms-media-modal-card cms-media-picker-modal" onClick={(e) => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="cms-media-modal-header">
+                          <div className="cms-media-header-title-box">
+                            <div className="cms-media-header-icon blue">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h3>{editingBlockIndex !== null ? 'Replace Article Image' : 'Insert Article Image'}</h3>
+                              <p>Choose an image directly from your Media Library (galleries), upload new WebP, or paste an external URL.</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="cms-modal-close-btn"
+                            onClick={() => setImageModalOpen(false)}
+                            title="Close modal"
+                          >
+                            &times;
+                          </button>
+                        </div>
+
+                        {/* Top Tab Bar */}
+                        <div className="cms-modal-tab-bar">
+                          <button
+                            type="button"
+                            className={`cms-modal-tab-btn ${imageModalTab === 'library' ? 'active' : ''}`}
+                            onClick={() => setImageModalTab('library')}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                              <circle cx="8.5" cy="8.5" r="1.5" />
+                              <polyline points="21 15 16 10 5 21" />
+                            </svg>
+                            <span>Media Library</span>
+                            <span className="cms-modal-tab-badge">{mediaList.length}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`cms-modal-tab-btn ${imageModalTab === 'upload' ? 'active' : ''}`}
+                            onClick={() => setImageModalTab('upload')}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="17 8 12 3 7 8" />
+                              <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                            <span>Quick Upload New (100% WebP)</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`cms-modal-tab-btn ${imageModalTab === 'url' ? 'active' : ''}`}
+                            onClick={() => setImageModalTab('url')}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                            </svg>
+                            <span>External URL &amp; Presets</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="cms-modal-open-ext-btn"
+                            title="Open Original Media Library in New Tab"
+                            onClick={() => window.open(mediaStandaloneUrl, '_blank')}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                              <polyline points="15 3 21 3 21 9" />
+                              <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                            <span>Open Media App ↗</span>
+                          </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="cms-media-modal-body">
+                          {/* Left Column based on active Tab */}
+                          <div className="cms-media-form-col">
+                            {/* TAB 1: Media Library */}
+                            {imageModalTab === 'library' && (
+                              <div className="cms-modal-lib-tab-content">
+                                <div className="cms-modal-lib-filter-bar">
+                                  <div className="cms-modal-search-box">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <circle cx="11" cy="11" r="8" />
+                                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                    </svg>
+                                    <input
+                                      type="text"
+                                      className="cms-modal-search-input"
+                                      placeholder="Filter media library by title, folder or date..."
+                                      value={imageModalSearch}
+                                      onChange={(e) => setImageModalSearch(e.target.value)}
+                                      autoFocus
+                                    />
+                                    {imageModalSearch && (
+                                      <button
+                                        type="button"
+                                        className="cms-modal-search-clear"
+                                        onClick={() => setImageModalSearch('')}
+                                      >
+                                        &times;
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="cms-modal-lib-meta-pill">
+                                    <span className="cms-folder-tag">
+                                      📁 {articleModalFolder === 'all' ? 'All Folders' : articleModalFolder}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Folder Filter Navigation Pills */}
+                                <div className="cms-modal-folder-filter-pills">
+                                  <button
+                                    type="button"
+                                    className={`cms-modal-folder-pill ${articleModalFolder === 'all' ? 'active' : ''}`}
+                                    onClick={() => setArticleModalFolder('all')}
+                                  >
+                                    <span>All</span>
+                                    <span className="cms-pill-cnt">{mediaList.length}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`cms-modal-folder-pill ${articleModalFolder === 'galleries' ? 'active' : ''}`}
+                                    onClick={() => setArticleModalFolder('galleries')}
+                                  >
+                                    <span>📁 galleries</span>
+                                    <span className="cms-pill-cnt">
+                                      {mediaList.filter((m) => (m.folder || 'galleries') === 'galleries').length}
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`cms-modal-folder-pill ${articleModalFolder === 'features' ? 'active' : ''}`}
+                                    onClick={() => setArticleModalFolder('features')}
+                                  >
+                                    <span>📁 features</span>
+                                    <span className="cms-pill-cnt">
+                                      {mediaList.filter((m) => m.folder === 'features').length}
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`cms-modal-folder-pill ${articleModalFolder === 'profileimg' ? 'active' : ''}`}
+                                    onClick={() => setArticleModalFolder('profileimg')}
+                                  >
+                                    <span>📁 profileimg</span>
+                                    <span className="cms-pill-cnt">
+                                      {mediaList.filter((m) => m.folder === 'profileimg').length}
+                                    </span>
+                                  </button>
+                                </div>
+
+                                {/* Media Library Grid */}
+                                <div className="cms-modal-media-grid">
+                                  {mediaList
+                                    .filter((m) => {
+                                      if (articleModalFolder !== 'all') {
+                                        const f = m.folder || 'galleries'
+                                        if (f !== articleModalFolder) return false
+                                      }
+                                      if (!imageModalSearch.trim()) return true
+                                      const q = imageModalSearch.toLowerCase()
+                                      return (
+                                        m.title.toLowerCase().includes(q) ||
+                                        m.url.toLowerCase().includes(q) ||
+                                        (m.folder && m.folder.toLowerCase().includes(q)) ||
+                                        (m.dateAdded && m.dateAdded.includes(q))
+                                      )
+                                    })
+                                    .map((item) => {
+                                      const isSelected = selectedLibraryItem?.id === item.id || imageModalUrl === item.url
+                                      return (
+                                        <div
+                                          key={item.id}
+                                          className={`cms-modal-media-card ${isSelected ? 'selected' : ''}`}
+                                          onClick={() => {
+                                            setSelectedLibraryItem(item)
+                                            setImageModalUrl(item.url)
+                                            if (!imageModalAlt || imageModalAlt === 'Jobsite Equipment Image') {
+                                              setImageModalAlt(item.title)
+                                            }
+                                          }}
+                                          onDoubleClick={() => {
+                                            setSelectedLibraryItem(item)
+                                            setImageModalUrl(item.url)
+                                            if (!imageModalAlt) setImageModalAlt(item.title)
+                                            handleInsertImageIntoSection()
+                                          }}
+                                          title={`Click to select, double-click to insert: ${item.title}`}
+                                        >
+                                          <div className="cms-mmc-thumb-box">
+                                            <img
+                                              src={item.url}
+                                              alt={item.title}
+                                              className="cms-mmc-thumb"
+                                              onError={(e) => {
+                                                (e.target as HTMLImageElement).src = '/images/why-choose-v900-jobsite.png'
+                                              }}
+                                            />
+                                            {isSelected && (
+                                              <div className="cms-mmc-check-badge">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                  <polyline points="20 6 9 17 4 12" />
+                                                </svg>
+                                              </div>
+                                            )}
+                                            {item.size && <span className="cms-mmc-size-badge">{item.size}</span>}
+                                          </div>
+                                          <div className="cms-mmc-meta">
+                                            <div className="cms-mmc-meta-top">
+                                              <span className="cms-mmc-title" title={item.title}>
+                                                {item.title}
+                                              </span>
+                                              <span className="cms-mmc-folder-tag">
+                                                📁 {item.folder || 'galleries'}
+                                              </span>
+                                            </div>
+                                            <span className="cms-mmc-date">{item.dateAdded}</span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* TAB 2: Quick Upload New (WebP 100%) */}
+                            {imageModalTab === 'upload' && (
+                              <div className="cms-modal-upload-tab-content">
+                                <div
+                                  className="cms-modal-dropzone"
+                                  onDragOver={(e) => e.preventDefault()}
+                                  onDrop={(e) => {
+                                    e.preventDefault()
+                                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                                      handleModalUploadFile(e.dataTransfer.files[0])
+                                    }
+                                  }}
+                                >
+                                  <div className="cms-dropzone-icon">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                      <polyline points="17 8 12 3 7 8" />
+                                      <line x1="12" y1="3" x2="12" y2="15" />
+                                    </svg>
+                                  </div>
+                                  <h4>Drag &amp; drop an image here</h4>
+                                  <p>Auto-converted to 100% Ultra-High Quality WebP and saved directly into <strong>galleries</strong>.</p>
+                                  <label className="cms-modal-browse-btn">
+                                    <span>Browse from Computer</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      style={{ display: 'none' }}
+                                      onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                          handleModalUploadFile(e.target.files[0])
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+
+                                {modalUploadProgress !== null && (
+                                  <div className="cms-modal-upload-progress-box">
+                                    <div className="cms-mup-text">
+                                      <span>{modalUploadStatus}</span>
+                                      <span>{modalUploadProgress}%</span>
+                                    </div>
+                                    <div className="cms-mup-track">
+                                      <div className="cms-mup-fill" style={{ width: `${modalUploadProgress}%` }} />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* TAB 3: External URL & Presets */}
+                            {imageModalTab === 'url' && (
+                              <div className="cms-modal-url-tab-content">
+                                <div className="cms-media-field">
+                                  <label className="cms-media-label">
+                                    <span>External Image URL</span>
+                                    <span className="cms-required-star">*</span>
+                                  </label>
+                                  <input
+                                    type="url"
+                                    className="cms-media-input"
+                                    placeholder="https://machineryvillage.com/... or https://example.com/photo.jpg"
+                                    value={imageModalUrl}
+                                    onChange={(e) => setImageModalUrl(e.target.value)}
+                                    autoFocus
+                                  />
+                                </div>
+
+                                {/* Quick Presets Gallery */}
+                                <div className="cms-media-field">
+                                  <label className="cms-media-label">
+                                    <span>Equipment Photo Presets</span>
+                                    <span className="cms-media-hint-inline">Click to select</span>
+                                  </label>
+                                  <div className="cms-media-presets-grid">
+                                    {[
+                                      { label: 'Happy Machinery Logo', url: 'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp', alt: 'Happy Machinery Brand Logo' },
+                                      { label: 'V900 Jobsite Walkaround', url: '/images/why-choose-v900-jobsite.png', alt: 'Typhon Stomp V900 Compact Skid Steer on Jobsite' },
+                                      { label: 'Residential Excavation', url: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=800&auto=format&fit=crop&q=80', alt: 'Mini excavator digging trenches for residential foundation' },
+                                      { label: 'Earthmoving Fleet', url: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&auto=format&fit=crop&q=80', alt: 'Heavy machinery fleet prepared for commercial site work' },
+                                      { label: 'Hydraulic Systems', url: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800&auto=format&fit=crop&q=80', alt: 'Precision hydraulic diagnostics and auxiliary flow lines' }
+                                    ].map((preset, idx) => (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        className={`cms-media-preset-card ${imageModalUrl === preset.url ? 'active' : ''}`}
+                                        onClick={() => {
+                                          setImageModalUrl(preset.url)
+                                          if (!imageModalAlt) setImageModalAlt(preset.alt)
+                                        }}
+                                      >
+                                        <img src={preset.url} alt={preset.label} onError={(e) => { (e.target as HTMLImageElement).src = '/images/why-choose-v900-jobsite.png' }} />
+                                        <span>{preset.label}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Common Alt Text & Caption fields below */}
+                            <div className="cms-media-field">
+                              <label className="cms-media-label">
+                                <span>Alt Text (SEO &amp; Accessibility)</span>
+                              </label>
+                              <input
+                                type="text"
+                                className="cms-media-input"
+                                placeholder="e.g. Typhon Stomp V900 skid steer operating on residential driveway"
+                                value={imageModalAlt}
+                                onChange={(e) => setImageModalAlt(e.target.value)}
+                              />
+                            </div>
+
+                            <div className="cms-media-field">
+                              <label className="cms-media-label">
+                                <span>Caption (Displays directly beneath image)</span>
+                              </label>
+                              <input
+                                type="text"
+                                className="cms-media-input"
+                                placeholder="e.g. Figure 1: Compact 7.1-inch track width allows tight clearance through gates"
+                                value={imageModalCaption}
+                                onChange={(e) => setImageModalCaption(e.target.value)}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Live Image Preview Column */}
+                          <div className="cms-media-preview-col">
+                            <div className="cms-media-preview-header">
+                              <span className="cms-media-preview-tag">SELECTED IMAGE PREVIEW</span>
+                              {imageModalUrl.trim() && <span className="cms-media-preview-status ok">Ready to insert</span>}
+                            </div>
+                            <div className="cms-media-preview-box">
+                              {imageModalUrl.trim() ? (
+                                <div className="cms-media-live-card">
+                                  <img
+                                    src={imageModalUrl}
+                                    alt={imageModalAlt || 'Preview'}
+                                    className="cms-media-live-img"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.opacity = '0.3'
+                                    }}
+                                  />
+                                  {imageModalCaption.trim() && (
+                                    <p className="cms-media-live-caption">
+                                      <em>{imageModalCaption}</em>
+                                    </p>
+                                  )}
+                                  <div className="cms-modal-url-display">
+                                    <span className="cms-mud-label">URL:</span>
+                                    <span className="cms-mud-val" title={imageModalUrl}>{imageModalUrl}</span>
+                                    <button
+                                      type="button"
+                                      className="cms-mud-copy"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(imageModalUrl)
+                                        showToast('Image URL copied to clipboard!', 'success')
+                                      }}
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="cms-media-empty-preview">
+                                  <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
+                                  </svg>
+                                  <p>Select any image from your <strong>Media Library</strong>, upload a new photo, or enter an external URL.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="cms-media-modal-footer">
+                          <button
+                            type="button"
+                            className="cms-profile-btn-cancel"
+                            onClick={() => {
+                              setImageModalOpen(false)
+                              setEditingBlockIndex(null)
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-profile-btn-save"
+                            disabled={!imageModalUrl.trim()}
+                            onClick={handleInsertImageIntoSection}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>
+                              {editingBlockIndex !== null ? 'Update Image in Article' : 'Insert Image into Article'}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* YouTube Video Embed Modal with Live Player Preview */}
+                  {youtubeModalOpen && (
+                    <div className="cms-modal-backdrop" onClick={() => setYoutubeModalOpen(false)}>
+                      <div className="cms-media-modal-card" onClick={(e) => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="cms-media-modal-header">
+                          <div className="cms-media-header-title-box">
+                            <div className="cms-media-header-icon red">
+                              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <h3>Embed YouTube Video</h3>
+                              <p>Paste any YouTube video link to preview playable video and embed it into your active section.</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="cms-modal-close-btn"
+                            onClick={() => setYoutubeModalOpen(false)}
+                            title="Close modal"
+                          >
+                            &times;
+                          </button>
+                        </div>
+
+                        <div className="cms-media-modal-body">
+                          {/* Form Column */}
+                          <div className="cms-media-form-col">
+                            <div className="cms-media-field">
+                              <label className="cms-media-label">
+                                <span>YouTube Video URL or Video ID</span>
+                                <span className="cms-required-star">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                className="cms-media-input"
+                                placeholder="https://www.youtube.com/watch?v=... or youtu.be/..."
+                                value={youtubeModalUrl}
+                                onChange={(e) => setYoutubeModalUrl(e.target.value)}
+                                autoFocus
+                              />
+                              <span className="cms-media-hint">Supports standard watch links, youtu.be short links, shorts, or raw 11-char IDs.</span>
+                            </div>
+
+                            {/* Equipment Video Presets */}
+                            <div className="cms-media-field">
+                              <label className="cms-media-label">
+                                <span>Equipment Demo Presets</span>
+                                <span className="cms-media-hint-inline">Click to test</span>
+                              </label>
+                              <div className="cms-media-video-presets-list">
+                                {[
+                                  { title: 'Typhon V900 Walkaround & Operation', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+                                  { title: 'Mini Excavator Trenching Diagnostics', url: 'https://www.youtube.com/watch?v=7hB6_988tYc' }
+                                ].map((preset, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    className={`cms-media-video-preset-pill ${youtubeModalUrl === preset.url ? 'active' : ''}`}
+                                    onClick={() => {
+                                      setYoutubeModalUrl(preset.url)
+                                      if (!youtubeModalTitle) setYoutubeModalTitle(preset.title)
+                                    }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    <span>{preset.title}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="cms-media-field">
+                              <label className="cms-media-label">
+                                <span>Video Display Title / Caption</span>
+                              </label>
+                              <input
+                                type="text"
+                                className="cms-media-input"
+                                placeholder="e.g. Typhon Stomp V900 Skid Steer Operational Demo"
+                                value={youtubeModalTitle}
+                                onChange={(e) => setYoutubeModalTitle(e.target.value)}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Live Video Preview Column */}
+                          <div className="cms-media-preview-col">
+                            <div className="cms-media-preview-header">
+                              <span className="cms-media-preview-tag">LIVE VIDEO PLAYER PREVIEW</span>
+                              {extractYouTubeId(youtubeModalUrl) && (
+                                <span className="cms-media-preview-status ok">
+                                  ID: {extractYouTubeId(youtubeModalUrl)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="cms-media-preview-box video-box">
+                              {extractYouTubeId(youtubeModalUrl) ? (
+                                <div className="cms-media-live-video-wrapper">
+                                  <iframe
+                                    src={`https://www.youtube-nocookie.com/embed/${extractYouTubeId(youtubeModalUrl)}?rel=0`}
+                                    title={youtubeModalTitle || 'YouTube video preview'}
+                                    className="cms-media-live-iframe"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                </div>
+                              ) : (
+                                <div className="cms-media-empty-preview">
+                                  <div className="cms-media-empty-play-icon">
+                                    <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
+                                      <polygon points="5 3 19 12 5 21 5 3"/>
+                                    </svg>
+                                  </div>
+                                  <p>Paste a YouTube video link to preview playable video here before inserting.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="cms-media-modal-footer">
+                          <button
+                            type="button"
+                            className="cms-profile-btn-cancel"
+                            onClick={() => setYoutubeModalOpen(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-profile-btn-save"
+                            style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' }}
+                            disabled={!extractYouTubeId(youtubeModalUrl)}
+                            onClick={handleInsertYouTubeIntoSection}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>Embed Video into Section</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* SUBVIEW B: CATEGORIES & SLUGS (SCREENSHOT 5) */}
               {articlesSubView === 'categories' && (
                 <div className="cms-categories-view-wrapper">
+                  <div className="cms-view-breadcrumb-bar">
+                    <span>Dashboard</span>
+                    <span>›</span>
+                    <span>Articles</span>
+                    <span>›</span>
+                    <span className="active">Categories & Slugs</span>
+                  </div>
                   <div className="cms-view-header">
                     <div className="cms-view-title-group">
-                      <span className="cms-eyebrow-blue">EDITORIAL TAXONOMY</span>
-                      <h1>Categories & Slugs</h1>
+                      <h1>Blog Categories & Slugs</h1>
                       <p>Organize your publication into distinct channels, URL slugs, and featured topics.</p>
                     </div>
                     <div className="cms-taxonomy-counters">
@@ -3046,22 +6212,32 @@ export default function AdminDashboard() {
                     <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('list')}>All Articles</button>
                     <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>New Article</button>
                     <button type="button" className="cms-subnav-btn active">Categories & Slugs</button>
+                    <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('topBlogs')}>🔥 Top Blogs</button>
                   </div>
 
                   <div className="cms-categories-grid">
-                    {/* Left: Add New Category */}
-                    <div className="cms-card">
-                      <div className="cms-card-header">
+                    {/* Left: Add or Edit Category Form */}
+                    <div className={`cms-card ${editingBlogCat ? 'is-editing-card' : ''}`}>
+                      <div className="cms-card-header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
                         <div className="cms-card-title">
-                          <span style={{ color: 'var(--cms-accent-blue)', fontSize: '1.2rem', fontWeight: 700 }}>+</span>
-                          <h3>Add New Category</h3>
+                          <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
+                            {editingBlogCat ? (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                              </svg>
+                            ) : (
+                              <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>+</span>
+                            )}
+                          </span>
+                          <h3>{editingBlogCat ? `Edit Category` : 'Add New Category'}</h3>
                         </div>
-                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
-                          Create a channel for your stories
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--cms-text-muted)' }}>
+                          {editingBlogCat ? `Modifying "${editingBlogCat.name}"` : 'Create a channel for your stories'}
                         </p>
                       </div>
 
-                      <form onSubmit={handleAddCategory} className="cms-category-form">
+                      <form onSubmit={handleSaveBlogCategory} className="cms-category-form">
                         <div className="cms-form-field">
                           <label>CATEGORY NAME *</label>
                           <input
@@ -3071,7 +6247,9 @@ export default function AdminDashboard() {
                             value={newCatName}
                             onChange={(e) => {
                               setNewCatName(e.target.value)
-                              setNewCatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+                              if (!editingBlogCat) {
+                                setNewCatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+                              }
                             }}
                           />
                         </div>
@@ -3092,11 +6270,17 @@ export default function AdminDashboard() {
 
                         <div className="cms-form-field">
                           <label>PARENT CATEGORY</label>
-                          <select className="cms-editor-select">
+                          <select
+                            className="cms-editor-select"
+                            value={newCatParent}
+                            onChange={(e) => setNewCatParent(e.target.value)}
+                          >
                             <option value="">None (Top Level Root)</option>
-                            {blogCategories.map((c) => (
-                              <option key={c.name} value={c.name}>{c.name}</option>
-                            ))}
+                            {blogCategories
+                              .filter((c) => !editingBlogCat || c.name !== editingBlogCat.name)
+                              .map((c) => (
+                                <option key={c.name} value={c.name}>{c.name}</option>
+                              ))}
                           </select>
                         </div>
 
@@ -3120,13 +6304,35 @@ export default function AdminDashboard() {
                           />
                         </div>
 
-                        <button type="submit" className="cms-btn cms-btn-primary" style={{ width: '100%', marginTop: '10px' }}>
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                          </svg>
-                          <span>Add Category</span>
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                          <button type="submit" className="cms-btn cms-btn-primary" style={{ flex: 1 }}>
+                            {editingBlogCat ? (
+                              <>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                <span>Save Changes</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Add Category</span>
+                              </>
+                            )}
+                          </button>
+                          {editingBlogCat && (
+                            <button
+                              type="button"
+                              className="cms-btn cms-btn-secondary"
+                              onClick={cancelEditBlogCategory}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
                       </form>
                     </div>
 
@@ -3161,8 +6367,12 @@ export default function AdminDashboard() {
                           .filter((c) => c.name.toLowerCase().includes(categorySearch.toLowerCase()) || c.slug.toLowerCase().includes(categorySearch.toLowerCase()))
                           .map((cat) => {
                             const count = posts.filter((p) => p.category === cat.name).length
+                            const isBeingEdited = editingBlogCat?.name === cat.name
                             return (
-                              <div key={cat.slug} className="cms-category-structure-item">
+                              <div
+                                key={cat.slug}
+                                className={`cms-category-structure-item ${isBeingEdited ? 'is-editing-item' : ''}`}
+                              >
                                 <div className="cms-cat-item-left">
                                   <span className="cms-cat-icon">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -3170,7 +6380,12 @@ export default function AdminDashboard() {
                                     </svg>
                                   </span>
                                   <div className="cms-cat-info">
-                                    <strong>{cat.name}</strong>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <strong>{cat.name}</strong>
+                                      {isBeingEdited && (
+                                        <span className="cms-cat-editing-badge">Editing</span>
+                                      )}
+                                    </div>
                                     <span className="cms-cat-slug">/category/{cat.slug} ↗</span>
                                   </div>
                                   <span className="cms-cat-blog-count">{count} blogs</span>
@@ -3183,13 +6398,27 @@ export default function AdminDashboard() {
                                       setGlobalSearch(cat.name)
                                       setArticlesSubView('list')
                                     }}
+                                    title="View articles in this category"
                                   >
                                     View Blogs
                                   </button>
                                   <button
                                     type="button"
+                                    className={`cms-btn cms-btn-sm ${isBeingEdited ? 'cms-btn-primary' : 'cms-btn-secondary'}`}
+                                    onClick={() => startEditBlogCategory(cat)}
+                                    title="Edit category name, slug, and details"
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px' }}>
+                                      <path d="M12 20h9" />
+                                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                    </svg>
+                                    {isBeingEdited ? 'Editing' : 'Edit'}
+                                  </button>
+                                  <button
+                                    type="button"
                                     className="cms-btn cms-btn-sm danger-text"
                                     onClick={() => handleDeleteCategory(cat.name)}
+                                    title="Move category to Trash"
                                   >
                                     Delete
                                   </button>
@@ -3227,6 +6456,20 @@ export default function AdminDashboard() {
                     <button type="button" className="cms-subnav-btn active">All Articles ({posts.length})</button>
                     <button type="button" className="cms-subnav-btn" onClick={openNewArticle}>New Article</button>
                     <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('categories')}>Categories & Slugs</button>
+                    <button type="button" className="cms-subnav-btn" onClick={() => setArticlesSubView('topBlogs')}>🔥 Top Blogs</button>
+                    {trashItems.filter((i) => i.type === 'article').length > 0 && (
+                      <button
+                        type="button"
+                        className="cms-subnav-btn"
+                        onClick={() => {
+                          setActiveTab('trash')
+                          setTrashFilter('article')
+                        }}
+                        style={{ color: 'var(--cms-warning)', marginLeft: 'auto' }}
+                      >
+                        Trash ({trashItems.filter((i) => i.type === 'article').length})
+                      </button>
+                    )}
                   </div>
 
                   <div className="cms-card">
@@ -3267,16 +6510,39 @@ export default function AdminDashboard() {
                                       href={getBlogPostPath(post)}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="cms-btn cms-btn-secondary cms-btn-sm"
+                                      className="cms-action-btn-modern view"
                                       title="View Live Guide"
                                     >
-                                      View ↗
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                        <polyline points="15 3 21 3 21 9" />
+                                        <line x1="10" y1="14" x2="21" y2="3" />
+                                      </svg>
+                                      <span>View</span>
                                     </a>
                                     <button
-                                      className="cms-btn cms-btn-primary cms-btn-sm"
+                                      type="button"
+                                      className="cms-action-btn-modern edit"
                                       onClick={() => openEditArticle(post)}
+                                      title="Edit Article"
                                     >
-                                      Edit
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                      </svg>
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="cms-action-btn-modern danger"
+                                      onClick={() => handleMoveArticleToTrash(post)}
+                                      title="Move article to Trash"
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      </svg>
+                                      <span>Delete</span>
                                     </button>
                                   </div>
                                 </td>
@@ -3288,478 +6554,1038 @@ export default function AdminDashboard() {
                   </div>
                 </>
               )}
+
+              {/* SUBVIEW D: TOP BLOGS RANKING & ANALYTICS */}
+              {articlesSubView === 'topBlogs' && (
+                <TopBlogsManager
+                  posts={posts}
+                  onEditArticle={(post) => openEditArticle(post)}
+                  onOpenNewArticle={openNewArticle}
+                  onNavigateToCategories={() => setArticlesSubView('categories')}
+                  onNavigateToList={() => setArticlesSubView('list')}
+                  trashCount={trashItems.filter((i) => i.type === 'article').length}
+                  onNavigateToTrash={() => {
+                    setActiveTab('trash')
+                    setTrashFilter('article')
+                  }}
+                  showToast={showToast}
+                />
+              )}
             </>
           )}
 
-          {/* TAB 3: MEDIA ASSET LIBRARY (SCREENSHOTS 2 & 3) */}
+          {/* TAB 3: MEDIA ASSET LIBRARY - FILE MANAGER-KIUQ (100% MATCHING ORIGINAL) */}
           {activeTab === 'media' && (
-            <div className="cms-medialib-view-content">
-              {/* Top View Header with Breadcrumb and Actions */}
-              <div className="cms-medialib-top-bar">
-                <div className="cms-medialib-badge">
-                  <span className="cms-blue-dot" />
-                  <span>Media Library</span>
-                </div>
-              </div>
-
-              {/* 4 Metric KPI Cards (Screenshots 2 & 3) */}
-              <div className="cms-medialib-metrics-grid">
-                <div className="cms-medialib-metric-card">
-                  <div className="cms-ml-icon-wrap folder">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                  <div className="cms-ml-metric-info">
-                    <span className="cms-ml-metric-val">{mediaList.length}</span>
-                    <span className="cms-ml-metric-label">Total items</span>
-                  </div>
-                </div>
-
-                <div className="cms-medialib-metric-card">
-                  <div className="cms-ml-icon-wrap folder-alt">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                      <polyline points="2 17 12 22 22 17" />
-                      <polyline points="2 12 12 17 22 12" />
-                    </svg>
-                  </div>
-                  <div className="cms-ml-metric-info">
-                    <span className="cms-ml-metric-val">4</span>
-                    <span className="cms-ml-metric-label">Folders</span>
-                  </div>
-                </div>
-
-                <div className="cms-medialib-metric-card">
-                  <div className="cms-ml-icon-wrap image">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <div className={`cms-kiuq-fm-container ${isMediaFullScreen ? 'cms-medialib-fullscreen-mode' : ''}`}>
+              {/* TOP HEADER BAR */}
+              <header className="cms-kiuq-topbar">
+                <div className="cms-kiuq-topbar-left">
+                  <button
+                    type="button"
+                    className="cms-kiuq-collapse-btn"
+                    title={isMediaSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                    onClick={() => setIsMediaSidebarCollapsed((prev) => !prev)}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
                     </svg>
-                  </div>
-                  <div className="cms-ml-metric-info">
-                    <span className="cms-ml-metric-val">{mediaList.length}</span>
-                    <span className="cms-ml-metric-label">Images</span>
+                  </button>
+
+                  <div className="cms-kiuq-brand">
+                    <div className="cms-kiuq-brand-info">
+                      <span className="cms-kiuq-brand-name">Happy Machinery</span>
+                      <span className="cms-kiuq-brand-tag">Asset & Media Library</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="cms-medialib-metric-card">
-                  <div className="cms-ml-icon-wrap storage">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                      <polyline points="17 21 17 13 7 13 7 21" />
-                      <polyline points="7 3 7 8 15 8" />
-                    </svg>
+                <div className="cms-kiuq-topbar-right">
+                  <button
+                    type="button"
+                    className="cms-kiuq-cms-btn"
+                    onClick={() => setActiveTab('dashboard')}
+                    title="Return to CMS Dashboard"
+                  >
+                    &lt; CMS
+                  </button>
+                  <a
+                    href="/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="cms-kiuq-cms-btn"
+                    title="Open live website in new tab"
+                  >
+                    Live Site ↗
+                  </a>
+                  <button
+                    type="button"
+                    className="cms-kiuq-cms-btn"
+                    onClick={() => setIsMediaFullScreen((prev) => !prev)}
+                    title={isMediaFullScreen ? 'Exit Full Screen' : 'Fullscreen'}
+                  >
+                    {isMediaFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  </button>
+                  <button
+                    type="button"
+                    className="cms-kiuq-cms-btn"
+                    onClick={() => {
+                      showToast('Opening Standalone Media Library (/happymachinery/Media_Library/medialibrary.php)... Make sure Apache is running in XAMPP.', 'info' as any)
+                      window.open(mediaStandaloneUrl, '_blank')
+                    }}
+                    title="Open Standalone Media Library in full browser window"
+                  >
+                    Standalone ↗
+                  </button>
+
+                  {/* Theme Switcher Sun / Moon */}
+                  <div
+                    className="cms-kiuq-theme-switch"
+                    onClick={() => {
+                      const next = theme === 'dark' ? 'light' : 'dark'
+                      setTheme(next)
+                      showToast(`Switched to ${next.toUpperCase()} theme`, 'info' as any)
+                    }}
+                    title="Toggle Dark / Light Mode"
+                  >
+                    <span>{theme === 'dark' ? '☀️' : '🌙'}</span>
                   </div>
-                  <div className="cms-ml-metric-info">
-                    <span className="cms-ml-metric-val">842.11 KB</span>
-                    <span className="cms-ml-metric-label">Folder size</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* Action Toolbar Pills (Screenshot 2) */}
-              <div className="cms-medialib-actions-toolbar">
-                <button
-                  type="button"
-                  className="cms-tb-btn upload-primary"
-                  onClick={() => setShowUploadMediaModal(true)}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                  <span>Upload</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="cms-tb-pill-btn"
-                  onClick={() => setShowFolderModal(true)}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                    <line x1="12" y1="11" x2="12" y2="17" />
-                    <line x1="9" y1="14" x2="15" y2="14" />
-                  </svg>
-                  <span>New Folder</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="cms-tb-pill-btn"
-                  onClick={() => setShowUploadMediaModal(true)}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="12" y1="18" x2="12" y2="12" />
-                    <line x1="9" y1="15" x2="15" y2="15" />
-                  </svg>
-                  <span>New File</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="cms-tb-pill-btn"
-                  onClick={() => {
-                    const allUrls = mediaList.map((m) => m.url).join('\n')
-                    navigator.clipboard.writeText(allUrls)
-                    showToast('All image URLs copied to clipboard!', 'success')
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                  <span>All URLs</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="cms-tb-pill-btn"
-                  onClick={() => showToast('Select mode activated.', 'info' as any)}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>Select</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="cms-tb-pill-btn"
-                  onClick={() => {
-                    const allUrls = mediaList.map((m) => m.url).join('\n')
-                    navigator.clipboard.writeText(allUrls)
-                    showToast('Media list exported.', 'success')
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  <span>Download</span>
-                </button>
-              </div>
-
-              {/* Path Breadcrumb (Screenshot 2) */}
-              <div className="cms-medialib-path-row">
-                <div className="cms-path-breadcrumb">
-                  <span className="cms-path-part" style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </span>
-                  <span className="cms-path-sep">/</span>
-                  <span className="cms-path-link" onClick={() => setMediaPath('blog')}>blog</span>
-                  <span className="cms-path-sep">/</span>
-                  <span className="cms-path-link" onClick={() => setMediaPath('blog / equipment')}>equipment</span>
-                  <span className="cms-path-sep">/</span>
-                  <span className="cms-path-link active">{mediaPath}</span>
-                </div>
-                <button
-                  type="button"
-                  className="cms-path-back-btn"
-                  onClick={() => setMediaPath('blog / equipment')}
-                >
-                  <span>← Back</span>
-                </button>
-              </div>
-
-              {/* Files & Folders Table (Screenshot 2) */}
-              <div className="cms-card cms-medialib-files-card">
-                <div className="cms-files-card-header">
-                  <div className="cms-files-header-left">
-                    <span style={{ display: 'inline-flex', color: 'var(--cms-accent-blue)' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                      </svg>
+                  {/* User Profile Chip */}
+                  <div
+                    className="cms-kiuq-user-pill"
+                    onClick={() => setShowProfileModal(true)}
+                    title="User Profile"
+                  >
+                    <span className="cms-kiuq-user-avatar">
+                      {currentUser?.name ? currentUser.name.slice(0, 4) : 'Dara'}
                     </span>
-                    <h3>Files & Folders</h3>
-                  </div>
-
-                  <div className="cms-files-search-box">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder="Search files... (press /)"
-                      value={mediaSearchTerm}
-                      onChange={(e) => setMediaSearchTerm(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="cms-files-header-right">
-                    <select
-                      className="cms-sort-select"
-                      value={mediaSortOrder}
-                      onChange={(e) => setMediaSortOrder(e.target.value as any)}
-                    >
-                      <option value="A-Z">↕ Name A-Z</option>
-                      <option value="Z-A">↕ Name Z-A</option>
-                      <option value="Newest">↕ Newest First</option>
-                    </select>
-                    <span className="cms-files-meta-text">
-                      {mediaList.length} items · 842.11 KB · Double-click to open
-                    </span>
+                    <span>Admin ▾</span>
                   </div>
                 </div>
+              </header>
 
-                <div className="cms-table-wrapper">
-                  <table className="cms-table cms-medialib-table">
-                    <thead>
-                      <tr>
-                        <th>NAME</th>
-                        <th>SIZE / DATE</th>
-                        <th style={{ textAlign: 'right' }}>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mediaList
-                        .filter((m) => m.title.toLowerCase().includes(mediaSearchTerm.toLowerCase()))
-                        .map((item) => (
-                          <tr key={item.id} onClick={() => handleOpenMedia(item)} style={{ cursor: 'pointer' }}>
-                            <td>
-                              <div className="cms-file-name-cell">
-                                <img
-                                  src={item.url}
-                                  alt={item.title}
-                                  className="cms-file-thumb"
-                                  onError={(e) => {
-                                    ;(e.target as HTMLElement).style.display = 'none'
-                                  }}
-                                />
-                                <div className="cms-file-title-wrap">
-                                  <strong>{item.title}</strong>
-                                  <small>{item.dateAdded || 'Sep 07, 2026'}</small>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="cms-file-size-date">
-                              <span>128.45 KB · {item.dateAdded || 'Sep 07, 2026'}</span>
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <div className="cms-file-row-actions" onClick={(e) => e.stopPropagation()}>
-                                <a
-                                  href={item.url}
-                                  download
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="cms-file-action-btn"
-                                  title="Download"
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                    <polyline points="7 10 12 15 17 10" />
-                                    <line x1="12" y1="15" x2="12" y2="3" />
-                                  </svg>
-                                  <span>Download</span>
-                                </a>
-                                <button
-                                  type="button"
-                                  className="cms-file-action-btn"
-                                  onClick={() => handleOpenMedia(item)}
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                  </svg>
-                                  <span>Open</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cms-file-action-btn"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(item.url)
-                                    showToast('URL copied to clipboard!', 'success')
-                                  }}
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                  </svg>
-                                  <span>Copy</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cms-file-action-btn danger"
-                                  onClick={() => {
-                                    setConfirmDialog({
-                                      title: 'Delete Media Item',
-                                      message: `Are you sure you want to delete "${item.title}"? This item will be permanently removed.`,
-                                      onConfirm: () => {
-                                        const updated = mediaList.filter((m) => m.id !== item.id)
-                                        setMediaList(updated)
-                                        void writeSharedContent('media-library', updated)
-                                        showToast('Item deleted.', 'warning')
-                                      }
-                                    })
-                                  }}
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                  <span>Delete</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              {/* BODY LAYOUT: SIDEBAR + MAIN */}
+              <div className="cms-kiuq-body">
+                {/* LEFT SIDEBAR */}
+                <aside className={`cms-kiuq-sidebar ${isMediaSidebarCollapsed ? 'collapsed' : ''}`}>
+                  <div className="cms-kiuq-side-section">ACTIONS</div>
+                  <button
+                    type="button"
+                    className={`cms-kiuq-side-btn ${selectedFolder === 'all' ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedFolder('all')
+                      setMediaActiveView('files')
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-home">📁</span>
+                    <span>All Media ({mediaList.length})</span>
+                  </button>
 
-              {/* Image URLs Section (Screenshot 3) */}
-              <div className="cms-card cms-image-urls-card">
-                <div className="cms-card-header-row">
-                  <div className="cms-header-title-flex">
-                    <span style={{ display: 'inline-flex', color: 'var(--cms-accent-blue)' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                      </svg>
-                    </span>
-                    <h3>Image URLs</h3>
-                  </div>
-                  <span className="cms-urls-count-badge">
-                    {mediaList.length} image(s) · Click any URL to copy
-                  </span>
-                </div>
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => {
+                      showToast('Convert File Type: Upload files to automatically convert to optimized WebP format.', 'info' as any)
+                      setShowUploadMediaModal(true)
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-convert">🔄</span>
+                    <span>Convert File Type</span>
+                  </button>
 
-                <div className="cms-urls-list">
-                  {mediaList.slice(0, 5).map((item, index) => (
-                    <div key={item.id} className="cms-url-copy-row">
-                      <span className="cms-url-index">{index + 1}</span>
-                      <img src={item.url} alt="" className="cms-url-thumb" />
-                      <span className="cms-url-name">{item.title}</span>
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => {
+                      setActiveTab('trash')
+                      setTrashFilter('all')
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-trash">🗑</span>
+                    <span>Trash Bin</span>
+                  </button>
+
+                  <div className="cms-kiuq-side-section">FOLDERS</div>
+                  {mediaFolders.map((folder) => {
+                    const count = mediaList.filter((m) => (m.folder || 'galleries') === folder.name).length
+                    return (
+                      <button
+                        key={folder.name}
+                        type="button"
+                        className={`cms-kiuq-side-btn ${selectedFolder === folder.name ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedFolder(folder.name)
+                          setMediaActiveView('files')
+                        }}
+                      >
+                        <span className="cms-kiuq-side-icon cms-kiuq-icon-folder">📁</span>
+                        <span>{folder.name}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.6, fontWeight: 600 }}>
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
+
+                  <div className="cms-kiuq-side-section">ACCOUNT</div>
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => setShowProfileModal(true)}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-user">👤</span>
+                    <span>Profile</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => {
+                      setActiveTab('security')
+                      showToast('Viewing login activity & security logs', 'info' as any)
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-log">🧾</span>
+                    <span>Login Activity</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => {
+                      setActiveTab('admins')
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-users">👥</span>
+                    <span>Users</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => {
+                      setActiveTab('settings')
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-gear">⚙️</span>
+                    <span>Admin Settings</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cms-kiuq-side-btn"
+                    onClick={() => {
+                      setActiveTab('security')
+                    }}
+                  >
+                    <span className="cms-kiuq-side-icon cms-kiuq-icon-shield">🛡️</span>
+                    <span>Security</span>
+                  </button>
+
+                  {/* BASE URL Box */}
+                  <div className="cms-kiuq-side-section">BASE URL</div>
+                  <div className="cms-kiuq-baseurl-box">
+                    <div className="cms-kiuq-baseurl-input-wrap">
                       <input
                         type="text"
                         readOnly
-                        value={item.url}
-                        className="cms-url-input"
-                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                        value={mediaBaseUrl}
+                        className="cms-kiuq-baseurl-input"
+                        title="Click to copy Base URL"
+                        onClick={() => {
+                          navigator.clipboard.writeText(mediaBaseUrl)
+                          showToast('Base URL copied: ' + mediaBaseUrl, 'success')
+                        }}
                       />
                       <button
                         type="button"
-                        className="cms-url-copy-btn"
+                        className="cms-kiuq-baseurl-copy"
+                        title="Copy Base URL"
                         onClick={() => {
-                          navigator.clipboard.writeText(item.url)
-                          showToast(`URL for "${item.title}" copied!`, 'success')
+                          navigator.clipboard.writeText(mediaBaseUrl)
+                          showToast('Base URL copied: ' + mediaBaseUrl, 'success')
                         }}
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                        <span>Copy</span>
+                        📋
                       </button>
                     </div>
-                  ))}
-                </div>
-
-                <div className="cms-urls-footer-actions">
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    onClick={() => {
-                      const allUrls = mediaList.map((m) => m.url).join('\n')
-                      navigator.clipboard.writeText(allUrls)
-                      showToast('All image URLs copied to clipboard!', 'success')
-                    }}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                    <span>Copy All URLs</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-secondary"
-                    onClick={() => {
-                      const firstFew = mediaList.slice(0, 3).map((m) => m.url).join('\n')
-                      navigator.clipboard.writeText(firstFew)
-                      showToast('Selected URLs copied to clipboard!', 'success')
-                    }}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    <span>Copy Selected URLs</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Image Preview Grid (Screenshot 3) */}
-              <div className="cms-card cms-image-preview-card">
-                <div className="cms-card-header-row">
-                  <div className="cms-header-title-flex">
-                    <span style={{ display: 'inline-flex', color: 'var(--cms-accent-blue)' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                        <circle cx="8.5" cy="8.5" r="1.5" />
-                        <polyline points="21 15 16 10 5 21" />
-                      </svg>
-                    </span>
-                    <h3>Image Preview</h3>
                   </div>
-                  <span className="cms-urls-count-badge">
-                    {mediaList.length} image(s) · Double-click for full preview
-                  </span>
-                </div>
 
-                <div className="cms-image-preview-grid">
-                  {mediaList.map((item) => (
-                    <div
-                      key={item.id}
-                      className="cms-preview-tile"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => handleOpenMedia(item)}
-                      onDoubleClick={() => handleOpenMedia(item)}
+                  <div className="cms-kiuq-side-logout">
+                    <button
+                      type="button"
+                      className="cms-kiuq-logout-btn"
+                      onClick={() => handleLogout()}
                     >
-                      <div className="cms-preview-img-wrap">
-                        <img src={item.url} alt={item.title} />
+                      <span className="cms-kiuq-side-icon cms-kiuq-icon-trash">🚪</span>
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                </aside>
+
+                {/* RIGHT MAIN AREA */}
+                <main className="cms-kiuq-main">
+                  {/* 4 STAT CARDS */}
+                  <div className="cms-kiuq-stats-row">
+                    <div className="cms-kiuq-stat-card">
+                      <div className="cms-kiuq-stat-icon purple">📂</div>
+                      <div className="cms-kiuq-stat-val">{mediaList.length}</div>
+                      <div className="cms-kiuq-stat-lbl">Total Media</div>
+                    </div>
+
+                    <div className="cms-kiuq-stat-card">
+                      <div className="cms-kiuq-stat-icon amber">📁</div>
+                      <div className="cms-kiuq-stat-val">{mediaFolders.length}</div>
+                      <div className="cms-kiuq-stat-lbl">Folders</div>
+                    </div>
+
+                    <div className="cms-kiuq-stat-card">
+                      <div className="cms-kiuq-stat-icon cyan">🖼️</div>
+                      <div className="cms-kiuq-stat-val">
+                        {selectedFolder === 'all'
+                          ? mediaList.length
+                          : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder).length}
                       </div>
-                      <div className="cms-preview-info">
-                        <strong className="cms-preview-title" title={item.title}>
-                          {item.title}
-                        </strong>
-                        <div className="cms-preview-url-row">
-                          <span className="cms-preview-shorturl">
-                            {item.url.slice(0, 24)}...
-                          </span>
-                          <button
-                            type="button"
-                            className="cms-preview-mini-copy"
-                            title="Copy URL"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              navigator.clipboard.writeText(item.url)
-                              showToast('Image URL copied!', 'success')
-                            }}
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                            </svg>
-                          </button>
-                        </div>
+                      <div className="cms-kiuq-stat-lbl">
+                        {selectedFolder === 'all' ? 'All Images' : `${selectedFolder} Images`}
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="cms-kiuq-stat-card">
+                      <div className="cms-kiuq-stat-icon green">💾</div>
+                      <div className="cms-kiuq-stat-val">26.5 MB</div>
+                      <div className="cms-kiuq-stat-lbl">Storage Used</div>
+                    </div>
+                  </div>
+
+                  {/* ACTION TOOLBAR (11 BUTTONS EXACTLY AS SCREENSHOT) */}
+                  <div className="cms-kiuq-toolbar">
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn primary"
+                      onClick={() => {
+                        setUploadTargetFolder(selectedFolder === 'all' ? 'galleries' : selectedFolder)
+                        setShowUploadMediaModal(true)
+                      }}
+                    >
+                      <span>📤</span>
+                      <span>Upload</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        showToast('Convert: Select images or drag & drop to convert to WebP format.', 'info' as any)
+                        setUploadTargetFolder('img-webp-converter')
+                        setShowUploadMediaModal(true)
+                      }}
+                    >
+                      <span>🔄</span>
+                      <span>Convert</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        const newName = prompt('Enter new folder name:')
+                        if (newName && newName.trim()) {
+                          const trimmed = newName.trim()
+                          if (mediaFolders.some((f) => f.name.toLowerCase() === trimmed.toLowerCase())) {
+                            showToast(`Folder "${trimmed}" already exists.`, 'warning')
+                          } else {
+                            setMediaFolders((prev) => [
+                              ...prev,
+                              { name: trimmed, isPinned: false, size: '0 KB', date: new Date().toISOString().split('T')[0] }
+                            ])
+                            showToast(`Folder "${trimmed}" created successfully!`, 'success')
+                          }
+                        }
+                      }}
+                    >
+                      <span>📁</span>
+                      <span>New Folder</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        const fileName = prompt('Enter new file name (e.g. README.txt, config.json):')
+                        if (fileName && fileName.trim()) {
+                          showToast(`File "${fileName.trim()}" created successfully!`, 'success')
+                        }
+                      }}
+                    >
+                      <span>📝</span>
+                      <span>New File</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn remove-bg"
+                      onClick={() => {
+                        showToast('AI Background Remover tool initialized. Select an image to process.', 'info' as any)
+                      }}
+                    >
+                      <span>🪄</span>
+                      <span>Remove BG</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn resize-img"
+                      onClick={() => {
+                        showToast('Image Resizer: Resize asset dimensions & aspect ratio.', 'info' as any)
+                      }}
+                    >
+                      <span>📐</span>
+                      <span>Resize Image</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        setMediaActiveView('urls')
+                        handleCopySelectedUrls()
+                      }}
+                    >
+                      <span>🔗</span>
+                      <span>All URLs</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        if (selectedMediaIds.length > 0) {
+                          setSelectedMediaIds([])
+                          showToast('Selection cleared.', 'info' as any)
+                        } else {
+                          const allIds = [
+                            ...mediaFolders.map((f) => `folder-${f.name}`),
+                            ...mediaList.map((m) => m.id)
+                          ]
+                          setSelectedMediaIds(allIds)
+                          showToast(`Selected all items.`, 'info' as any)
+                        }
+                      }}
+                    >
+                      <span style={{ color: '#16a34a' }}>✅</span>
+                      <span>Select</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        const newExt = prompt('Enter new extension / type (e.g. webp, jpg, png):', 'webp')
+                        if (newExt && newExt.trim()) {
+                          showToast(`Batch type rename to .${newExt.trim()} complete.`, 'success')
+                        }
+                      }}
+                    >
+                      <span style={{ color: '#d97706' }}>🏷️</span>
+                      <span>Rename Type</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn"
+                      onClick={() => {
+                        const allUrls = mediaList.map((m) => m.url).join('\n')
+                        navigator.clipboard.writeText(allUrls)
+                        showToast('Downloading / copied all URLs for download!', 'success')
+                      }}
+                    >
+                      <span style={{ color: '#2563eb' }}>⬇️</span>
+                      <span>Download</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="cms-kiuq-tb-btn danger"
+                      onClick={handleBatchDeleteMedia}
+                    >
+                      <span style={{ color: '#ef4444' }}>🗑️</span>
+                      <span>Delete</span>
+                    </button>
+                  </div>
+
+                  {/* BREADCRUMB PATH ROW */}
+                  <div className="cms-kiuq-pathbar">
+                    <span
+                      className="ph-home"
+                      onClick={() => {
+                        setSelectedFolder('all')
+                        setMediaActiveView('files')
+                      }}
+                      title="All Media"
+                    >
+                      🏠
+                    </span>
+                    <span className="ph-sep">/</span>
+                    <span
+                      className={`ph-link ${selectedFolder === 'all' ? 'ph-cur' : ''}`}
+                      onClick={() => {
+                        setSelectedFolder('all')
+                        setMediaActiveView('files')
+                      }}
+                    >
+                      media
+                    </span>
+                    {selectedFolder !== 'all' && (
+                      <>
+                        <span className="ph-sep">/</span>
+                        <span className="ph-cur">{selectedFolder}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* MAIN PANEL (FILES & FOLDERS) */}
+                  <div className="cms-kiuq-panel">
+                    <div className="cms-kiuq-panel-head">
+                      <div className="cms-kiuq-panel-title">
+                        <span>📁</span>
+                        <span>{selectedFolder === 'all' ? 'All Files & Folders' : `Folder: ${selectedFolder}`}</span>
+                      </div>
+
+                      <div className="cms-kiuq-search-box">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="11" cy="11" r="8" />
+                          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Search files... (press /)"
+                          value={mediaSearchTerm}
+                          onChange={(e) => setMediaSearchTerm(e.target.value)}
+                        />
+                        <span className="cms-kiuq-search-kbd">/</span>
+                      </div>
+
+                      <select
+                        className="cms-kiuq-sort-select"
+                        value={mediaSortOrder}
+                        onChange={(e) => setMediaSortOrder(e.target.value as any)}
+                      >
+                        <option value="A-Z">↕ Name A–Z</option>
+                        <option value="Z-A">↕ Name Z–A</option>
+                        <option value="Newest">↕ Newest First</option>
+                      </select>
+
+                      <div className="cms-kiuq-head-pills">
+                        <button
+                          type="button"
+                          className={`cms-kiuq-head-pill-btn ${mediaActiveView === 'urls' ? 'active' : ''}`}
+                          onClick={() => setMediaActiveView(mediaActiveView === 'urls' ? 'files' : 'urls')}
+                          title="View / Copy Image URLs"
+                        >
+                          <span>🔗</span>
+                          <span>Image URLs</span>
+                          <span className="cms-kiuq-head-pill-badge">
+                            {selectedFolder === 'all'
+                              ? mediaList.length
+                              : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder).length}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`cms-kiuq-head-pill-btn ${mediaActiveView === 'previews' ? 'active' : ''}`}
+                          onClick={() => setMediaActiveView(mediaActiveView === 'previews' ? 'files' : 'previews')}
+                          title="View Image Previews"
+                        >
+                          <span>🖼️</span>
+                          <span>Image Preview</span>
+                          <span className="cms-kiuq-head-pill-badge">
+                            {selectedFolder === 'all'
+                              ? mediaList.length
+                              : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder).length}
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="cms-kiuq-panel-meta">
+                        {selectedFolder === 'all'
+                          ? `${mediaList.length} items · Double-click to open`
+                          : `${mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder).length} items in ${selectedFolder} · Double-click to open`}
+                      </div>
+                    </div>
+
+                    {/* TABLE */}
+                    <div className="cms-kiuq-table-responsive">
+                      <div className="cms-kiuq-table-head">
+                        <div>
+                          <input
+                            type="checkbox"
+                            checked={
+                              mediaList.length > 0 &&
+                              mediaList.every((m) => selectedMediaIds.includes(m.id))
+                            }
+                            onChange={(e) => handleSelectAllMedia(e, mediaList)}
+                          />
+                        </div>
+                        <div>NAME</div>
+                        <div>SIZE / DATE</div>
+                        <div style={{ textAlign: 'right' }}>ACTIONS</div>
+                      </div>
+
+                      {/* FOLDER ROWS (Shown in all or when searching) */}
+                      {selectedFolder === 'all' &&
+                        mediaFolders
+                          .filter((f) => {
+                            if (!mediaSearchTerm.trim()) return true
+                            return f.name.toLowerCase().includes(mediaSearchTerm.toLowerCase())
+                          })
+                          .sort((a, b) => {
+                            if (mediaSortOrder === 'A-Z') return a.name.localeCompare(b.name)
+                            if (mediaSortOrder === 'Z-A') return b.name.localeCompare(a.name)
+                            return 0
+                          })
+                          .map((folder) => {
+                            const isSelected = selectedMediaIds.includes(`folder-${folder.name}`)
+                            return (
+                              <div
+                                key={folder.name}
+                                className={`cms-kiuq-row ${isSelected ? 'selected' : ''}`}
+                                onClick={() => {
+                                  setSelectedMediaIds((prev) =>
+                                    prev.includes(`folder-${folder.name}`)
+                                      ? prev.filter((id) => id !== `folder-${folder.name}`)
+                                      : [...prev, `folder-${folder.name}`]
+                                  )
+                                }}
+                                onDoubleClick={() => {
+                                  setSelectedFolder(folder.name)
+                                }}
+                              >
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setSelectedMediaIds((prev) =>
+                                        prev.includes(`folder-${folder.name}`)
+                                          ? prev.filter((id) => id !== `folder-${folder.name}`)
+                                          : [...prev, `folder-${folder.name}`]
+                                      )
+                                    }}
+                                  />
+                                </div>
+
+                                <div className="cms-kiuq-item-name-cell">
+                                  <div className="cms-kiuq-folder-glyph">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#3b82f6" stroke="#2563eb" strokeWidth="1">
+                                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                    </svg>
+                                  </div>
+                                  <div className="cms-kiuq-name-meta">
+                                    <div className="cms-kiuq-filename-row">
+                                      <span
+                                        className="cms-kiuq-filename"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setSelectedFolder(folder.name)
+                                        }}
+                                      >
+                                        {folder.name}
+                                      </span>
+                                      {folder.isPinned && (
+                                        <span className="cms-kiuq-pin-badge" title="Pinned Folder">
+                                          📌
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="cms-kiuq-filesub">Folder</span>
+                                  </div>
+                                </div>
+
+                                <div className="cms-kiuq-size-cell">
+                                  {folder.size}
+                                </div>
+
+                                <div className="cms-kiuq-row-actions" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    className="cms-kiuq-act-btn"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(`${mediaBaseUrl}${folder.name}`)
+                                      showToast(`Folder path for "${folder.name}" copied!`, 'success')
+                                    }}
+                                  >
+                                    ⬇ Download
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-kiuq-act-btn"
+                                    onClick={() => setSelectedFolder(folder.name)}
+                                  >
+                                    👁 Open
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-kiuq-act-btn"
+                                    onClick={() => {
+                                      const ren = prompt('Rename folder:', folder.name)
+                                      if (ren && ren.trim() && ren.trim() !== folder.name) {
+                                        setMediaFolders((prev) =>
+                                          prev.map((f) => (f.name === folder.name ? { ...f, name: ren.trim() } : f))
+                                        )
+                                        showToast(`Folder renamed to "${ren.trim()}".`, 'success')
+                                      }
+                                    }}
+                                  >
+                                    ✏️ Rename
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-kiuq-act-btn danger"
+                                    onClick={() => {
+                                      if (confirm(`Delete folder "${folder.name}"?`)) {
+                                        setMediaFolders((prev) => prev.filter((f) => f.name !== folder.name))
+                                        showToast(`Folder "${folder.name}" deleted.`, 'success')
+                                      }
+                                    }}
+                                  >
+                                    🗑
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                      {/* FILES LIST (Matching current folder or all) */}
+                      {mediaList
+                        .filter((item) => {
+                          if (selectedFolder === 'all') return true
+                          return (item.folder || 'galleries') === selectedFolder
+                        })
+                        .filter((item) => {
+                          if (!mediaSearchTerm.trim()) return true
+                          const q = mediaSearchTerm.toLowerCase()
+                          return item.title.toLowerCase().includes(q) || item.url.toLowerCase().includes(q)
+                        })
+                        .map((item) => {
+                          const isSelected = selectedMediaIds.includes(item.id)
+                          return (
+                            <div
+                              key={item.id}
+                              className={`cms-kiuq-row ${isSelected ? 'selected' : ''}`}
+                              onClick={(e) => handleToggleSelectMedia(item.id, e)}
+                              onDoubleClick={() => handleOpenMedia(item)}
+                            >
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    setSelectedMediaIds((prev) =>
+                                      prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                                    )
+                                  }}
+                                />
+                              </div>
+
+                              <div className="cms-kiuq-item-name-cell">
+                                <img
+                                  src={item.url}
+                                  alt={item.title}
+                                  className="cms-kiuq-thumb-img"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleOpenMedia(item)
+                                  }}
+                                />
+                                <div className="cms-kiuq-name-meta">
+                                  <div className="cms-kiuq-filename-row">
+                                    <span
+                                      className="cms-kiuq-filename"
+                                      title={item.title}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleOpenMedia(item)
+                                      }}
+                                    >
+                                      {item.title}
+                                    </span>
+                                  </div>
+                                  <span className="cms-kiuq-filesub">
+                                    image/webp · {item.size || '2.4 MB'} · {item.dateAdded || '2026-07-18'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="cms-kiuq-size-cell">
+                                {item.size || '2.4 MB'}
+                              </div>
+
+                              <div className="cms-kiuq-row-actions" onClick={(e) => e.stopPropagation()}>
+                                <a
+                                  href={item.url}
+                                  download={item.title}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="cms-kiuq-act-btn"
+                                >
+                                  ⬇ Download
+                                </a>
+                                <button
+                                  type="button"
+                                  className="cms-kiuq-act-btn"
+                                  onClick={() => handleOpenMedia(item)}
+                                >
+                                  👁 Open
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-kiuq-act-btn"
+                                  onClick={(e) => handleDuplicateMedia(item, e)}
+                                >
+                                  📑 Duplicate
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-kiuq-act-btn"
+                                  onClick={() => {
+                                    const dest = prompt('Move item to folder:', 'galleries')
+                                    if (dest) handleMoveMediaFolder(item.id, dest)
+                                  }}
+                                >
+                                  📦 Move
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-kiuq-act-btn"
+                                  onClick={(e) => handleRenameMedia(item, e)}
+                                >
+                                  ✏️ Rename
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-kiuq-act-btn danger"
+                                  onClick={(e) => handleDeleteSingleMedia(item, e)}
+                                >
+                                  🗑
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </div>
+
+                  {/* ALL URLs PANEL (Matches original .all-urls-panel) */}
+                  {(mediaActiveView === 'urls' || mediaActiveView === 'files') && (
+                    <div className="cms-kiuq-urls-panel">
+                      <div className="cms-kiuq-panel-head">
+                        <div className="cms-kiuq-panel-title">
+                          <span>🔗</span>
+                          <span>Image URLs</span>
+                        </div>
+                        <div className="cms-kiuq-panel-meta">
+                          {(selectedFolder === 'all'
+                            ? mediaList
+                            : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder)
+                          ).length}{' '}
+                          image(s) · Click any URL to copy
+                        </div>
+                      </div>
+
+                      <div className="cms-kiuq-url-list-wrap">
+                        {(selectedFolder === 'all'
+                          ? mediaList
+                          : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder)
+                        )
+                          .filter((item) => {
+                            if (!mediaSearchTerm.trim()) return true
+                            const q = mediaSearchTerm.toLowerCase()
+                            return item.title.toLowerCase().includes(q) || item.url.toLowerCase().includes(q)
+                          })
+                          .slice(0, 24)
+                          .map((item, idx) => (
+                            <div key={item.id} className="cms-kiuq-url-item">
+                              <span className="cms-kiuq-url-num">{idx + 1}</span>
+                              <img
+                                src={item.url}
+                                alt=""
+                                className="cms-kiuq-url-thumb"
+                                onClick={() => handleOpenMedia(item)}
+                              />
+                              <span className="cms-kiuq-url-name" title={item.title}>
+                                {item.title}
+                              </span>
+                              <input
+                                type="text"
+                                readOnly
+                                value={item.url}
+                                className="cms-kiuq-url-input"
+                                onClick={(e) => (e.target as HTMLInputElement).select()}
+                              />
+                              <button
+                                type="button"
+                                className="cms-kiuq-url-copy-btn"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.url)
+                                  showToast(`URL copied!`, 'success')
+                                }}
+                              >
+                                📋 Copy
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+
+                      <div className="cms-kiuq-urls-footer">
+                        <button
+                          type="button"
+                          className="cms-kiuq-tb-btn primary"
+                          onClick={() => {
+                            const curItems =
+                              selectedFolder === 'all'
+                                ? mediaList
+                                : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder)
+                            const all = curItems.map((m) => m.url).join('\n')
+                            navigator.clipboard.writeText(all)
+                            showToast('All URLs copied to clipboard!', 'success')
+                          }}
+                        >
+                          📋 Copy All URLs
+                        </button>
+                        <button
+                          type="button"
+                          className="cms-kiuq-tb-btn"
+                          onClick={() => {
+                            const selected = mediaList.filter((m) => selectedMediaIds.includes(m.id))
+                            if (selected.length === 0) {
+                              showToast('Please select items to copy URLs.', 'warning')
+                            } else {
+                              const urls = selected.map((m) => m.url).join('\n')
+                              navigator.clipboard.writeText(urls)
+                              showToast(`${selected.length} URL(s) copied!`, 'success')
+                            }
+                          }}
+                        >
+                          ✅ Copy Selected URLs
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* IMAGE PREVIEWS GRID PANEL (Matches original .img-grid-panel) */}
+                  {(mediaActiveView === 'previews' || mediaActiveView === 'files') && (
+                    <div className="cms-kiuq-preview-grid-panel">
+                      <div className="cms-kiuq-panel-head">
+                        <div className="cms-kiuq-panel-title">
+                          <span>🖼️</span>
+                          <span>Image Preview</span>
+                        </div>
+                        <div className="cms-kiuq-panel-meta">
+                          {(selectedFolder === 'all'
+                            ? mediaList
+                            : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder)
+                          ).length}{' '}
+                          image(s) · Double-click for full preview
+                        </div>
+                      </div>
+
+                      <div className="cms-kiuq-grid">
+                        {(selectedFolder === 'all'
+                          ? mediaList
+                          : mediaList.filter((m) => (m.folder || 'galleries') === selectedFolder)
+                        )
+                          .filter((item) => {
+                            if (!mediaSearchTerm.trim()) return true
+                            const q = mediaSearchTerm.toLowerCase()
+                            return item.title.toLowerCase().includes(q) || item.url.toLowerCase().includes(q)
+                          })
+                          .slice(0, 36)
+                          .map((item) => (
+                            <div
+                              key={item.id}
+                              className="cms-kiuq-card-tile"
+                              onClick={() => handleOpenMedia(item)}
+                            >
+                              <img
+                                src={item.url}
+                                alt={item.title}
+                                className="cms-kiuq-tile-thumb"
+                              />
+                              <div className="cms-kiuq-tile-info">
+                                <div className="cms-kiuq-tile-name" title={item.title}>
+                                  {item.title}
+                                </div>
+                                <div className="cms-kiuq-tile-url-row" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    value={item.url}
+                                    className="cms-kiuq-tile-input"
+                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="cms-kiuq-tile-copy"
+                                    title="Copy URL"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(item.url)
+                                      showToast('URL copied!', 'success')
+                                    }}
+                                  >
+                                    📋
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </main>
+              </div>
+
+              {/* FLOATING CAPSULE SWITCHER (BOTTOM RIGHT FIXED) */}
+              <div className="cms-kiuq-floating-switcher">
+                <button
+                  type="button"
+                  className={`cms-kiuq-capsule-btn ${mediaActiveView === 'files' ? 'active' : ''}`}
+                  onClick={() => {
+                    setMediaActiveView('files')
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                >
+                  <span>📁</span>
+                  <span>Files</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`cms-kiuq-capsule-btn ${mediaActiveView === 'urls' ? 'active' : ''}`}
+                  onClick={() => {
+                    setMediaActiveView('urls')
+                  }}
+                >
+                  <span>🔗</span>
+                  <span>URLs</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`cms-kiuq-capsule-btn ${mediaActiveView === 'previews' ? 'active' : ''}`}
+                  onClick={() => {
+                    setMediaActiveView('previews')
+                  }}
+                >
+                  <span>🖼</span>
+                  <span>Previews</span>
+                </button>
               </div>
             </div>
           )}
+
 
           {/* TAB 4: EQUIPMENT & PRODUCTS (SCREENSHOTS 1, 2, 3) */}
           {activeTab === 'products' && (
@@ -3768,15 +7594,16 @@ export default function AdminDashboard() {
                 <div className="cms-catalog-view-container">
                   {/* Top Breadcrumb Bar */}
                   <div className="cms-view-breadcrumb-bar">
-                    <span>DASHBOARD PORTAL</span>
-                    <span>/</span>
-                    <span style={{ color: 'var(--cms-accent-blue)' }}>ADMIN/PRODUCTS</span>
+                    <span>Dashboard</span>
+                    <span>›</span>
+                    <span>Products</span>
+                    <span>›</span>
+                    <span className="active">All Products</span>
                   </div>
 
                   {/* Header Title Row */}
                   <div className="cms-catalog-title-row">
                     <div>
-                      <span className="cms-catalog-eyebrow">STORE CATALOG</span>
                       <h1 className="cms-catalog-h1">All Products</h1>
                       <p className="cms-catalog-subtext">
                         {products.length} total • {products.filter((p) => p.status === 'Published').length} published • {products.filter((p) => p.status === 'Draft').length} drafts
@@ -3796,30 +7623,123 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  {/* 4 Product Metric Cards (Screenshot 2) */}
+                  {/* Products Subnav Row */}
+                  <div className="cms-articles-subnav" style={{ marginBottom: '16px' }}>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn active"
+                      onClick={() => {
+                        setProductsSubView('list')
+                        setProdCategoryFilter('all')
+                      }}
+                    >
+                      All Products ({products.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => openCreateProduct()}
+                    >
+                      Add New Product
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('categories')}
+                    >
+                      Categories & Hierarchy ({productCategories.length})
+                    </button>
+                    {trashItems.filter((i) => i.type === 'product').length > 0 && (
+                      <button
+                        type="button"
+                        className="cms-subnav-btn"
+                        style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                        onClick={() => {
+                          setActiveTab('trash')
+                          setTrashFilter('product')
+                        }}
+                        title="View trashed products"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px' }}>
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                        <span>Trash ({trashItems.filter((i) => i.type === 'product').length})</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 4 Product Metric Cards */}
                   <div className="cms-prod-metrics-grid">
-                    <div className="cms-prod-metric-card" style={{ cursor: 'pointer' }} onClick={() => { setProdStatusFilter('all'); setProdSearch('') }}>
-                      <span className="cms-pm-label">Total Products</span>
+                    <div
+                      className={`cms-prod-metric-card total ${prodStatusFilter === 'all' && !prodSearch ? 'active' : ''}`}
+                      onClick={() => { setProdStatusFilter('all'); setProdSearch(''); setProdCurrentPage(1) }}
+                    >
+                      <div className="cms-prod-metric-top">
+                        <span className="cms-pm-label">Total Products</span>
+                        <div className="cms-pm-icon total">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                          </svg>
+                        </div>
+                      </div>
                       <span className="cms-pm-value">{products.length}</span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Complete store inventory</span>
+                      <span className="cms-pm-sub">Complete store inventory</span>
                     </div>
 
-                    <div className="cms-prod-metric-card published" style={{ cursor: 'pointer' }} onClick={() => setProdStatusFilter('published')}>
-                      <span className="cms-pm-label">Published</span>
+                    <div
+                      className={`cms-prod-metric-card published ${prodStatusFilter === 'published' ? 'active' : ''}`}
+                      onClick={() => { setProdStatusFilter('published'); setProdCurrentPage(1) }}
+                    >
+                      <div className="cms-prod-metric-top">
+                        <span className="cms-pm-label">Published</span>
+                        <div className="cms-pm-icon published">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                            <polyline points="22 4 12 14.01 9 11.01" />
+                          </svg>
+                        </div>
+                      </div>
                       <span className="cms-pm-value">{products.filter((p) => p.status === 'Published').length}</span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Live in catalog & store</span>
+                      <span className="cms-pm-sub">Live in catalog & store</span>
                     </div>
 
-                    <div className="cms-prod-metric-card drafts" style={{ cursor: 'pointer' }} onClick={() => setProdStatusFilter('draft')}>
-                      <span className="cms-pm-label">Drafts</span>
+                    <div
+                      className={`cms-prod-metric-card drafts ${prodStatusFilter === 'draft' ? 'active' : ''}`}
+                      onClick={() => { setProdStatusFilter('draft'); setProdCurrentPage(1) }}
+                    >
+                      <div className="cms-prod-metric-top">
+                        <span className="cms-pm-label">Drafts</span>
+                        <div className="cms-pm-icon drafts">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                          </svg>
+                        </div>
+                      </div>
                       <span className="cms-pm-value">{products.filter((p) => p.status === 'Draft').length}</span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Draft catalog listings</span>
+                      <span className="cms-pm-sub">Draft catalog listings</span>
                     </div>
 
-                    <div className="cms-prod-metric-card lowstock" style={{ cursor: 'pointer' }} onClick={() => setProdStatusFilter('low-stock')}>
-                      <span className="cms-pm-label">Low Stock</span>
+                    <div
+                      className={`cms-prod-metric-card lowstock ${prodStatusFilter === 'low-stock' ? 'active' : ''}`}
+                      onClick={() => { setProdStatusFilter('low-stock'); setProdCurrentPage(1) }}
+                    >
+                      <div className="cms-prod-metric-top">
+                        <span className="cms-pm-label">Low Stock</span>
+                        <div className="cms-pm-icon lowstock">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                          </svg>
+                        </div>
+                      </div>
                       <span className="cms-pm-value">{products.filter((p) => (p.stock ?? 0) <= 2).length}</span>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>Units with stock ≤ 2</span>
+                      <span className="cms-pm-sub">Units with stock ≤ 2</span>
                     </div>
                   </div>
 
@@ -3865,9 +7785,9 @@ export default function AdminDashboard() {
                       }}
                     >
                       <option value="all">All Categories</option>
-                      {IMPORTED_CATEGORY_PATHS.map((catPath) => (
-                        <option key={catPath} value={catPath}>
-                          {catPath}
+                      {productCategories.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
                         </option>
                       ))}
                     </select>
@@ -3960,7 +7880,7 @@ export default function AdminDashboard() {
                                       </div>
                                     </td>
                                     <td>
-                                      <span className="cms-sku-badge">{prod.sku}</span>
+                                      <span className="cms-sku-badge">{(prod.sku || '').replace(/^typh/i, 'TYPH')}</span>
                                     </td>
                                     <td>
                                       <span className="cms-category-pill" style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={prod.category}>
@@ -3980,8 +7900,9 @@ export default function AdminDashboard() {
                                       </div>
                                     </td>
                                     <td>
-                                      <span className={`cms-stock-pill ${(prod.stock ?? 0) > 0 ? 'in-stock' : 'out-stock'}`}>
-                                        {prod.stock ?? 0}
+                                      <span className={`cms-stock-pill ${(prod.stock ?? 0) > 2 ? 'in-stock' : (prod.stock ?? 0) > 0 ? 'low-stock' : 'out-stock'}`}>
+                                        <span className="cms-stock-dot" />
+                                        <span>{prod.stock ?? 0}</span>
                                       </span>
                                     </td>
                                     <td>
@@ -3991,13 +7912,13 @@ export default function AdminDashboard() {
                                         onClick={() => handleToggleProductStatus(prod.id)}
                                         title="Click to toggle Published / Draft"
                                       >
-                                        <span>•</span>
+                                        <span className="cms-status-dot" />
                                         <span>{prod.status}</span>
                                       </button>
                                     </td>
                                     <td>
                                       <span className={`cms-cart-badge-pill ${prod.addToCartEnabled !== false ? 'enabled' : 'disabled'}`}>
-                                        {prod.addToCartEnabled !== false ? 'Enabled' : 'Disabled'}
+                                        {prod.addToCartEnabled !== false ? '✓ Enabled' : '✕ Disabled'}
                                       </span>
                                     </td>
                                     <td style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)', whiteSpace: 'nowrap' }}>
@@ -4007,26 +7928,27 @@ export default function AdminDashboard() {
                                       <div className="cms-table-action-btns">
                                         <button
                                           type="button"
-                                          className="cms-action-btn-outline"
+                                          className="cms-action-btn-modern edit"
                                           onClick={() => openEditProduct(prod)}
+                                          title="Edit Product"
                                         >
-                                          Edit
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                          </svg>
+                                          <span>Edit</span>
                                         </button>
                                         <button
                                           type="button"
-                                          className="cms-action-btn-outline"
-                                          onClick={() => handleDuplicateProduct(prod)}
-                                          title="Duplicate Product"
-                                        >
-                                          Copy
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="cms-action-btn-outline danger"
+                                          className="cms-action-btn-modern danger"
                                           onClick={() => handleDeleteProduct(prod.id)}
-                                          title="Delete Product"
+                                          title="Move to Trash"
                                         >
-                                          Delete
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                          </svg>
+                                          <span>Delete</span>
                                         </button>
                                       </div>
                                     </td>
@@ -4132,7 +8054,7 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             className="cms-input-text"
-                            placeholder="skid-steer-v900-red"
+                            placeholder="e.g. skid-steer-v900-red"
                             value={prodEditorSlug}
                             onChange={(e) => setProdEditorSlug(e.target.value)}
                           />
@@ -4180,27 +8102,18 @@ export default function AdminDashboard() {
 
                         {prodEditorSpecs.length === 0 ? (
                           <div className="cms-no-specs-notice">
-                            <span>NO SPECIFICATIONS ADDED YET.</span>
+                            <span>No specifications added yet.</span>
                             <button
                               type="button"
-                              className="cms-btn-primary-blue"
-                              style={{ fontSize: '0.78rem', padding: '6px 14px' }}
-                              onClick={() => {
-                                setProdEditorSpecs([
-                                  { name: 'Engine Model', value: 'Kubota D1105 Diesel Engine (Tier 4 / Stage V)' },
-                                  { name: 'Operating Weight', value: '2,150 lbs (975 kg)' },
-                                  { name: 'Rated Operating Capacity', value: '900 lbs (408 kg)' },
-                                  { name: 'Hydraulic Flow', value: '12.7 GPM @ 2,321 psi' },
-                                  { name: 'Width', value: '35.5 in (Fits Standard Backyard Gates)' }
-                                ])
-                              }}
+                              className="cms-action-pill-btn"
+                              style={{ fontSize: '0.82rem', padding: '7px 16px' }}
+                              onClick={handleAddSpecRow}
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
                               </svg>
-                              <span>Load Standard V900 Specs</span>
+                              <span>Add First Specification</span>
                             </button>
                           </div>
                         ) : (
@@ -4209,7 +8122,7 @@ export default function AdminDashboard() {
                               <div key={index} className="cms-spec-item-row">
                                 <input
                                   type="text"
-                                  placeholder="Spec Name (e.g. Engine)"
+                                  placeholder="Spec Name (e.g. Engine Model)"
                                   value={spec.name}
                                   onChange={(e) => handleUpdateSpecRow(index, 'name', e.target.value)}
                                 />
@@ -4246,8 +8159,9 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.01"
                               className="cms-input-text"
+                              placeholder="0.00"
                               value={prodEditorPrice}
-                              onChange={(e) => setProdEditorPrice(parseFloat(e.target.value) || 0)}
+                              onChange={(e) => setProdEditorPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                               required
                             />
                           </div>
@@ -4260,7 +8174,7 @@ export default function AdminDashboard() {
                               className="cms-input-text"
                               placeholder="Optional discounted price"
                               value={prodEditorSalePrice ?? ''}
-                              onChange={(e) => setProdEditorSalePrice(e.target.value ? parseFloat(e.target.value) : undefined)}
+                              onChange={(e) => setProdEditorSalePrice(e.target.value ? parseFloat(e.target.value) : '')}
                             />
                           </div>
                         </div>
@@ -4271,8 +8185,9 @@ export default function AdminDashboard() {
                             <input
                               type="number"
                               className="cms-input-text"
+                              placeholder="0"
                               value={prodEditorStock}
-                              onChange={(e) => setProdEditorStock(parseInt(e.target.value, 10) || 0)}
+                              onChange={(e) => setProdEditorStock(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
                             />
                           </div>
 
@@ -4281,6 +8196,7 @@ export default function AdminDashboard() {
                             <input
                               type="text"
                               className="cms-input-text"
+                              placeholder="e.g. HM-SKID-01"
                               value={prodEditorSku}
                               onChange={(e) => setProdEditorSku(e.target.value)}
                               required
@@ -4296,11 +8212,13 @@ export default function AdminDashboard() {
                       <div className="cms-editor-card">
                         <button
                           type="button"
-                          className="cms-btn-primary-blue"
-                          style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.94rem', marginBottom: '12px' }}
+                          className="cms-btn-primary-blue cms-prod-publish-btn"
                           onClick={() => handleSaveProduct('Published')}
                         >
-                          PUBLISH PRODUCT
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>PUBLISH PRODUCT</span>
                         </button>
 
                         <div className="cms-form-field-group">
@@ -4317,11 +8235,15 @@ export default function AdminDashboard() {
 
                         <button
                           type="button"
-                          className="cms-action-btn-outline"
-                          style={{ width: '100%', justifyContent: 'center', padding: '9px' }}
+                          className="cms-action-btn-outline cms-prod-draft-btn"
                           onClick={() => handleSaveProduct('Draft')}
                         >
-                          Save as Draft
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                            <polyline points="17 21 17 13 7 13 7 21" />
+                            <polyline points="7 3 7 8 15 8" />
+                          </svg>
+                          <span>Save as Draft</span>
                         </button>
                       </div>
 
@@ -4336,6 +8258,7 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             className="cms-input-text"
+                            placeholder="e.g. TYPHON, KUBOTA, BOBCAT..."
                             value={prodEditorBrand}
                             onChange={(e) => setProdEditorBrand(e.target.value)}
                           />
@@ -4348,9 +8271,10 @@ export default function AdminDashboard() {
                             value={prodEditorCategory}
                             onChange={(e) => setProdEditorCategory(e.target.value)}
                           >
-                            {IMPORTED_CATEGORY_PATHS.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
+                            <option value="">Select a category...</option>
+                            {productCategories.map((cat) => (
+                              <option key={cat.id} value={cat.name}>
+                                {cat.name}
                               </option>
                             ))}
                           </select>
@@ -4368,7 +8292,7 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             className="cms-input-text"
-                            placeholder="https://..."
+                            placeholder="https://happymachinery.com/store/your-product"
                             value={prodEditorBuyUrl}
                             onChange={(e) => setProdEditorBuyUrl(e.target.value)}
                           />
@@ -4387,7 +8311,7 @@ export default function AdminDashboard() {
                             checked={prodEditorFeatured}
                             onChange={(e) => setProdEditorFeatured(e.target.checked)}
                           />
-                          <span>Feature this product</span>
+                          <span>Feature this product in store highlights</span>
                         </label>
 
                         <label className="cms-checkbox-label">
@@ -4457,6 +8381,416 @@ export default function AdminDashboard() {
                             </div>
                           )}
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBVIEW C: PRODUCT CATEGORIES MANAGEMENT (SHOWS ONLY CATEGORIES, ALLOWS ADD & UPDATE) */}
+              {productsSubView === 'categories' && (
+                <div className="cms-categories-view-wrapper">
+                  {/* Top Breadcrumb Bar */}
+                  <div className="cms-view-breadcrumb-bar">
+                    <span>Dashboard</span>
+                    <span>›</span>
+                    <span>Products</span>
+                    <span>›</span>
+                    <span className="active">Categories</span>
+                  </div>
+
+                  {/* Header Row */}
+                  <div className="cms-view-header">
+                    <div className="cms-view-title-group">
+                      <h1>Equipment & Product Categories</h1>
+                      <p>Organize store machinery into distinct categories, hierarchy paths, and URL slugs.</p>
+                    </div>
+                    <div className="cms-taxonomy-counters">
+                      <div className="cms-tax-pill">
+                        <span>CATEGORIES</span>
+                        <strong>{productCategories.length}</strong>
+                      </div>
+                      <div className="cms-tax-pill blue">
+                        <span>ASSIGNED EQUIPMENT</span>
+                        <strong>{products.length}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subnav row */}
+                  <div className="cms-articles-subnav">
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => {
+                        setProductsSubView('list')
+                        setProdCategoryFilter('all')
+                      }}
+                    >
+                      All Products ({products.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn active"
+                    >
+                      Categories ({productCategories.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('brands')}
+                    >
+                      Brands
+                    </button>
+                  </div>
+
+                  {/* 2-Column Categories Grid */}
+                  <div className="cms-categories-grid">
+                    {/* LEFT CARD: Add / Update Category Form */}
+                    <div className="cms-card" id="cms-pcat-form-anchor">
+                      <div className="cms-card-header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                        <div className="cms-card-title">
+                          <span style={{ color: 'var(--cms-accent-blue)', fontSize: '1.2rem', fontWeight: 700 }}>
+                            {editingProductCat ? '✏️' : '+'}
+                          </span>
+                          <h3>{editingProductCat ? 'Update Category' : 'Add New Category'}</h3>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--cms-text-muted)' }}>
+                          {editingProductCat ? `Editing "${editingProductCat.name}"` : 'Create a category for equipment and store catalog'}
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleSaveProductCategory} className="cms-category-form">
+                        <div className="cms-form-field">
+                          <label>CATEGORY NAME *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Mini Excavators"
+                            value={pcatName}
+                            onChange={(e) => {
+                              setPcatName(e.target.value)
+                              if (!editingProductCat) {
+                                setPcatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
+                              }
+                            }}
+                          />
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>URL SLUG *</label>
+                          <div className="cms-slug-input-wrapper">
+                            <span>/store?category=</span>
+                            <input
+                              type="text"
+                              required
+                              placeholder="mini-excavators"
+                              value={pcatSlug}
+                              onChange={(e) => setPcatSlug(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>PARENT CATEGORY</label>
+                          <select
+                            className="cms-editor-select"
+                            value={pcatParent}
+                            onChange={(e) => setPcatParent(e.target.value)}
+                          >
+                            <option value="">None (Top-Level Equipment Root)</option>
+                            <option value="Equipment">Equipment</option>
+                            <option value="Attachments & Parts">Attachments & Parts</option>
+                            {productCategories
+                              .filter((c) => !editingProductCat || c.id !== editingProductCat.id)
+                              .map((c) => (
+                                <option key={c.id} value={c.name}>
+                                  {c.parent ? `${c.parent} > ` : ''}{c.name}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>COVER IMAGE URL</label>
+                          <input
+                            type="text"
+                            placeholder="/images/loader-red.png or https://..."
+                            value={pcatCover}
+                            onChange={(e) => setPcatCover(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="cms-form-field">
+                          <label>DESCRIPTION</label>
+                          <textarea
+                            rows={3}
+                            placeholder="Brief description of the machinery or attachments in this category..."
+                            value={pcatDesc}
+                            onChange={(e) => setPcatDesc(e.target.value)}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                          <button
+                            type="submit"
+                            className="cms-btn cms-btn-primary"
+                            style={{ flex: 1 }}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              {editingProductCat ? (
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                              ) : (
+                                <>
+                                  <line x1="12" y1="5" x2="12" y2="19" />
+                                  <line x1="5" y1="12" x2="19" y2="12" />
+                                </>
+                              )}
+                            </svg>
+                            <span>{editingProductCat ? 'Update Category' : 'Add Category'}</span>
+                          </button>
+                          {editingProductCat && (
+                            <button
+                              type="button"
+                              className="cms-btn cms-btn-secondary"
+                              onClick={handleCancelEditProductCat}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                    </div>
+
+                    {/* RIGHT CARD: Categories List & Hierarchy */}
+                    <div className="cms-card">
+                      <div className="cms-card-header">
+                        <div className="cms-card-title">
+                          <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                              <line x1="7" y1="7" x2="7.01" y2="7" />
+                            </svg>
+                          </span>
+                          <h3>Active Categories ({productCategories.length})</h3>
+                        </div>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                          Click Edit to update category details
+                        </span>
+                      </div>
+
+                      {/* Search Bar inside card */}
+                      <div style={{ padding: '0 20px 14px 20px' }}>
+                        <div className="cms-filter-search-box" style={{ maxWidth: '100%' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search categories or slugs..."
+                            value={pcatSearch}
+                            onChange={(e) => setPcatSearch(e.target.value)}
+                          />
+                          {pcatSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setPcatSearch('')}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--cms-text-muted)', fontSize: '0.9rem' }}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Categories Table */}
+                      <div className="cms-table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
+                        <table className="cms-table">
+                          <thead>
+                            <tr>
+                              <th>CATEGORY</th>
+                              <th>PARENT HIERARCHY</th>
+                              <th>ASSIGNED ITEMS</th>
+                              <th style={{ textAlign: 'right' }}>ACTIONS</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {productCategories
+                              .filter((c) => {
+                                if (!pcatSearch) return true
+                                const q = pcatSearch.toLowerCase()
+                                return (
+                                  c.name.toLowerCase().includes(q) ||
+                                  c.slug.toLowerCase().includes(q) ||
+                                  (c.parent && c.parent.toLowerCase().includes(q))
+                                )
+                              })
+                              .map((cat) => {
+                                const count = getProductCountForCategory(cat.name)
+                                const isEditing = editingProductCat?.id === cat.id
+                                return (
+                                  <tr key={cat.id} style={isEditing ? { background: 'rgba(37, 99, 235, 0.08)' } : undefined}>
+                                    <td>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <img
+                                          src={cat.coverImage || '/images/why-choose-v900-jobsite.png'}
+                                          alt={cat.name}
+                                          style={{ width: '38px', height: '38px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--cms-border)', flexShrink: 0 }}
+                                          onError={(e) => { (e.target as any).src = '/images/why-choose-v900-jobsite.png' }}
+                                        />
+                                        <div>
+                                          <strong style={{ display: 'block', fontSize: '0.88rem', color: 'var(--cms-text-primary)', fontWeight: 750 }}>
+                                            {cat.name}
+                                          </strong>
+                                          <span style={{ fontSize: '0.74rem', color: 'var(--cms-accent-blue)', fontFamily: 'monospace' }}>
+                                            /{cat.slug}
+                                          </span>
+                                          {cat.description && (
+                                            <p style={{ margin: '2px 0 0', fontSize: '0.74rem', color: 'var(--cms-text-secondary)', maxWidth: '300px', whiteSpace: 'normal' }}>
+                                              {cat.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span className="cms-category-pill" style={{ fontSize: '0.72rem' }}>
+                                        {cat.parent || 'Top-Level Root'}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <button
+                                        type="button"
+                                        style={{
+                                          background: count > 0 ? 'rgba(37, 99, 235, 0.1)' : 'var(--cms-bg-card-hover)',
+                                          color: count > 0 ? '#2563eb' : 'var(--cms-text-muted)',
+                                          border: '1px solid',
+                                          borderColor: count > 0 ? 'rgba(37, 99, 235, 0.25)' : 'var(--cms-border)',
+                                          padding: '3px 8px',
+                                          borderRadius: '9999px',
+                                          fontSize: '0.74rem',
+                                          fontWeight: 750,
+                                          cursor: count > 0 ? 'pointer' : 'default',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                        onClick={() => {
+                                          if (count > 0) {
+                                            setActiveTab('products')
+                                            setProductsSubView('list')
+                                            setProdCategoryFilter(cat.name)
+                                          }
+                                        }}
+                                        title={count > 0 ? `Filter products to ${cat.name}` : 'No products assigned'}
+                                      >
+                                        <span>{count} {count === 1 ? 'item' : 'items'}</span>
+                                        {count > 0 && <span style={{ fontSize: '0.7rem' }}>→</span>}
+                                      </button>
+                                    </td>
+                                    <td style={{ textAlign: 'right' }}>
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                        <button
+                                          type="button"
+                                          className="cms-action-btn-modern edit"
+                                          onClick={() => handleStartEditProductCat(cat)}
+                                          title="Edit and update category"
+                                        >
+                                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                          </svg>
+                                          <span>Edit</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-action-btn-modern danger"
+                                          onClick={() => handleDeleteProductCat(cat.id, cat.name)}
+                                          title="Delete category"
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                          </svg>
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBVIEW D: BRANDS FILTER / LIST */}
+              {productsSubView === 'brands' && (
+                <div className="cms-categories-view-wrapper">
+                  <div className="cms-view-breadcrumb-bar">
+                    <span>Dashboard</span>
+                    <span>›</span>
+                    <span>Products</span>
+                    <span>›</span>
+                    <span className="active">Brands</span>
+                  </div>
+                  <div className="cms-view-header">
+                    <div className="cms-view-title-group">
+                      <h1>Equipment Brands</h1>
+                      <p>View products organized by machinery manufacturer brand.</p>
+                    </div>
+                  </div>
+                  <div className="cms-articles-subnav">
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => {
+                        setProductsSubView('list')
+                        setProdCategoryFilter('all')
+                      }}
+                    >
+                      All Products
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('categories')}
+                    >
+                      Categories ({productCategories.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn active"
+                    >
+                      Brands
+                    </button>
+                  </div>
+                  <div className="cms-categories-grid">
+                    <div className="cms-card">
+                      <div className="cms-card-header">
+                        <div className="cms-card-title">
+                          <h3>TYPHON Machinery</h3>
+                        </div>
+                      </div>
+                      <div style={{ padding: '0 20px 20px 20px' }}>
+                        <p style={{ margin: '0 0 16px', color: 'var(--cms-text-secondary)', fontSize: '0.88rem' }}>
+                          Primary equipment line including mini excavators, skid steer loaders, wheel loaders, and heavy attachments.
+                          Currently includes <strong>{products.filter((p) => p.brand === 'TYPHON' || !p.brand).length} products</strong>.
+                        </p>
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-primary"
+                          onClick={() => {
+                            setProductsSubView('list')
+                            setProdSearch('TYPHON')
+                          }}
+                        >
+                          View TYPHON Products →
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -4742,6 +9076,7 @@ export default function AdminDashboard() {
                     .map((item) => (
                       <div
                         key={item.id}
+                        className="cms-comment-row-item"
                         style={{
                           background: 'var(--cms-bg-surface)',
                           border: '1px solid var(--cms-border)',
@@ -4773,6 +9108,11 @@ export default function AdminDashboard() {
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                               <strong style={{ fontSize: '0.94rem' }}>{item.author}</strong>
+                              {item.email && (
+                                <span style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                                  ({item.email})
+                                </span>
+                              )}
                               <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)' }}>{item.date}</span>
                               <span className={`cms-status-btn-pill ${item.status === 'Approved' ? 'published' : 'draft'}`}>
                                 {item.status}
@@ -4787,7 +9127,7 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        <div className="cms-comment-actions-wrap" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                           {item.status !== 'Approved' && (
                             <button
                               type="button"
@@ -4821,79 +9161,366 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB 5: VISUAL PAGE BUILDER */}
+          {/* TAB 5: VISUAL HOMEPAGE BUILDER (WORDPRESS CMS) */}
           {activeTab === 'pages' && (
-            <>
+            <HomePageCmsEditor
+              content={homeContent}
+              onChange={setHomeContent}
+              onSave={async () => {
+                setIsSavingHome(true)
+                try {
+                  const payload: HomePageContent = {
+                    ...homeContent,
+                    updatedAt: new Date().toISOString()
+                  }
+                  await writeSharedContent('home-content', payload)
+                  showToast('Homepage changes saved & published live!', 'success')
+                } catch (err) {
+                  console.error(err)
+                  showToast('Error saving homepage.', 'error')
+                } finally {
+                  setIsSavingHome(false)
+                }
+              }}
+              onReset={async () => {
+                if (window.confirm('Reset ALL homepage sections to factory default template? This cannot be undone.')) {
+                  setHomeContent(DEFAULT_HOME_CONTENT)
+                  await writeSharedContent('home-content', DEFAULT_HOME_CONTENT)
+                  showToast('Homepage reset to default template.', 'success')
+                }
+              }}
+              isSaving={isSavingHome}
+              mediaList={mediaList}
+              showToast={showToast}
+            />
+          )}
+
+          {/* TAB: TRASH & RECOVERY VAULT */}
+          {activeTab === 'trash' && (
+            <div className="cms-trash-view-wrapper">
+              {/* Top Breadcrumb Bar */}
+              <div className="cms-view-breadcrumb-bar">
+                <span>Dashboard</span>
+                <span>›</span>
+                <span>System</span>
+                <span>›</span>
+                <span className="active">Trash & Recovery</span>
+              </div>
+
+              {/* View Header */}
               <div className="cms-view-header">
                 <div className="cms-view-title-group">
-                  <h1>Visual Page Management</h1>
-                  <p>Configure homepage sections, hero banners, custom buttons, and call-to-action blocks.</p>
+                  <h1>Trash & Recovery</h1>
+                  <p>
+                    Safely recover accidentally deleted equipment products, blog articles, and categories, or permanently erase them.
+                  </p>
+                </div>
+                <div className="cms-view-actions">
+                  {trashItems.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-primary"
+                        onClick={handleRestoreAllTrash}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                          <polyline points="1 4 1 10 7 10" />
+                          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                        </svg>
+                        <span>Restore All ({trashItems.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-danger"
+                        onClick={handleEmptyAllTrash}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                        <span>Empty Trash</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="cms-card">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {sitePages.map((page) => (
-                    <div
-                      key={page.id}
-                      style={{
-                        background: 'var(--cms-bg-card)',
-                        border: '1px solid var(--cms-border)',
-                        borderRadius: '12px',
-                        padding: '18px'
-                      }}
+              {/* 4 Metric / Status Cards */}
+              <div className="cms-trash-stat-row">
+                <div className="cms-trash-stat-card">
+                  <div className="cms-trash-stat-icon total">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </div>
+                  <div className="cms-trash-stat-data">
+                    <span className="cms-trash-stat-num">{trashItems.length}</span>
+                    <span className="cms-trash-stat-label">Total in Trash</span>
+                  </div>
+                </div>
+
+                <div className="cms-trash-stat-card">
+                  <div className="cms-trash-stat-icon article">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  </div>
+                  <div className="cms-trash-stat-data">
+                    <span className="cms-trash-stat-num">{trashItems.filter((i) => i.type === 'article').length}</span>
+                    <span className="cms-trash-stat-label">Articles</span>
+                  </div>
+                </div>
+
+                <div className="cms-trash-stat-card">
+                  <div className="cms-trash-stat-icon product">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                    </svg>
+                  </div>
+                  <div className="cms-trash-stat-data">
+                    <span className="cms-trash-stat-num">{trashItems.filter((i) => i.type === 'product').length}</span>
+                    <span className="cms-trash-stat-label">Equipment Products</span>
+                  </div>
+                </div>
+
+                <div className="cms-trash-stat-card">
+                  <div className="cms-trash-stat-icon category">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <div className="cms-trash-stat-data">
+                    <span className="cms-trash-stat-num">
+                      {trashItems.filter((i) => i.type === 'blog-category' || i.type === 'product-category').length}
+                    </span>
+                    <span className="cms-trash-stat-label">Categories</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Subnav Filters & Search Bar */}
+              <div className="cms-trash-filter-bar">
+                <div className="cms-articles-subnav" style={{ margin: 0 }}>
+                  <button
+                    type="button"
+                    className={`cms-subnav-btn ${trashFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setTrashFilter('all')}
+                  >
+                    All ({trashItems.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`cms-subnav-btn ${trashFilter === 'article' ? 'active' : ''}`}
+                    onClick={() => setTrashFilter('article')}
+                  >
+                    Articles ({trashItems.filter((i) => i.type === 'article').length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`cms-subnav-btn ${trashFilter === 'product' ? 'active' : ''}`}
+                    onClick={() => setTrashFilter('product')}
+                  >
+                    Products ({trashItems.filter((i) => i.type === 'product').length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`cms-subnav-btn ${trashFilter === 'category' ? 'active' : ''}`}
+                    onClick={() => setTrashFilter('category')}
+                  >
+                    Categories ({trashItems.filter((i) => i.type === 'blog-category' || i.type === 'product-category').length})
+                  </button>
+                </div>
+
+                <div className="cms-trash-search-wrapper">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search trash by title or details..."
+                    value={trashSearch}
+                    onChange={(e) => setTrashSearch(e.target.value)}
+                  />
+                  {trashSearch && (
+                    <button
+                      type="button"
+                      className="cms-trash-search-clear"
+                      onClick={() => setTrashSearch('')}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <div>
-                          <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{page.title}</h4>
-                          <span style={{ fontSize: '0.78rem', color: 'var(--cms-text-muted)' }}>
-                            URL: /{page.slug || ''}
-                          </span>
-                        </div>
-                        <span className="cms-badge success">{page.status}</span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {page.sections.map((sec, idx) => (
-                          <div
-                            key={sec.id}
-                            style={{
-                              padding: '10px 14px',
-                              background: 'var(--cms-bg-surface)',
-                              border: '1px solid var(--cms-border)',
-                              borderRadius: '8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between'
-                            }}
-                          >
-                            <div>
-                              <strong style={{ fontSize: '0.88rem' }}>{idx + 1}. {sec.title}</strong>
-                              <span style={{ fontSize: '0.76rem', color: 'var(--cms-text-muted)', marginLeft: '10px' }}>
-                                [{sec.type.toUpperCase()}]
-                              </span>
-                            </div>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                              <input
-                                type="checkbox"
-                                checked={sec.visible}
-                                onChange={(e) => {
-                                  sec.visible = e.target.checked
-                                  setSitePages([...sitePages])
-                                  void writeSharedContent('site-pages', sitePages)
-                                  showToast('Section visibility updated.', 'success')
-                                }}
-                              />
-                              Visible
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                      ✕
+                    </button>
+                  )}
                 </div>
               </div>
-            </>
+
+              {/* Trash Items List or Empty State */}
+              <div className="cms-card" style={{ padding: 0, overflow: 'hidden' }}>
+                {trashItems.length === 0 ? (
+                  <div className="cms-trash-empty-state">
+                    <div className="cms-trash-empty-icon">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        <line x1="10" y1="11" x2="10" y2="17" />
+                        <line x1="14" y1="11" x2="14" y2="17" />
+                      </svg>
+                    </div>
+                    <h3>Trash Vault is Empty</h3>
+                    <p>
+                      No deleted articles, equipment listings, or categories. When you delete items from your store catalog or blog, they will be safely kept here for quick recovery.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {(() => {
+                      const filtered = trashItems.filter((item) => {
+                        const matchesFilter =
+                          trashFilter === 'all'
+                            ? true
+                            : trashFilter === 'category'
+                            ? item.type === 'blog-category' || item.type === 'product-category'
+                            : item.type === trashFilter
+                        const matchesSearch =
+                          trashSearch.trim() === '' ||
+                          item.title.toLowerCase().includes(trashSearch.toLowerCase()) ||
+                          (item.subtitle && item.subtitle.toLowerCase().includes(trashSearch.toLowerCase()))
+                        return matchesFilter && matchesSearch
+                      })
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="cms-trash-empty-state">
+                            <h3>No Matching Items</h3>
+                            <p>No trashed items match your current filter or search criteria.</p>
+                            <button
+                              type="button"
+                              className="cms-btn cms-btn-secondary"
+                              onClick={() => {
+                                setTrashFilter('all')
+                                setTrashSearch('')
+                              }}
+                            >
+                              Reset Filters
+                            </button>
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <div className="cms-table-responsive">
+                          <table className="cms-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '45%' }}>Item / Content Details</th>
+                                <th style={{ width: '18%' }}>Item Type</th>
+                                <th style={{ width: '17%' }}>Deleted On</th>
+                                <th style={{ width: '20%', textAlign: 'right' }}>Recovery Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtered.map((item) => {
+                                const typeLabel =
+                                  item.type === 'article'
+                                    ? 'Blog Article'
+                                    : item.type === 'product'
+                                    ? 'Equipment Product'
+                                    : item.type === 'blog-category'
+                                    ? 'Editorial Category'
+                                    : 'Store Category'
+
+                                const typeBadgeClass =
+                                  item.type === 'article'
+                                    ? 'article'
+                                    : item.type === 'product'
+                                    ? 'product'
+                                    : 'category'
+
+                                return (
+                                  <tr key={item.id} className="cms-trash-table-row">
+                                    <td>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        {item.image ? (
+                                          <img
+                                            src={item.image}
+                                            alt=""
+                                            className="cms-trash-item-thumb"
+                                            onError={(e) => {
+                                              ;(e.target as HTMLElement).style.display = 'none'
+                                            }}
+                                          />
+                                        ) : (
+                                          <div className="cms-trash-item-placeholder">
+                                            {item.type === 'article' ? '📝' : item.type === 'product' ? '🚜' : '📁'}
+                                          </div>
+                                        )}
+                                        <div style={{ minWidth: 0 }}>
+                                          <strong className="cms-trash-item-title">{item.title}</strong>
+                                          {item.subtitle && (
+                                            <div className="cms-trash-item-subtitle">{item.subtitle}</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <span className={`cms-trash-type-badge ${typeBadgeClass}`}>
+                                        {typeLabel}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div className="cms-trash-item-date">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        <span>{item.deletedAt}</span>
+                                      </div>
+                                    </td>
+                                    <td style={{ textAlign: 'right' }}>
+                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                        <button
+                                          type="button"
+                                          className="cms-btn cms-btn-primary cms-btn-sm"
+                                          onClick={() => handleRestoreTrashItem(item)}
+                                          title="Restore this item back to active catalog/articles"
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <polyline points="1 4 1 10 7 10" />
+                                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                                          </svg>
+                                          <span>Restore</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="cms-btn cms-btn-secondary cms-btn-sm danger-text"
+                                          onClick={() => handlePermanentlyDeleteTrashItem(item)}
+                                          title="Permanently remove from database"
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                          </svg>
+                                          <span>Delete Forever</span>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )
+                    })()}
+                  </>
+                )}
+              </div>
+            </div>
           )}
 
           {/* TAB 6: SECURITY CENTER */}
@@ -4916,7 +9543,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Security Center Sub-navigation Tabs */}
-              <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--cms-border)', paddingBottom: '12px' }}>
+              <div className="cms-security-subnav" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--cms-border)', paddingBottom: '12px' }}>
                 <button
                   className={`cms-btn ${securitySubTab === 'overview' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
                   onClick={() => setSecuritySubTab('overview')}
@@ -5367,112 +9994,383 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="cms-card" style={{ maxWidth: '680px' }}>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    void writeSharedContent('site-settings', siteSettings)
-                    void logSecurityEvent('SETTINGS_UPDATED', 'Global website settings updated.', 'info', currentUser?.username)
-                    showToast('Website settings saved successfully!', 'success')
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-                >
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                      Website Name
-                    </label>
-                    <input
-                      type="text"
-                      className="cms-header-search-input"
-                      style={{ width: '100%' }}
-                      value={siteSettings.siteName}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, siteName: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                      Tagline / Slogan
-                    </label>
-                    <input
-                      type="text"
-                      className="cms-header-search-input"
-                      style={{ width: '100%' }}
-                      value={siteSettings.tagline}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, tagline: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                        Contact Email
-                      </label>
-                      <input
-                        type="email"
-                        className="cms-header-search-input"
-                        style={{ width: '100%' }}
-                        value={siteSettings.contactEmail}
-                        onChange={(e) => setSiteSettings({ ...siteSettings, contactEmail: e.target.value })}
-                      />
+              <div className="cms-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px', alignItems: 'start' }}>
+                {/* CARD 1: BRAND ASSETS (LOGO & FAVICON) */}
+                <div className="cms-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', borderBottom: '1px solid var(--cms-border-subtle)', paddingBottom: '12px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(30, 58, 138, 0.12)', color: 'var(--cms-accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                      </svg>
                     </div>
                     <div>
+                      <h2 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--cms-text-primary)' }}>Brand Identity & Logos</h2>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)', margin: '2px 0 0' }}>Manage primary header logo and browser tab favicon</p>
+                    </div>
+                  </div>
+
+                  {/* Hidden file inputs */}
+                  <input
+                    type="file"
+                    ref={logoFileInputRef}
+                    style={{ display: 'none' }}
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleLogoUpload(e.target.files[0])
+                      }
+                    }}
+                  />
+                  <input
+                    type="file"
+                    ref={faviconFileInputRef}
+                    style={{ display: 'none' }}
+                    accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/webp,image/svg+xml"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleFaviconUpload(e.target.files[0])
+                      }
+                    }}
+                  />
+
+                  {/* LOGO SECTION */}
+                  <div style={{ marginBottom: '22px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--cms-text-primary)' }}>
+                        Website Primary Logo
+                      </label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setLogoPreviewBg('dark')}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '0.72rem',
+                            borderRadius: '5px',
+                            border: '1px solid var(--cms-border-subtle)',
+                            background: logoPreviewBg === 'dark' ? 'var(--cms-accent-blue)' : 'transparent',
+                            color: logoPreviewBg === 'dark' ? '#fff' : 'var(--cms-text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Dark Bg
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogoPreviewBg('light')}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: '0.72rem',
+                            borderRadius: '5px',
+                            border: '1px solid var(--cms-border-subtle)',
+                            background: logoPreviewBg === 'light' ? 'var(--cms-accent-blue)' : 'transparent',
+                            color: logoPreviewBg === 'light' ? '#fff' : 'var(--cms-text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Light Bg
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Logo Preview Stage */}
+                    <div
+                      style={{
+                        padding: '20px',
+                        borderRadius: '12px',
+                        background: logoPreviewBg === 'dark' ? '#0f172a' : '#f8fafc',
+                        border: '1px dashed var(--cms-border-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: '100px',
+                        marginBottom: '10px'
+                      }}
+                    >
+                      <img
+                        src={siteSettings.logo || '/logo.png'}
+                        alt="Brand Logo Preview"
+                        style={{ maxHeight: '70px', maxWidth: '100%', objectFit: 'contain' }}
+                        onError={(e) => { (e.target as HTMLImageElement).src = '/logo.png' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-primary"
+                        style={{ fontSize: '0.82rem', padding: '7px 14px' }}
+                        onClick={() => logoFileInputRef.current?.click()}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        Upload New Logo
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-outline"
+                        style={{ fontSize: '0.82rem', padding: '7px 12px' }}
+                        onClick={() => {
+                          setSiteSettings((prev) => ({ ...prev, logo: '/logo.png' }))
+                          showToast('Reset logo to default (/logo.png)', 'success')
+                        }}
+                      >
+                        Reset to Default
+                      </button>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', color: 'var(--cms-text-muted)' }}>
+                        Or Direct Logo URL / Asset Path
+                      </label>
+                      <input
+                        type="text"
+                        className="cms-header-search-input"
+                        style={{ width: '100%', fontSize: '0.82rem' }}
+                        placeholder="/logo.png or https://example.com/logo.png"
+                        value={siteSettings.logo}
+                        onChange={(e) => setSiteSettings({ ...siteSettings, logo: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* FAVICON SECTION */}
+                  <div style={{ borderTop: '1px solid var(--cms-border-subtle)', paddingTop: '16px' }}>
+                    <label style={{ display: 'block', fontWeight: 600, fontSize: '0.88rem', color: 'var(--cms-text-primary)', marginBottom: '8px' }}>
+                      Browser Tab Favicon
+                    </label>
+
+                    {/* Browser Tab Simulation Preview */}
+                    <div
+                      style={{
+                        background: 'var(--cms-bg-card-secondary, #1e293b)',
+                        borderRadius: '10px',
+                        padding: '10px 14px',
+                        marginBottom: '10px',
+                        border: '1px solid var(--cms-border-subtle)'
+                      }}
+                    >
+                      <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--cms-text-muted)', display: 'block', marginBottom: '6px' }}>
+                        Browser Tab Live Preview
+                      </span>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          background: 'var(--cms-bg-card, #0f172a)',
+                          padding: '6px 14px',
+                          borderRadius: '8px 8px 0 0',
+                          border: '1px solid var(--cms-border-subtle)',
+                          maxWidth: '260px'
+                        }}
+                      >
+                        <img
+                          src={siteSettings.favicon || '/favicon.png'}
+                          alt="Favicon Preview"
+                          style={{ width: '18px', height: '18px', objectFit: 'contain', borderRadius: '3px' }}
+                          onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.png' }}
+                        />
+                        <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--cms-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {siteSettings.siteName || 'Happy Machinery'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-primary"
+                        style={{ fontSize: '0.82rem', padding: '7px 14px' }}
+                        onClick={() => faviconFileInputRef.current?.click()}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        Upload Favicon
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-outline"
+                        style={{ fontSize: '0.82rem', padding: '7px 12px' }}
+                        onClick={() => {
+                          const currentLogo = siteSettings.logo || '/logo.png'
+                          setSiteSettings((prev) => ({ ...prev, favicon: currentLogo }))
+                          updateBrowserFavicon(currentLogo)
+                          showToast('Favicon synced with current Brand Logo!', 'success')
+                        }}
+                      >
+                        Sync with Logo
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-outline"
+                        style={{ fontSize: '0.82rem', padding: '7px 12px' }}
+                        onClick={() => {
+                          setSiteSettings((prev) => ({ ...prev, favicon: '/favicon.png' }))
+                          updateBrowserFavicon('/favicon.png')
+                          showToast('Reset favicon to default (/favicon.png)', 'success')
+                        }}
+                      >
+                        Reset Default
+                      </button>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', color: 'var(--cms-text-muted)' }}>
+                        Or Direct Favicon URL / Asset Path
+                      </label>
+                      <input
+                        type="text"
+                        className="cms-header-search-input"
+                        style={{ width: '100%', fontSize: '0.82rem' }}
+                        placeholder="/logo.png or https://example.com/favicon.ico"
+                        value={siteSettings.favicon}
+                        onChange={(e) => {
+                          setSiteSettings({ ...siteSettings, favicon: e.target.value })
+                          if (e.target.value) updateBrowserFavicon(e.target.value)
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* CARD 2: GENERAL WEBSITE & SEO SETTINGS */}
+                <div className="cms-card">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void writeSharedContent('site-settings', siteSettings)
+                      cacheSiteSettings(siteSettings)
+                      updateBrowserFavicon(siteSettings.favicon || '/favicon.png')
+                      void logSecurityEvent('SETTINGS_UPDATED', 'Global website settings & brand assets updated.', 'info', currentUser?.username)
+                      showToast('Website settings and brand assets saved successfully!', 'success')
+                    }}
+                    style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', borderBottom: '1px solid var(--cms-border-subtle)', paddingBottom: '12px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(30, 58, 138, 0.12)', color: 'var(--cms-accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, color: 'var(--cms-text-primary)' }}>Site Details & SEO</h2>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)', margin: '2px 0 0' }}>Configure public contact info and default search engine metadata</p>
+                      </div>
+                    </div>
+
+                    <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                        Phone
+                        Website Name
                       </label>
                       <input
                         type="text"
                         className="cms-header-search-input"
                         style={{ width: '100%' }}
-                        value={siteSettings.phone}
-                        onChange={(e) => setSiteSettings({ ...siteSettings, phone: e.target.value })}
+                        value={siteSettings.siteName}
+                        onChange={(e) => setSiteSettings({ ...siteSettings, siteName: e.target.value })}
                       />
                     </div>
-                  </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                      Physical Address
-                    </label>
-                    <input
-                      type="text"
-                      className="cms-header-search-input"
-                      style={{ width: '100%' }}
-                      value={siteSettings.address}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, address: e.target.value })}
-                    />
-                  </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
+                        Tagline / Slogan
+                      </label>
+                      <input
+                        type="text"
+                        className="cms-header-search-input"
+                        style={{ width: '100%' }}
+                        value={siteSettings.tagline}
+                        onChange={(e) => setSiteSettings({ ...siteSettings, tagline: e.target.value })}
+                      />
+                    </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                      Default SEO Title
-                    </label>
-                    <input
-                      type="text"
-                      className="cms-header-search-input"
-                      style={{ width: '100%' }}
-                      value={siteSettings.defaultSeoTitle}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, defaultSeoTitle: e.target.value })}
-                    />
-                  </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '14px' }}>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
+                          Contact Email
+                        </label>
+                        <input
+                          type="email"
+                          className="cms-header-search-input"
+                          style={{ width: '100%' }}
+                          value={siteSettings.contactEmail}
+                          onChange={(e) => setSiteSettings({ ...siteSettings, contactEmail: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
+                          Phone
+                        </label>
+                        <input
+                          type="text"
+                          className="cms-header-search-input"
+                          style={{ width: '100%' }}
+                          value={siteSettings.phone}
+                          onChange={(e) => setSiteSettings({ ...siteSettings, phone: e.target.value })}
+                        />
+                      </div>
+                    </div>
 
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                      Default SEO Meta Description
-                    </label>
-                    <textarea
-                      rows={3}
-                      className="cms-header-search-input"
-                      style={{ width: '100%', height: 'auto', padding: '10px 14px', borderRadius: '10px' }}
-                      value={siteSettings.defaultSeoDescription}
-                      onChange={(e) => setSiteSettings({ ...siteSettings, defaultSeoDescription: e.target.value })}
-                    />
-                  </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
+                        Physical Address
+                      </label>
+                      <input
+                        type="text"
+                        className="cms-header-search-input"
+                        style={{ width: '100%' }}
+                        value={siteSettings.address}
+                        onChange={(e) => setSiteSettings({ ...siteSettings, address: e.target.value })}
+                      />
+                    </div>
 
-                  <button type="submit" className="cms-btn cms-btn-primary" style={{ marginTop: '10px' }}>
-                    Save Global Settings
-                  </button>
-                </form>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
+                        Default SEO Title
+                      </label>
+                      <input
+                        type="text"
+                        className="cms-header-search-input"
+                        style={{ width: '100%' }}
+                        value={siteSettings.defaultSeoTitle}
+                        onChange={(e) => setSiteSettings({ ...siteSettings, defaultSeoTitle: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
+                        Default SEO Meta Description
+                      </label>
+                      <textarea
+                        rows={3}
+                        className="cms-header-search-input"
+                        style={{ width: '100%', height: 'auto', padding: '10px 14px', borderRadius: '10px' }}
+                        value={siteSettings.defaultSeoDescription}
+                        onChange={(e) => setSiteSettings({ ...siteSettings, defaultSeoDescription: e.target.value })}
+                      />
+                    </div>
+
+                    <button type="submit" className="cms-btn cms-btn-primary" style={{ marginTop: '10px', width: '100%', justifyContent: 'center' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                      </svg>
+                      Save Global Settings & Brand Assets
+                    </button>
+                  </form>
+                </div>
               </div>
             </>
           )}
@@ -5505,7 +10403,15 @@ export default function AdminDashboard() {
                     type="button"
                     className="cms-btn cms-btn-primary"
                     onClick={() => {
-                      showToast('Maintenance settings saved successfully!', 'success')
+                      saveMaintenanceConfig({
+                        global: maintenanceGlobal,
+                        title: maintenanceTitle,
+                        message: maintenanceMessage,
+                        eta: maintenanceEta,
+                        progress: maintenanceProgress,
+                        routes: maintenanceRoutes
+                      })
+                      showToast('Maintenance settings saved & published to all pages successfully!', 'success')
                     }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -5547,12 +10453,21 @@ export default function AdminDashboard() {
                       type="checkbox"
                       checked={maintenanceGlobal}
                       onChange={(e) => {
-                        setMaintenanceGlobal(e.target.checked)
+                        const isChecked = e.target.checked
+                        setMaintenanceGlobal(isChecked)
+                        saveMaintenanceConfig({
+                          global: isChecked,
+                          title: maintenanceTitle,
+                          message: maintenanceMessage,
+                          eta: maintenanceEta,
+                          progress: maintenanceProgress,
+                          routes: maintenanceRoutes
+                        })
                         showToast(
-                          e.target.checked
-                            ? 'Global Maintenance activated.'
-                            : 'Global Maintenance deactivated. Site is Live!',
-                          e.target.checked ? 'warning' : 'success'
+                          isChecked
+                            ? 'Global Maintenance activated for all pages.'
+                            : 'Global Maintenance deactivated. All pages are Live!',
+                          isChecked ? 'warning' : 'success'
                         )
                       }}
                     />
@@ -5822,61 +10737,204 @@ export default function AdminDashboard() {
       {/* Profile Modal */}
       {showProfileModal && (
         <div className="cms-modal-backdrop" onClick={() => setShowProfileModal(false)}>
-          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-            <h3>My Administrator Profile</h3>
-            <p>Update your display credentials and personal authentication passcode.</p>
-            <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Display Name</label>
-                <input
-                  type="text"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
+          <div className="cms-profile-modal-card" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="cms-profile-modal-header">
+              <div className="cms-profile-header-title-box">
+                <div className="cms-profile-header-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </div>
+                <div>
+                  <h3>My Administrator Profile</h3>
+                  <p>Update your display credentials, avatar, and authentication security.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setShowProfileModal(false)}
+                title="Close profile modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Profile Identity Card with Live Avatar Preview & Presets */}
+            <div className="cms-profile-identity-strip">
+              <div className="cms-profile-avatar-wrapper">
+                <img
+                  src={profileAvatar || currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'}
+                  alt={profileName || currentUser?.name || 'Administrator'}
+                  className="cms-profile-avatar-img"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'
+                  }}
                 />
+                <span className="cms-profile-avatar-status-dot" title="Session Verified & Active" />
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Email Address</label>
-                <input
-                  type="email"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  value={profileEmail}
-                  onChange={(e) => setProfileEmail(e.target.value)}
-                />
+              <div className="cms-profile-identity-info">
+                <div className="cms-profile-identity-name-row">
+                  <h4>{profileName || currentUser?.name || 'Super Admin'}</h4>
+                  <span className="cms-profile-role-pill">{currentUser?.role || 'Lead Administrator'}</span>
+                </div>
+                <span className="cms-profile-identity-handle">
+                  @{currentUser?.username || 'admin'} • {profileEmail || currentUser?.email || 'admin@happymachinery.com'}
+                </span>
+
+                {/* Quick Avatar Presets */}
+                <div className="cms-profile-presets-row">
+                  <span className="cms-profile-presets-label">Presets:</span>
+                  {[
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=160&auto=format&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&auto=format&fit=crop&q=80',
+                    'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp'
+                  ].map((presetUrl, pIdx) => (
+                    <button
+                      key={pIdx}
+                      type="button"
+                      className={`cms-profile-preset-thumb-btn ${profileAvatar === presetUrl ? 'active' : ''}`}
+                      onClick={() => setProfileAvatar(presetUrl)}
+                      title={`Select preset avatar ${pIdx + 1}`}
+                    >
+                      <img src={presetUrl} alt={`Preset ${pIdx + 1}`} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Profile Edit Form */}
+            <form onSubmit={handleSaveProfile} className="cms-profile-form">
+              <div className="cms-profile-fields-grid">
+                {/* Display Name */}
+                <div className="cms-profile-field-group">
+                  <label className="cms-profile-field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    <span>Display Name</span>
+                  </label>
+                  <div className="cms-profile-input-wrap">
+                    <input
+                      type="text"
+                      className="cms-profile-input"
+                      placeholder="e.g. Super Admin"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Email Address */}
+                <div className="cms-profile-field-group">
+                  <label className="cms-profile-field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
+                    </svg>
+                    <span>Email Address</span>
+                  </label>
+                  <div className="cms-profile-input-wrap">
+                    <input
+                      type="email"
+                      className="cms-profile-input"
+                      placeholder="admin@happymachinery.com"
+                      value={profileEmail}
+                      onChange={(e) => setProfileEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Avatar Image URL */}
+                <div className="cms-profile-field-group">
+                  <label className="cms-profile-field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                    <span>Avatar Image URL</span>
+                  </label>
+                  <div className="cms-profile-input-wrap">
+                    <input
+                      type="url"
+                      className="cms-profile-input"
+                      placeholder="https://example.com/avatar.jpg"
+                      value={profileAvatar}
+                      onChange={(e) => setProfileAvatar(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Password / Passcode */}
+                <div className="cms-profile-field-group">
+                  <label className="cms-profile-field-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    <span>New Password / Passcode</span>
+                  </label>
+                  <div className="cms-profile-input-wrap password-wrap">
+                    <input
+                      type={showProfilePassword ? 'text' : 'password'}
+                      className="cms-profile-input"
+                      placeholder="Leave blank to keep current password"
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="cms-profile-pwd-toggle-btn"
+                      onClick={() => setShowProfilePassword(!showProfilePassword)}
+                      title={showProfilePassword ? 'Hide password' : 'Show password'}
+                      tabIndex={-1}
+                    >
+                      {showProfilePassword ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                          <line x1="1" y1="1" x2="23" y2="23" />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <span className="cms-profile-field-hint">Leave blank to maintain your current secure login passcode.</span>
+                </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Avatar Image URL</label>
-                <input
-                  type="text"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  value={profileAvatar}
-                  onChange={(e) => setProfileAvatar(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>New Password / Passcode</label>
-                <input
-                  type="password"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  placeholder="Leave blank to keep current password"
-                  value={newPasswordInput}
-                  onChange={(e) => setNewPasswordInput(e.target.value)}
-                />
-              </div>
-
-              <div className="cms-modal-actions" style={{ marginTop: '10px' }}>
-                <button type="button" className="cms-modal-btn secondary" onClick={() => setShowProfileModal(false)}>
+              {/* Modal Actions */}
+              <div className="cms-profile-modal-footer">
+                <button
+                  type="button"
+                  className="cms-profile-btn-cancel"
+                  onClick={() => setShowProfileModal(false)}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="cms-modal-btn primary">
-                  Save Changes
+                <button
+                  type="submit"
+                  className="cms-profile-btn-save"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>
@@ -5888,7 +10946,18 @@ export default function AdminDashboard() {
       {showAddAdminModal && (
         <div className="cms-modal-backdrop" onClick={() => setShowAddAdminModal(false)}>
           <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
-            <h3>Provision New Administrator</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <h3 style={{ margin: 0 }}>Provision New Administrator</h3>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setShowAddAdminModal(false)}
+                title="Close modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
             <p>Create credentials for an authorized team member with role-based access.</p>
             <form onSubmit={handleCreateAdmin} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
@@ -5970,7 +11039,18 @@ export default function AdminDashboard() {
       {showBanIpModal && (
         <div className="cms-modal-backdrop" onClick={() => setShowBanIpModal(false)}>
           <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ color: 'var(--cms-danger)' }}>Add IP to Threat Ban List</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <h3 style={{ color: 'var(--cms-danger)', margin: 0 }}>Add IP to Threat Ban List</h3>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setShowBanIpModal(false)}
+                title="Close modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
             <p>Traffic originating from this IP address will be blocked at the server level.</p>
             <form onSubmit={handleBanIp} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
@@ -6015,7 +11095,18 @@ export default function AdminDashboard() {
       {editingProduct && (
         <div className="cms-modal-backdrop" onClick={() => setEditingProduct(null)}>
           <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px' }}>
-            <h3>Edit Machine: {editingProduct.name}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <h3 style={{ margin: 0 }}>Edit Machine: {editingProduct.name}</h3>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setEditingProduct(null)}
+                title="Close modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
             <p>Customize pricing, specification metadata, and primary call-to-action button.</p>
             <form
               onSubmit={(e) => {
@@ -6106,7 +11197,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               className="cms-lightbox-tool-btn"
-              title="Zoom Out (-)"
+              title="Zoom Out (- or Scroll Down)"
               onClick={handleZoomOut}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -6117,7 +11208,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               className="cms-lightbox-tool-btn"
-              title="Zoom In (+)"
+              title="Zoom In (+ or Scroll Up)"
               onClick={handleZoomIn}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -6164,7 +11255,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               className="cms-lightbox-nav-btn prev"
-              title="Previous Image (←)"
+              title="Previous Image (← or Swipe Right)"
               onClick={(e) => {
                 e.stopPropagation()
                 handlePrevMedia()
@@ -6181,7 +11272,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               className="cms-lightbox-nav-btn next"
-              title="Next Image (→)"
+              title="Next Image (→ or Swipe Left)"
               onClick={(e) => {
                 e.stopPropagation()
                 handleNextMedia()
@@ -6193,17 +11284,25 @@ export default function AdminDashboard() {
             </button>
           )}
 
-          {/* Center Image Canvas */}
+          {/* Center Image Canvas (Canva Experience: Mouse Zoom, Pan/Drag, Double-Click) */}
           <div
-            className="cms-lightbox-canvas"
+            className={`cms-lightbox-canvas ${isPanning ? 'panning' : ''}`}
             onClick={(e) => e.stopPropagation()}
+            onWheel={handleLightboxWheel}
+            onMouseDown={handleLightboxMouseDown}
+            onMouseMove={handleLightboxMouseMove}
+            onMouseUp={handleLightboxMouseUp}
+            onMouseLeave={() => setIsPanning(false)}
+            onDoubleClick={handleLightboxDoubleClick}
+            title="Scroll mouse to zoom • Click and drag to pan • Double-click to toggle zoom"
           >
             <img
               src={selectedMedia.url}
               alt={selectedMedia.title}
               className="cms-lightbox-img"
               style={{
-                transform: `scale(${mediaZoom / 100}) rotate(${mediaRotation}deg)`,
+                transform: `translate3d(${mediaPan.x}px, ${mediaPan.y}px, 0) scale(${mediaZoom / 100}) rotate(${mediaRotation}deg)`,
+                transition: isPanning ? 'none' : 'transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
               }}
               draggable={false}
             />
@@ -6211,10 +11310,15 @@ export default function AdminDashboard() {
 
           {/* Bottom Left Title & Count Indicator */}
           <div className="cms-lightbox-bottom-left" onClick={(e) => e.stopPropagation()}>
-            <div className="cms-lightbox-filename" title={selectedMedia.title}>
-              {selectedMedia.url.split('/').pop() || selectedMedia.title}
+            <div className="cms-lightbox-filename" title={selectedMedia.title} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span>{selectedMedia.url.split('/').pop() || selectedMedia.title}</span>
+              <span className={`cms-folder-badge ${selectedMedia.folder || 'galleries'}`}>
+                📁 {selectedMedia.folder || 'galleries'}
+              </span>
             </div>
             <div className="cms-lightbox-counter">
+              {selectedMedia.size ? `${selectedMedia.size} · ` : ''}
+              {selectedMedia.dateAdded ? `${selectedMedia.dateAdded} · ` : ''}
               {(() => {
                 const curIdx = mediaList.findIndex((m) => m.id === selectedMedia.id || m.url === selectedMedia.url)
                 return curIdx !== -1 ? `${curIdx + 1} / ${mediaList.length}` : `1 / ${mediaList.length || 1}`
@@ -6225,18 +11329,28 @@ export default function AdminDashboard() {
           {/* Bottom Right Blue Copy URL Button */}
           <button
             type="button"
-            className="cms-lightbox-copy-btn"
+            className={`cms-lightbox-copy-btn ${copiedMediaUrl ? 'copied' : ''}`}
             onClick={(e) => {
               e.stopPropagation()
-              navigator.clipboard.writeText(selectedMedia.url)
-              showToast('Media URL copied to clipboard!', 'success')
+              void handleCopySelectedUrl(selectedMedia.url)
             }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            <span>Copy URL</span>
+            {copiedMediaUrl ? (
+              <>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span>Copy URL</span>
+              </>
+            )}
           </button>
         </div>
       )}
@@ -6246,17 +11360,31 @@ export default function AdminDashboard() {
         <div className="cms-dialog-backdrop" onClick={() => setShowFolderModal(false)}>
           <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()}>
             <div className="cms-dialog-header">
-              <div className="cms-dialog-icon-wrap">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                  <line x1="12" y1="11" x2="12" y2="17" />
-                  <line x1="9" y1="14" x2="15" y2="14" />
-                </svg>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                <div className="cms-dialog-icon-wrap blue">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    <line x1="12" y1="11" x2="12" y2="17" />
+                    <line x1="9" y1="14" x2="15" y2="14" />
+                  </svg>
+                </div>
+                <div className="cms-dialog-titles">
+                  <h3>Create New Folder</h3>
+                  <p>Organize your media assets into a dedicated folder directory.</p>
+                </div>
               </div>
-              <div className="cms-dialog-titles">
-                <h3>Create New Folder</h3>
-                <p>Organize your media assets into a dedicated folder directory.</p>
-              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => {
+                  setShowFolderModal(false)
+                  setNewFolderName('')
+                }}
+                title="Close dialog"
+                aria-label="Close"
+              >
+                &times;
+              </button>
             </div>
             <form
               onSubmit={(e) => {
@@ -6300,23 +11428,46 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Add Media Asset In-App Modal */}
+      {/* Add Media Asset In-App Modal with Fast 100% Quality WebP Auto-Converter */}
       {showUploadMediaModal && (
         <div className="cms-dialog-backdrop" onClick={() => setShowUploadMediaModal(false)}>
-          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()}>
+          <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
             <div className="cms-dialog-header">
-              <div className="cms-dialog-icon-wrap">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                <div className="cms-dialog-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(37,99,235,0.2) 0%, rgba(30,64,175,0.3) 100%)', color: '#60a5fa' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <div className="cms-dialog-titles">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3>Upload Media Asset</h3>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, background: 'rgba(37,99,235,0.18)', color: '#60a5fa', padding: '2px 8px', borderRadius: '999px', border: '1px solid rgba(37,99,235,0.3)' }}>
+                      Auto-WebP 100%
+                    </span>
+                  </div>
+                  <p>Drag & drop or select images. Fast auto-conversion to WebP at 100% original quality.</p>
+                </div>
               </div>
-              <div className="cms-dialog-titles">
-                <h3>Add Media Asset</h3>
-                <p>Upload a new image, video preview, or technical diagram to your Media Library.</p>
-              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => {
+                  setShowUploadMediaModal(false)
+                  setUploadMediaTitle('')
+                  setUploadMediaUrl('')
+                  setConvertedWebpInfo(null)
+                  setUploadProgress(0)
+                }}
+                title="Close dialog"
+                aria-label="Close"
+              >
+                &times;
+              </button>
             </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -6325,53 +11476,154 @@ export default function AdminDashboard() {
                     id: `med-${Date.now()}`,
                     title: uploadMediaTitle.trim(),
                     url: uploadMediaUrl.trim(),
-                    dateAdded: new Date().toISOString().split('T')[0]
+                    dateAdded: new Date().toISOString().split('T')[0],
+                    size: convertedWebpInfo?.webpSize || 'WebP',
+                    folder: uploadTargetFolder
                   }
                   const updated = [newMedia, ...mediaList]
                   setMediaList(updated)
                   void writeSharedContent('media-library', updated)
-                  showToast('Media asset added to library.', 'success')
+                  showToast(`"${uploadMediaTitle.trim()}" added to ${uploadTargetFolder}.`, 'success')
                   setUploadMediaTitle('')
                   setUploadMediaUrl('')
+                  setConvertedWebpInfo(null)
+                  setUploadProgress(0)
                   setShowUploadMediaModal(false)
                 }
               }}
             >
               <div className="cms-dialog-body">
-                <label className="cms-dialog-label">Asset Title</label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="e.g. Caterpillar 320 GC Excavator"
-                  className="cms-dialog-input"
-                  value={uploadMediaTitle}
-                  onChange={(e) => setUploadMediaTitle(e.target.value)}
-                />
+                {/* Drag & Drop Zone */}
+                <div
+                  className={`cms-upload-dropzone ${isDragOverUpload ? 'drag-over' : ''} ${uploadMediaUrl ? 'has-file' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setIsDragOverUpload(true)
+                  }}
+                  onDragLeave={() => setIsDragOverUpload(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setIsDragOverUpload(false)
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      void handleUploadFiles(e.dataTransfer.files)
+                    }
+                  }}
+                  onClick={() => {
+                    const inputEl = document.getElementById('cms-file-upload-input')
+                    if (inputEl) inputEl.click()
+                  }}
+                >
+                  <input
+                    type="file"
+                    id="cms-file-upload-input"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        void handleUploadFiles(e.target.files)
+                      }
+                    }}
+                  />
+                  <div className="cms-dropzone-content">
+                    <div className="cms-dropzone-icon">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <circle cx="8.5" cy="8.5" r="1.5" />
+                        <polyline points="21 15 16 10 5 21" />
+                      </svg>
+                    </div>
+                    <div className="cms-dropzone-text">
+                      <strong>Click to browse</strong> or drag & drop image
+                    </div>
+                    <span className="cms-dropzone-hint">
+                      PNG, JPG, JPEG, GIF, AVIF · Auto-converts to WebP with 100% Quality
+                    </span>
+                  </div>
+                </div>
 
-                <label className="cms-dialog-label" style={{ marginTop: '12px' }}>Media Asset URL</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="https://... or /images/..."
-                  className="cms-dialog-input"
-                  value={uploadMediaUrl}
-                  onChange={(e) => setUploadMediaUrl(e.target.value)}
-                />
+                {/* Upload & Conversion Progress Bar */}
+                {(isUploadingMedia || uploadProgress > 0) && (
+                  <div className="cms-upload-progress-card">
+                    <div className="cms-upload-progress-header">
+                      <span className="cms-progress-label">{uploadStatusText || 'Processing...'}</span>
+                      <span className="cms-progress-pct">{uploadProgress}%</span>
+                    </div>
+                    <div className="cms-upload-progress-track">
+                      <div
+                        className="cms-upload-progress-fill"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                    {convertedWebpInfo && (
+                      <div className="cms-webp-stats-row">
+                        <span className="cms-stat-badge">
+                          Original: <strong>{convertedWebpInfo.originalSize}</strong>
+                        </span>
+                        <span className="cms-stat-sep">→</span>
+                        <span className="cms-stat-badge success">
+                          WebP: <strong>{convertedWebpInfo.webpSize}</strong> ({convertedWebpInfo.savings})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
+                {/* Target Folder Selector */}
+                <div style={{ marginTop: '14px' }}>
+                  <label className="cms-dialog-label">Target Media Folder</label>
+                  <select
+                    className="cms-dialog-input"
+                    value={uploadTargetFolder}
+                    onChange={(e) => setUploadTargetFolder(e.target.value as any)}
+                  >
+                    <option value="galleries">📁 galleries (Equipment & Jobsite Photos)</option>
+                    <option value="features">📁 features (Banners, Logos & Promos)</option>
+                    <option value="profileimg">📁 profileimg (Team, Authors & Portraits)</option>
+                  </select>
+                </div>
+
+                {/* Asset Title */}
+                <div style={{ marginTop: '12px' }}>
+                  <label className="cms-dialog-label">Asset Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Caterpillar 320 GC Excavator"
+                    className="cms-dialog-input"
+                    value={uploadMediaTitle}
+                    onChange={(e) => setUploadMediaTitle(e.target.value)}
+                  />
+                </div>
+
+                {/* Media URL / Converted Source */}
+                <div style={{ marginTop: '12px' }}>
+                  <label className="cms-dialog-label">Image Source URL (WebP)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Auto-populated or paste custom URL..."
+                    className="cms-dialog-input"
+                    value={uploadMediaUrl}
+                    onChange={(e) => setUploadMediaUrl(e.target.value)}
+                  />
+                </div>
+
+                {/* Image Preview Box */}
                 {uploadMediaUrl && (
-                  <div style={{ marginTop: '12px', borderRadius: '10px', overflow: 'hidden', height: '140px', background: '#050a14', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--cms-border)' }}>
+                  <div className="cms-upload-preview-wrap">
                     <img
                       src={uploadMediaUrl}
                       alt="Preview"
-                      style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+                      className="cms-upload-preview-img"
                       onError={(e) => {
                         ;(e.target as HTMLElement).style.display = 'none'
                       }}
                     />
+                    <span className="cms-preview-badge">100% Quality WebP</span>
                   </div>
                 )}
               </div>
+
               <div className="cms-dialog-footer">
                 <button
                   type="button"
@@ -6380,11 +11632,17 @@ export default function AdminDashboard() {
                     setShowUploadMediaModal(false)
                     setUploadMediaTitle('')
                     setUploadMediaUrl('')
+                    setConvertedWebpInfo(null)
+                    setUploadProgress(0)
                   }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="cms-dialog-btn primary">
+                <button
+                  type="submit"
+                  className="cms-dialog-btn primary"
+                  disabled={!uploadMediaUrl || !uploadMediaTitle}
+                >
                   Save to Media Library
                 </button>
               </div>
@@ -6398,17 +11656,28 @@ export default function AdminDashboard() {
         <div className="cms-dialog-backdrop" onClick={() => setConfirmDialog(null)}>
           <div className="cms-dialog-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
             <div className="cms-dialog-header">
-              <div className="cms-dialog-icon-wrap warning">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1 }}>
+                <div className="cms-dialog-icon-wrap warning">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <div className="cms-dialog-titles">
+                  <h3>{confirmDialog.title}</h3>
+                  <p>{confirmDialog.message}</p>
+                </div>
               </div>
-              <div className="cms-dialog-titles">
-                <h3>{confirmDialog.title}</h3>
-                <p>{confirmDialog.message}</p>
-              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setConfirmDialog(null)}
+                title="Close dialog"
+                aria-label="Close"
+              >
+                &times;
+              </button>
             </div>
             <div className="cms-dialog-footer" style={{ marginTop: '20px' }}>
               <button
