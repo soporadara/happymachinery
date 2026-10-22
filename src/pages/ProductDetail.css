@@ -181,7 +181,74 @@
   align-items: center;
   justify-content: center;
   user-select: none;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
   cursor: zoom-in;
+}
+
+.pdp-main-image-viewport.is-zoomed {
+  cursor: grab;
+}
+
+.pdp-main-image-viewport.is-dragging {
+  cursor: grabbing !important;
+}
+
+.pdp-main-img-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.pdp-main-zoom-indicator {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.74rem;
+  font-weight: 750;
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.pdp-zoom-tip {
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+.pdp-zoom-reset-btn {
+  background: rgba(56, 189, 248, 0.25);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.pdp-zoom-reset-btn:hover {
+  background: #38bdf8;
+  color: #020617;
 }
 
 @media (max-width: 1080px) {
@@ -210,11 +277,9 @@
   width: auto;
   height: auto;
   object-fit: contain;
-  transition: transform 0.25s ease;
-}
-
-.pdp-main-image-viewport:hover .pdp-main-product-img {
-  transform: scale(1.02);
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.12));
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .pdp-main-video-player {
@@ -1288,6 +1353,27 @@
   border-color: #ef4444;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.lb-two-finger-hint {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7dd3fc;
+  background: rgba(125, 211, 252, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  padding: 5px 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .lb-two-finger-hint {
+    display: none;
+  }
 }
 
 /* --- Main Canvas Stage --- */

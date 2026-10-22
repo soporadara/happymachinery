@@ -153,15 +153,32 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
   const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lightboxOpenTimeRef = useRef<number>(0)
 
+  // On-Page Main Viewport Zoom & Pan State (Two-Finger Zoom & Move directly on product page)
+  const [mainZoomScale, setMainZoomScale] = useState(1)
+  const [mainPanOffset, setMainPanOffset] = useState({ x: 0, y: 0 })
+  const [isMainDragging, setIsMainDragging] = useState(false)
+  const [mainDragStart, setMainDragStart] = useState({ x: 0, y: 0 })
+  const [isMainWheeling, setIsMainWheeling] = useState(false)
+  const mainStageRef = useRef<HTMLDivElement>(null)
+  const mainTouchStartRef = useRef<{
+    startDist: number
+    startMidX: number
+    startMidY: number
+    startZoom: number
+    startPanX: number
+    startPanY: number
+  } | null>(null)
+  const mainWheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const lightboxStageRef = useRef<HTMLDivElement>(null)
   const lightboxThumbStripRef = useRef<HTMLDivElement>(null)
   const touchStartRef = useRef<{
-    x: number
-    y: number
-    dist: number
-    midX: number
-    midY: number
-    initialZoom: number
+    startDist: number
+    startMidX: number
+    startMidY: number
+    startZoom: number
+    startPanX: number
+    startPanY: number
   } | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'specifications' | 'reviews' | 'shipping'>('overview')
   const [quantity, setQuantity] = useState(1)
@@ -266,20 +283,18 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
     handleResetView()
   }, [galleryImages.length, handleResetView])
 
-  // Mouse Wheel Zoom (Safe, slow, bounded cursor-anchored zoom; min zoom 100% Fit)
-  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+  const handleResetMainView = useCallback(() => {
+    setMainZoomScale(1)
+    setMainPanOffset({ x: 0, y: 0 })
+    setIsMainDragging(false)
+  }, [])
+
+  // Lightbox Wheel: Two-finger pinch to zoom, two-finger scroll to pan/move image
+  const handleWheelZoom = useCallback((e: WheelEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
-    // 1. Guard against trailing momentum wheel events immediately after modal opens
-    if (Date.now() - lightboxOpenTimeRef.current < 400) {
-      return
-    }
-
-    // 2. Distinguish pinch-to-zoom (ctrlKey) from accidental 2-finger page scroll
-    const isPinchOrCtrl = e.ctrlKey || e.metaKey
-    const isMouseWheelNotch = e.deltaMode !== 0
-    if (!isPinchOrCtrl && !isMouseWheelNotch && zoomScale <= 1) {
+    if (Date.now() - lightboxOpenTimeRef.current < 200) {
       return
     }
 
@@ -287,15 +302,10 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
     if (!stage) return
 
     const rect = stage.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left - rect.width / 2
-    const mouseY = e.clientY - rect.top - rect.height / 2
+    const cursorX = e.clientX - rect.left - rect.width / 2
+    const cursorY = e.clientY - rect.top - rect.height / 2
 
-    let delta = e.deltaY
-    if (e.deltaMode === 1) delta *= 16
-    else if (e.deltaMode === 2) delta *= 100
-
-    const zoomDelta = -delta * 0.0012
-    const zoomFactor = Math.min(1.15, Math.max(0.85, Math.exp(zoomDelta)))
+    const isPinch = e.ctrlKey || e.metaKey
 
     setIsWheeling(true)
     if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current)
@@ -303,33 +313,68 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
       setIsWheeling(false)
     }, 120)
 
-    setZoomScale((prevZoom) => {
-      let nextZoom = prevZoom * zoomFactor
-      // CLAMP: Minimum zoom is 1.0 (100% Fit). Never zoom out below 100%!
-      nextZoom = Math.min(8, Math.max(1, Number(nextZoom.toFixed(3))))
-      if (Math.abs(nextZoom - prevZoom) < 0.001) return prevZoom
+    if (isPinch) {
+      // 1. PINCH-TO-ZOOM (Trackpad Two-Finger Pinch)
+      const zoomFactor = Math.exp(-e.deltaY * 0.008)
+      setZoomScale((prevZoom) => {
+        let nextZoom = Math.min(8, Math.max(1, Number((prevZoom * zoomFactor).toFixed(3))))
+        if (Math.abs(nextZoom - prevZoom) < 0.001) return prevZoom
 
-      if (nextZoom <= 1.02) {
-        setPanOffset({ x: 0, y: 0 })
-        return 1
-      }
+        if (nextZoom <= 1.02) {
+          setPanOffset({ x: 0, y: 0 })
+          return 1
+        }
 
-      setPanOffset((prevPan) => {
-        const ratio = nextZoom / prevZoom
-        const newX = mouseX - (mouseX - prevPan.x) * ratio
-        const newY = mouseY - (mouseY - prevPan.y) * ratio
-        const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
-        const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
-        const clampedX = Math.max(-maxPanX, Math.min(maxPanX, newX))
-        const clampedY = Math.max(-maxPanY, Math.min(maxPanY, newY))
-        return { x: Math.round(clampedX), y: Math.round(clampedY) }
+        setPanOffset((prevPan) => {
+          const ratio = nextZoom / prevZoom
+          const newX = cursorX - (cursorX - prevPan.x) * ratio
+          const newY = cursorY - (cursorY - prevPan.y) * ratio
+          const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
+          const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
+          return {
+            x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+            y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+          }
+        })
+
+        return nextZoom
       })
-
-      return nextZoom
-    })
+    } else {
+      // 2. TWO-FINGER SCROLL / SWIPE (PAN & MOVE IMAGE)
+      if (zoomScale > 1) {
+        setPanOffset((prevPan) => {
+          const newX = prevPan.x - e.deltaX
+          const newY = prevPan.y - e.deltaY
+          const maxPanX = Math.max(0, (rect.width * zoomScale - rect.width) / 2)
+          const maxPanY = Math.max(0, (rect.height * zoomScale - rect.height) / 2)
+          return {
+            x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+            y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+          }
+        })
+      } else {
+        // At 100% fit: if scrolling up or using mouse wheel notch, initiate smooth zoom
+        if (e.deltaY < -15 || e.deltaMode !== 0) {
+          const delta = e.deltaMode !== 0 ? e.deltaY * 16 : e.deltaY
+          if (delta < 0) {
+            const nextZoom = 1.35
+            setZoomScale(nextZoom)
+            const ratio = nextZoom / 1
+            const newX = cursorX - cursorX * ratio
+            const newY = cursorY - cursorY * ratio
+            const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
+            const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
+            setPanOffset({
+              x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+              y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+            })
+          }
+        }
+      }
+    }
   }, [zoomScale])
 
-  // Mouse Drag to Pan (Move Canvas)
+  // Mouse Drag to Pan (Move Canvas in Lightbox)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return
 
@@ -396,88 +441,92 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
     }
   }, [zoomScale, handleResetView])
 
-  // Touch Support (Two-finger pinch-to-zoom & single-finger pan like Canva)
-  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 1) {
+  // Touch Support for Lightbox (Two-finger pinch-to-zoom & two-finger/single-finger pan)
+  const handleNativeTouchStart = useCallback((e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      const midX = (t1.clientX + t2.clientX) / 2
+      const midY = (t1.clientY + t2.clientY) / 2
+      touchStartRef.current = {
+        startDist: dist,
+        startMidX: midX,
+        startMidY: midY,
+        startZoom: zoomScale,
+        startPanX: panOffset.x,
+        startPanY: panOffset.y
+      }
+      setIsDragging(false)
+    } else if (e.touches.length === 1) {
       const touch = e.touches[0]
       touchStartRef.current = {
-        x: touch.clientX - panOffset.x,
-        y: touch.clientY - panOffset.y,
-        dist: 0,
-        midX: touch.clientX,
-        midY: touch.clientY,
-        initialZoom: zoomScale,
+        startDist: 0,
+        startMidX: touch.clientX,
+        startMidY: touch.clientY,
+        startZoom: zoomScale,
+        startPanX: touch.clientX - panOffset.x,
+        startPanY: touch.clientY - panOffset.y
       }
       if (zoomScale > 1) {
         setIsDragging(true)
       }
-    } else if (e.touches.length === 2) {
-      const t1 = e.touches[0]
-      const t2 = e.touches[1]
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
-      const midX = (t1.clientX + t2.clientX) / 2
-      const midY = (t1.clientY + t2.clientY) / 2
-      touchStartRef.current = {
-        x: panOffset.x,
-        y: panOffset.y,
-        dist,
-        midX,
-        midY,
-        initialZoom: zoomScale,
-      }
-      setIsDragging(false)
     }
-  }, [panOffset, zoomScale])
+  }, [zoomScale, panOffset])
 
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+  const handleNativeTouchMove = useCallback((e: TouchEvent) => {
     if (!touchStartRef.current) return
+    const stage = lightboxStageRef.current
+    if (!stage) return
+    const rect = stage.getBoundingClientRect()
 
-    if (e.touches.length === 1 && (zoomScale > 1 || isDragging)) {
-      const touch = e.touches[0]
-      setPanOffset({
-        x: Math.round(touch.clientX - touchStartRef.current.x),
-        y: Math.round(touch.clientY - touchStartRef.current.y)
-      })
-    } else if (e.touches.length === 2 && touchStartRef.current.dist > 0) {
+    if (e.touches.length === 2 && touchStartRef.current.startDist > 0) {
+      e.preventDefault()
       const t1 = e.touches[0]
       const t2 = e.touches[1]
       const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
       const midX = (t1.clientX + t2.clientX) / 2
       const midY = (t1.clientY + t2.clientY) / 2
 
-      const scaleDelta = dist / touchStartRef.current.dist
-      const newZoom = Math.min(8, Math.max(1, Number((touchStartRef.current.initialZoom * scaleDelta).toFixed(3))))
+      const scaleRatio = dist / touchStartRef.current.startDist
+      const nextZoom = Math.min(8, Math.max(1, Number((touchStartRef.current.startZoom * scaleRatio).toFixed(3))))
 
-      const stage = lightboxStageRef.current
-      if (stage) {
-        const rect = stage.getBoundingClientRect()
-        const pinchCenterX = touchStartRef.current.midX - rect.left - rect.width / 2
-        const pinchCenterY = touchStartRef.current.midY - rect.top - rect.height / 2
-        const panDeltaX = midX - touchStartRef.current.midX
-        const panDeltaY = midY - touchStartRef.current.midY
-        const ratio = newZoom / touchStartRef.current.initialZoom
+      const pinchOriginX = touchStartRef.current.startMidX - rect.left - rect.width / 2
+      const pinchOriginY = touchStartRef.current.startMidY - rect.top - rect.height / 2
+      const moveDeltaX = midX - touchStartRef.current.startMidX
+      const moveDeltaY = midY - touchStartRef.current.startMidY
+      const ratio = nextZoom / touchStartRef.current.startZoom
 
-        const newPanX = pinchCenterX - (pinchCenterX - touchStartRef.current.x) * ratio + panDeltaX
-        const newPanY = pinchCenterY - (pinchCenterY - touchStartRef.current.y) * ratio + panDeltaY
+      const newPanX = pinchOriginX - (pinchOriginX - touchStartRef.current.startPanX) * ratio + moveDeltaX
+      const newPanY = pinchOriginY - (pinchOriginY - touchStartRef.current.startPanY) * ratio + moveDeltaY
 
-        setZoomScale(newZoom)
-        if (newZoom <= 1) {
-          setPanOffset({ x: 0, y: 0 })
-        } else {
-          const maxPanX = Math.max(0, (rect.width * newZoom - rect.width) / 2)
-          const maxPanY = Math.max(0, (rect.height * newZoom - rect.height) / 2)
-          setPanOffset({
-            x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newPanX))),
-            y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newPanY)))
-          })
-        }
+      setZoomScale(nextZoom)
+      if (nextZoom <= 1.02) {
+        setPanOffset({ x: 0, y: 0 })
       } else {
-        setZoomScale(newZoom)
+        const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
+        const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
+        setPanOffset({
+          x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newPanX))),
+          y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newPanY)))
+        })
       }
+    } else if (e.touches.length === 1 && (zoomScale > 1 || isDragging)) {
+      e.preventDefault()
+      const touch = e.touches[0]
+      const newX = touch.clientX - touchStartRef.current.startPanX
+      const newY = touch.clientY - touchStartRef.current.startPanY
+      const maxPanX = Math.max(0, (rect.width * zoomScale - rect.width) / 2)
+      const maxPanY = Math.max(0, (rect.height * zoomScale - rect.height) / 2)
+      setPanOffset({
+        x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+        y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+      })
     }
   }, [zoomScale, isDragging])
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+  const handleNativeTouchEnd = useCallback((e: TouchEvent) => {
     if (e.touches.length === 0) {
       touchStartRef.current = null
       setIsDragging(false)
@@ -488,18 +537,242 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
     } else if (e.touches.length === 1) {
       const touch = e.touches[0]
       touchStartRef.current = {
-        x: touch.clientX - panOffset.x,
-        y: touch.clientY - panOffset.y,
-        dist: 0,
-        midX: touch.clientX,
-        midY: touch.clientY,
-        initialZoom: zoomScale,
+        startDist: 0,
+        startMidX: touch.clientX,
+        startMidY: touch.clientY,
+        startZoom: zoomScale,
+        startPanX: touch.clientX - panOffset.x,
+        startPanY: touch.clientY - panOffset.y
       }
       if (zoomScale > 1) {
         setIsDragging(true)
       }
     }
   }, [zoomScale, panOffset])
+
+  // Attach non-passive wheel & touch listeners to lightbox stage
+  useEffect(() => {
+    const stage = lightboxStageRef.current
+    if (!stage || !isLightboxOpen) return
+
+    stage.addEventListener('wheel', handleWheelZoom, { passive: false })
+    stage.addEventListener('touchstart', handleNativeTouchStart, { passive: false })
+    stage.addEventListener('touchmove', handleNativeTouchMove, { passive: false })
+    stage.addEventListener('touchend', handleNativeTouchEnd, { passive: false })
+
+    return () => {
+      stage.removeEventListener('wheel', handleWheelZoom)
+      stage.removeEventListener('touchstart', handleNativeTouchStart)
+      stage.removeEventListener('touchmove', handleNativeTouchMove)
+      stage.removeEventListener('touchend', handleNativeTouchEnd)
+    }
+  }, [isLightboxOpen, handleWheelZoom, handleNativeTouchStart, handleNativeTouchMove, handleNativeTouchEnd])
+
+  // On-Page Main Viewport: Two-finger pinch-to-zoom & two-finger scroll to pan/move image
+  const handleMainWheel = useCallback((e: WheelEvent) => {
+    if (isVideoActive) return
+    const stage = mainStageRef.current
+    if (!stage) return
+
+    const rect = stage.getBoundingClientRect()
+    const cursorX = e.clientX - rect.left - rect.width / 2
+    const cursorY = e.clientY - rect.top - rect.height / 2
+
+    const isPinch = e.ctrlKey || e.metaKey
+
+    if (isPinch) {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsMainWheeling(true)
+      if (mainWheelTimeoutRef.current) clearTimeout(mainWheelTimeoutRef.current)
+      mainWheelTimeoutRef.current = setTimeout(() => setIsMainWheeling(false), 100)
+
+      const zoomFactor = Math.exp(-e.deltaY * 0.008)
+      setMainZoomScale((prevZoom) => {
+        let nextZoom = Math.min(4, Math.max(1, Number((prevZoom * zoomFactor).toFixed(3))))
+        if (Math.abs(nextZoom - prevZoom) < 0.001) return prevZoom
+
+        if (nextZoom <= 1.02) {
+          setMainPanOffset({ x: 0, y: 0 })
+          return 1
+        }
+
+        setMainPanOffset((prevPan) => {
+          const ratio = nextZoom / prevZoom
+          const newX = cursorX - (cursorX - prevPan.x) * ratio
+          const newY = cursorY - (cursorY - prevPan.y) * ratio
+          const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
+          const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
+          return {
+            x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+            y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+          }
+        })
+        return nextZoom
+      })
+    } else if (mainZoomScale > 1) {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsMainWheeling(true)
+      if (mainWheelTimeoutRef.current) clearTimeout(mainWheelTimeoutRef.current)
+      mainWheelTimeoutRef.current = setTimeout(() => setIsMainWheeling(false), 100)
+
+      setMainPanOffset((prevPan) => {
+        const newX = prevPan.x - e.deltaX
+        const newY = prevPan.y - e.deltaY
+        const maxPanX = Math.max(0, (rect.width * mainZoomScale - rect.width) / 2)
+        const maxPanY = Math.max(0, (rect.height * mainZoomScale - rect.height) / 2)
+        return {
+          x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+          y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+        }
+      })
+    }
+  }, [mainZoomScale, isVideoActive])
+
+  const handleMainTouchStart = useCallback((e: TouchEvent) => {
+    if (isVideoActive) return
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      const midX = (t1.clientX + t2.clientX) / 2
+      const midY = (t1.clientY + t2.clientY) / 2
+      mainTouchStartRef.current = {
+        startDist: dist,
+        startMidX: midX,
+        startMidY: midY,
+        startZoom: mainZoomScale,
+        startPanX: mainPanOffset.x,
+        startPanY: mainPanOffset.y
+      }
+      setIsMainDragging(false)
+    } else if (e.touches.length === 1 && mainZoomScale > 1) {
+      const touch = e.touches[0]
+      mainTouchStartRef.current = {
+        startDist: 0,
+        startMidX: touch.clientX,
+        startMidY: touch.clientY,
+        startZoom: mainZoomScale,
+        startPanX: touch.clientX - mainPanOffset.x,
+        startPanY: touch.clientY - mainPanOffset.y
+      }
+      setIsMainDragging(true)
+    }
+  }, [mainZoomScale, mainPanOffset, isVideoActive])
+
+  const handleMainTouchMove = useCallback((e: TouchEvent) => {
+    if (!mainTouchStartRef.current || isVideoActive) return
+    const stage = mainStageRef.current
+    if (!stage) return
+    const rect = stage.getBoundingClientRect()
+
+    if (e.touches.length === 2 && mainTouchStartRef.current.startDist > 0) {
+      e.preventDefault()
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+      const midX = (t1.clientX + t2.clientX) / 2
+      const midY = (t1.clientY + t2.clientY) / 2
+
+      const scaleRatio = dist / mainTouchStartRef.current.startDist
+      const nextZoom = Math.min(4, Math.max(1, Number((mainTouchStartRef.current.startZoom * scaleRatio).toFixed(3))))
+
+      const pinchOriginX = mainTouchStartRef.current.startMidX - rect.left - rect.width / 2
+      const pinchOriginY = mainTouchStartRef.current.startMidY - rect.top - rect.height / 2
+      const moveDeltaX = midX - mainTouchStartRef.current.startMidX
+      const moveDeltaY = midY - mainTouchStartRef.current.startMidY
+      const ratio = nextZoom / mainTouchStartRef.current.startZoom
+
+      const newPanX = pinchOriginX - (pinchOriginX - mainTouchStartRef.current.startPanX) * ratio + moveDeltaX
+      const newPanY = pinchOriginY - (pinchOriginY - mainTouchStartRef.current.startPanY) * ratio + moveDeltaY
+
+      setMainZoomScale(nextZoom)
+      if (nextZoom <= 1.02) {
+        setMainPanOffset({ x: 0, y: 0 })
+      } else {
+        const maxPanX = Math.max(0, (rect.width * nextZoom - rect.width) / 2)
+        const maxPanY = Math.max(0, (rect.height * nextZoom - rect.height) / 2)
+        setMainPanOffset({
+          x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newPanX))),
+          y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newPanY)))
+        })
+      }
+    } else if (e.touches.length === 1 && (mainZoomScale > 1 || isMainDragging)) {
+      e.preventDefault()
+      const touch = e.touches[0]
+      const newX = touch.clientX - mainTouchStartRef.current.startPanX
+      const newY = touch.clientY - mainTouchStartRef.current.startPanY
+      const maxPanX = Math.max(0, (rect.width * mainZoomScale - rect.width) / 2)
+      const maxPanY = Math.max(0, (rect.height * mainZoomScale - rect.height) / 2)
+      setMainPanOffset({
+        x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, newX))),
+        y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, newY)))
+      })
+    }
+  }, [mainZoomScale, isMainDragging, isVideoActive])
+
+  const handleMainTouchEnd = useCallback((e: TouchEvent) => {
+    if (e.touches.length === 0) {
+      mainTouchStartRef.current = null
+      setIsMainDragging(false)
+      if (mainZoomScale < 1) {
+        setMainZoomScale(1)
+        setMainPanOffset({ x: 0, y: 0 })
+      }
+    }
+  }, [mainZoomScale])
+
+  const handleMainMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (mainZoomScale > 1 && (e.button === 0 || e.button === 1)) {
+      e.preventDefault()
+      setIsMainDragging(true)
+      setMainDragStart({
+        x: e.clientX - mainPanOffset.x,
+        y: e.clientY - mainPanOffset.y
+      })
+    }
+  }, [mainZoomScale, mainPanOffset])
+
+  const handleMainMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMainDragging || mainZoomScale <= 1) return
+    e.preventDefault()
+    const stage = mainStageRef.current
+    const rawX = e.clientX - mainDragStart.x
+    const rawY = e.clientY - mainDragStart.y
+    if (stage) {
+      const rect = stage.getBoundingClientRect()
+      const maxPanX = Math.max(0, (rect.width * mainZoomScale - rect.width) / 2)
+      const maxPanY = Math.max(0, (rect.height * mainZoomScale - rect.height) / 2)
+      setMainPanOffset({
+        x: Math.round(Math.max(-maxPanX, Math.min(maxPanX, rawX))),
+        y: Math.round(Math.max(-maxPanY, Math.min(maxPanY, rawY)))
+      })
+    }
+  }, [isMainDragging, mainDragStart, mainZoomScale])
+
+  const handleMainMouseUp = useCallback(() => {
+    setIsMainDragging(false)
+  }, [])
+
+  // Attach non-passive wheel & touch listeners to main on-page stage
+  useEffect(() => {
+    const stage = mainStageRef.current
+    if (!stage) return
+
+    stage.addEventListener('wheel', handleMainWheel, { passive: false })
+    stage.addEventListener('touchstart', handleMainTouchStart, { passive: false })
+    stage.addEventListener('touchmove', handleMainTouchMove, { passive: false })
+    stage.addEventListener('touchend', handleMainTouchEnd, { passive: false })
+
+    return () => {
+      stage.removeEventListener('wheel', handleMainWheel)
+      stage.removeEventListener('touchstart', handleMainTouchStart)
+      stage.removeEventListener('touchmove', handleMainTouchMove)
+      stage.removeEventListener('touchend', handleMainTouchEnd)
+    }
+  }, [handleMainWheel, handleMainTouchStart, handleMainTouchMove, handleMainTouchEnd])
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -715,10 +988,39 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
 
             {/* Main Stage: Image or Video */}
             <div
-              className="pdp-main-image-viewport"
-              onDoubleClick={() => handleOpenLightbox()}
-              title="Double click to expand full screen"
+              className={`pdp-main-image-viewport ${mainZoomScale > 1 ? 'is-zoomed' : ''} ${isMainDragging ? 'is-dragging' : ''}`}
+              ref={mainStageRef}
+              onMouseDown={handleMainMouseDown}
+              onMouseMove={handleMainMouseMove}
+              onMouseUp={handleMainMouseUp}
+              onMouseLeave={handleMainMouseUp}
+              onDoubleClick={() => {
+                if (mainZoomScale > 1) {
+                  handleResetMainView()
+                } else {
+                  handleOpenLightbox()
+                }
+              }}
+              title={mainZoomScale > 1 ? "Double-click to reset (100%), drag to pan" : "Pinch with two fingers to zoom, or double click to expand full screen"}
             >
+              {mainZoomScale > 1 && (
+                <div className="pdp-main-zoom-indicator">
+                  <span>🔍 {Math.round(mainZoomScale * 100)}%</span>
+                  <span className="pdp-zoom-tip">• Two fingers to move</span>
+                  <button
+                    type="button"
+                    className="pdp-zoom-reset-btn"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleResetMainView()
+                    }}
+                    title="Reset to 100%"
+                  >
+                    Reset
+                  </button>
+                </div>
+              )}
+
               {isVideoActive ? (
                 <video
                   src="/images/home-hero-optimized.m4v"
@@ -729,11 +1031,21 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   className="pdp-main-video-player"
                 />
               ) : (
-                <img
-                  src={activeImage}
-                  alt={product.name}
-                  className="pdp-main-product-img"
-                />
+                <div
+                  className="pdp-main-img-wrapper"
+                  style={{
+                    transform: `translate3d(${mainZoomScale <= 1 ? 0 : mainPanOffset.x}px, ${mainZoomScale <= 1 ? 0 : mainPanOffset.y}px, 0) scale(${mainZoomScale})`,
+                    transition: (isMainDragging || isMainWheeling) ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                    cursor: isMainDragging ? 'grabbing' : (mainZoomScale > 1 ? 'grab' : 'zoom-in')
+                  }}
+                >
+                  <img
+                    src={activeImage}
+                    alt={product.name}
+                    className="pdp-main-product-img"
+                    draggable={false}
+                  />
+                </div>
               )}
             </div>
 
@@ -1489,6 +1801,9 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
                   Reset
                 </button>
 
+                {/* Two-finger Gesture Hint */}
+                <span className="lb-two-finger-hint">✌️ Two fingers to zoom & move</span>
+
                 {/* Close Button */}
                 <button
                   type="button"
@@ -1509,15 +1824,11 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
             <div
               className={`lightbox-main-stage ${isDragging ? 'is-dragging' : ''} ${isSpacePressed ? 'space-held' : ''}`}
               ref={lightboxStageRef}
-              onWheel={handleWheelZoom}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
               onDoubleClick={handleStageDoubleClick}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
             >
               {/* Previous Image Stage Arrow */}
               <button
