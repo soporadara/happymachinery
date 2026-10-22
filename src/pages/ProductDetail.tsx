@@ -134,8 +134,31 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
   const [adminProduct, setAdminProduct] = useState<AdminProduct | null>(() => {
     if (!id) return null
     try {
-      const saved = JSON.parse(localStorage.getItem('happy-machinery-products') || '[]') as AdminProduct[]
-      return saved.find((item) => String(item.id) === id) ?? null
+      const savedRaw = localStorage.getItem('happy-machinery-products')
+      if (savedRaw) {
+        const saved = JSON.parse(savedRaw) as AdminProduct[]
+        let modified = false
+        const updated = saved.map((item) => {
+          if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red'
+            modified = true
+          }
+          if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow'
+            modified = true
+          }
+          if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue'
+            modified = true
+          }
+          return item
+        })
+        if (modified) {
+          try { localStorage.setItem('happy-machinery-products', JSON.stringify(updated)) } catch {}
+        }
+        return updated.find((item) => String(item.id) === id) ?? null
+      }
+      return null
     } catch {
       return null
     }
@@ -195,6 +218,9 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
         const sharedProducts = await readSharedContent<AdminProduct[]>('products')
         const sharedProduct = sharedProducts?.find((item) => String(item.id) === id)
         if (sharedProduct) {
+          if (!sharedProduct.name || !sharedProduct.name.includes('TYPHON STOMP')) {
+            if (baseProduct) sharedProduct.name = baseProduct.name
+          }
           setAdminProduct(sharedProduct)
           return
         }
@@ -203,8 +229,32 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
       }
 
       try {
-        const saved = JSON.parse(localStorage.getItem('happy-machinery-products') || '[]') as AdminProduct[]
-        setAdminProduct(saved.find((item) => String(item.id) === id) ?? null)
+        const savedRaw = localStorage.getItem('happy-machinery-products')
+        if (savedRaw) {
+          const saved = JSON.parse(savedRaw) as AdminProduct[]
+          let modified = false
+          const updated = saved.map((item) => {
+            if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red'
+              modified = true
+            }
+            if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow'
+              modified = true
+            }
+            if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue'
+              modified = true
+            }
+            return item
+          })
+          if (modified) {
+            try { localStorage.setItem('happy-machinery-products', JSON.stringify(updated)) } catch {}
+          }
+          setAdminProduct(updated.find((item) => String(item.id) === id) ?? null)
+          return
+        }
+        setAdminProduct(null)
       } catch {
         setAdminProduct(null)
       }
@@ -217,12 +267,12 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
       window.removeEventListener('products-updated', loadProduct)
       window.removeEventListener('storage', loadProduct)
     }
-  }, [id])
+  }, [id, baseProduct])
 
   const product: LoaderProduct | null = baseProduct ? {
     ...baseProduct,
     purchaseSku: (adminProduct?.sku ? adminProduct.sku.replace(/^typh/i, 'TYPH') : baseProduct.purchaseSku),
-    name: adminProduct?.name || baseProduct.name,
+    name: (adminProduct?.name && adminProduct.name.includes('TYPHON STOMP')) ? adminProduct.name : baseProduct.name,
     description: adminProduct?.description || baseProduct.description,
     fullDesc: adminProduct?.description || baseProduct.fullDesc,
     image: adminProduct?.image || baseProduct.image,

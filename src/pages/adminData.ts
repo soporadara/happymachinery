@@ -130,7 +130,7 @@ export const DEFAULT_CART_ORDERS: CartOrder[] = [
     customer: 'David Vance',
     email: 'dvance@vanceconcrete.com',
     phone: '305-555-8812',
-    items: 'Skid Steer V900 — Cobalt Blue (1x)',
+    items: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Cobalt Blue (1x)',
     amount: 11999.00,
     status: 'Completed',
     date: 'Oct 15, 2026'

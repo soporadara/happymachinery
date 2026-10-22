@@ -662,8 +662,29 @@ export default function AdminDashboard() {
     try {
       const saved = localStorage.getItem('happy-machinery-products')
       if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        const parsed = JSON.parse(saved) as AdminProduct[]
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          let mod = false
+          const migrated = parsed.map((item) => {
+            if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Crimson Red'
+              mod = true
+            }
+            if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Industrial Yellow'
+              mod = true
+            }
+            if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load — Cobalt Blue'
+              mod = true
+            }
+            return item
+          })
+          if (mod) {
+            try { localStorage.setItem('happy-machinery-products', JSON.stringify(migrated)) } catch {}
+          }
+          return migrated
+        }
       }
     } catch {}
     return DEFAULT_PRODUCTS
