@@ -123,7 +123,8 @@ const sharedContentApi = () => {
         request.on('end', () => {
           writeQueue = writeQueue.then(async () => {
             const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { value?: unknown }
-            if (!Array.isArray(payload.value)) throw new Error('A valid content value is required.')
+            if (request.method === 'PUT' && !Array.isArray(payload.value)) throw new Error('A valid content value is required.')
+            if (request.method === 'POST' && (payload.value === null || typeof payload.value !== 'object')) throw new Error('A valid activity value is required.')
             const database = await readDatabase()
             if (request.method === 'POST' && key === 'cart-activity') {
               const existing = Array.isArray(database[key]) ? database[key] as unknown[] : []
