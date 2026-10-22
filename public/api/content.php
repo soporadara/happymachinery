@@ -60,10 +60,12 @@ session_set_cookie_params([
     'samesite' => 'Strict',
 ]);
 session_start();
+if ($_SERVER['REQUEST_METHOD'] === 'PUT' || ($_SERVER['REQUEST_METHOD'] === 'POST' && $key !== 'cart-activity')) {
 if (empty($_SESSION['happy_admin_authenticated'])) {
     http_response_code(401);
     echo json_encode(['error' => 'Administrator authentication is required.']);
     exit;
+}
 }
 
 if (!in_array($_SERVER['REQUEST_METHOD'], ['PUT', 'POST'], true)) {
