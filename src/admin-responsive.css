@@ -1,0 +1,269 @@
+/* Responsive CMS safety net: loaded after component styles to normalize desktop overrides. */
+.console-wrapper,
+.console-wrapper * {
+  box-sizing: border-box;
+}
+.console-wrapper {
+  min-width: 0;
+  width: 100%;
+  overflow-x: clip;
+}
+.console-main,
+.console-content,
+.console-header,
+.admin-card,
+.product-manager,
+.product-create-grid,
+.product-create-main,
+.product-create-sidebar {
+  min-width: 0;
+}
+.console-main {
+  overflow-x: clip;
+}
+.console-sidebar {
+  min-width: 0;
+}
+.console-sidebar button,
+.console-main button,
+.console-main a,
+.console-main input,
+.console-main select,
+.console-main textarea {
+  touch-action: manipulation;
+}
+.console-wrapper :focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+.console-wrapper img,
+.console-wrapper video {
+  max-width: 100%;
+}
+.product-admin-table-wrap,
+.admin-table-wrap,
+.media-grid,
+.product-meta-list {
+  max-width: 100%;
+}
+.product-admin-table-wrap,
+.admin-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.product-admin-table {
+  min-width: 680px;
+}
+@media (max-width: 1100px) {
+  .stats-grid,
+  .product-admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quick-actions-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-split-layout,
+  .analytics-layout-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .product-create-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .product-create-sidebar {
+    position: static;
+  }
+}
+@media (max-width: 760px) {
+  .console-wrapper {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .console-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    width: 100%;
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, .25);
+  }
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    margin: 0 0 8px;
+    padding: 0 6px;
+  }
+  .sidebar-brand h2 {
+    font-size: 1rem;
+  }
+  .sidebar-menu {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 0 5px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .menu-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
+    min-height: 42px;
+    padding: 10px 12px;
+    font-size: .82rem;
+  }
+  .product-menu-group {
+    flex: 0 0 auto;
+  }
+  .product-menu-group .product-submenu {
+    position: absolute;
+    z-index: 110;
+    max-height: min(65dvh, 420px);
+    overflow-y: auto;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .2);
+  }
+  .sidebar-footer {
+    display: none;
+  }
+  .console-main {
+    width: 100%;
+    min-height: auto;
+    padding: 0 14px 28px;
+    overflow: visible;
+  }
+  .console-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 -14px 18px;
+    padding: 14px;
+    align-items: flex-start;
+  }
+  .console-header h1 {
+    font-size: clamp(1.15rem, 5vw, 1.5rem);
+    overflow-wrap: anywhere;
+  }
+  .header-subtext {
+    display: block;
+    font-size: .8rem;
+    line-height: 1.45;
+  }
+  .header-actions {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .header-admin-label {
+    display: none;
+  }
+  .console-content {
+    gap: 18px;
+  }
+  .stats-grid,
+  .product-admin-stats,
+  .quick-actions-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .stat-card {
+    min-width: 0;
+    gap: 10px;
+    padding: 12px;
+  }
+  .stat-number {
+    font-size: 1.2rem;
+    overflow-wrap: anywhere;
+  }
+  .admin-card,
+  .analytics-card {
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .admin-split-layout,
+  .analytics-layout-grid,
+  .product-create-grid,
+  .product-pricing-grid,
+  .product-meta-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .list-controls-header,
+  .product-filter-bar,
+  .list-search-filter-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .product-filter-bar input,
+  .product-filter-bar select,
+  .list-search-filter-row input,
+  .admin-form input,
+  .admin-form select,
+  .admin-form textarea {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+  }
+  .product-create-heading {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .specification-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .wide-article-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-login-page {
+    min-height: 100dvh;
+    padding: 20px 14px;
+  }
+  .admin-login-card {
+    width: 100%;
+    max-width: 440px;
+    padding: 24px 18px;
+  }
+}
+@media (max-width: 420px) {
+  .stats-grid,
+  .product-admin-stats,
+  .quick-actions-row,
+  .media-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .console-main {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+  .console-header {
+    margin-right: -10px;
+    margin-left: -10px;
+    padding: 12px 10px;
+  }
+  .admin-card,
+  .analytics-card {
+    padding: 13px;
+  }
+  .menu-item {
+    padding: 9px 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-wrapper *,
+  .console-wrapper *::before,
+  .console-wrapper *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
+header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store, no-cache, must-revalidate');
 
 $allowedKeys = ['blog-posts', 'media-library', 'products', 'cart-activity'];
@@ -46,6 +47,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     echo json_encode(['value' => $database[$key]], JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+// All content mutations require a server-validated administrator session.
+session_name('happy_admin_session');
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'secure' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'),
+    'httponly' => true,
+    'samesite' => 'Strict',
+]);
+session_start();
+if ($_SERVER['REQUEST_METHOD'] === 'PUT' || ($_SERVER['REQUEST_METHOD'] === 'POST' && $key !== 'cart-activity')) {
+if (empty($_SESSION['happy_admin_authenticated'])) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Administrator authentication is required.']);
+    exit;
+}
 }
 
 if (!in_array($_SERVER['REQUEST_METHOD'], ['PUT', 'POST'], true)) {
