@@ -27,7 +27,6 @@ export default function Home() {
   })
   const [hoveredHotspot, setHoveredHotspot] = useState<string | null>(null)
   const [activeWhySpec, setActiveWhySpec] = useState(0)
-  const [activeHeroVideoModal, setActiveHeroVideoModal] = useState(false)
   const [activeVideoModal, setActiveVideoModal] = useState<{
     videoId: string
     title: string
@@ -36,12 +35,9 @@ export default function Home() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setActiveVideoModal(null)
-        setActiveHeroVideoModal(false)
-      }
+      if (e.key === 'Escape') setActiveVideoModal(null)
     }
-    if (activeVideoModal || activeHeroVideoModal) {
+    if (activeVideoModal) {
       window.addEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'hidden'
     } else {
@@ -51,7 +47,7 @@ export default function Home() {
       window.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = ''
     }
-  }, [activeVideoModal, activeHeroVideoModal])
+  }, [activeVideoModal])
 
   useEffect(() => {
     let mounted = true
@@ -225,62 +221,46 @@ export default function Home() {
 
   return (
     <div className="home-page">
-      {/* 1. V900 Hero & Core Performance Engineering Showcase (Hero, Engine, Hydraulics, Tracks, Protective Guards, Capacity) */}
-      <V900Showcase onOpenVideo={() => setActiveHeroVideoModal(true)} />
-
-      {/* Field Operation Video Cinema Modal */}
-      {activeHeroVideoModal && (
-        <div
-          className="cinema-video-modal-backdrop"
-          onClick={() => setActiveHeroVideoModal(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="V900 Field Demonstration Video"
-        >
-          <div className="cinema-video-modal-shell" onClick={(e) => e.stopPropagation()}>
-            <div className="cinema-modal-header">
-              <div className="cinema-modal-title-group">
-                <span className="cinema-modal-tag">FIELD OPERATION DEMO</span>
-                <h3 className="cinema-modal-heading">V900 Compact Track Loader in Action</h3>
-              </div>
-              <button
-                type="button"
-                className="cinema-modal-close"
-                onClick={() => setActiveHeroVideoModal(false)}
-                aria-label="Close video player"
-              >
-                &times;
-              </button>
-            </div>
-            <div className="cinema-modal-player-wrap">
-              <video
-                src={content.hero.videoUrl || "/images/home-hero-optimized.m4v"}
-                controls
-                autoPlay
-                playsInline
-                className="cinema-modal-iframe"
-                style={{ objectFit: 'contain', background: '#000', width: '100%', height: '100%' }}
-              />
-            </div>
-            <div className="cinema-modal-footer">
-              <div className="cinema-modal-info">
-                <p className="cinema-modal-desc">
-                  Full jobsite walkaround and active operation demonstration of the V900 loader.
-                </p>
-              </div>
-              <Link
-                to="/product/typhon-stomp-v900-mini-track-loader-kubota-d1105"
-                className="cinema-modal-cta"
-                onClick={() => setActiveHeroVideoModal(false)}
-              >
-                <span>Explore V900 Full Specs</span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
+      {/* 1. Premium Hero Section */}
+      {content.hero.visible !== false && (
+        <section className="hero">
+          <video
+            key={content.hero.videoUrl}
+            className="hero-background-media"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            poster={content.hero.posterUrl}
+            aria-hidden="true"
+          >
+            <source src={content.hero.videoUrl} type="video/mp4" />
+          </video>
+          <div className="hero-overlay"></div>
+          <div className="hero-content">
+            <p className="eyebrow-accent">{content.hero.eyebrow}</p>
+            <h1 aria-label={`${content.hero.titleRed} ${content.hero.titleYellow} ${content.hero.titleBlue}`}>
+              <span className="hero-title-part hero-title-red">{content.hero.titleRed}</span>{' '}
+              <span className="hero-title-part hero-title-yellow">{content.hero.titleYellow}</span>{' '}
+              <span className="hero-title-part hero-title-blue">{content.hero.titleBlue}</span>
+            </h1>
+            <p className="hero-desc">{content.hero.description}</p>
+            <div className="hero-buttons">
+              <a href={content.hero.primaryBtnUrl} className="btn btn-primary">
+                {content.hero.primaryBtnText}
+              </a>
+              <Link to={content.hero.secondaryBtnUrl} className="btn btn-secondary">
+                {content.hero.secondaryBtnText}
               </Link>
             </div>
+            <div className="hero-stats" aria-label="Machine highlights">
+              {content.hero.highlights.map((h, i) => (
+                <span key={i}><strong>{h.tag}</strong> {h.label}</span>
+              ))}
+            </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* 2. Main Features Grid */}
@@ -732,6 +712,9 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      {/* V900 Engineering & Performance Deep-Dive: Kubota D1105, 3P/3V Hydraulics, Tracks, Guards, Capacity */}
+      <V900Showcase />
 
       {/* 8. Frequently Asked Questions */}
       {content.faq.visible !== false && (
