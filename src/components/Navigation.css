@@ -96,6 +96,26 @@
   text-decoration: none;
   flex-shrink: 0;
   height: 100%;
+  margin-left: 28px;
+  transition: margin-left 0.25s ease;
+}
+
+@media (min-width: 1200px) {
+  .nav-logo {
+    margin-left: 36px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .nav-logo {
+    margin-left: 48px;
+  }
+}
+
+@media (max-width: 760px) {
+  .nav-logo {
+    margin-left: 8px;
+  }
 }
 
 .nav-logo img {
