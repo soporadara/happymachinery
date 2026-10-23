@@ -552,55 +552,71 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
 }
 
-.cms-google-native-slot {
+.cms-google-btn-wrapper {
+  position: relative;
+  width: 100%;
+  height: 52px;
   display: flex;
+  align-items: center;
   justify-content: center;
-  width: 100%;
-  min-height: 44px;
 }
 
-.cms-google-native-slot:empty {
-  display: none;
-}
-
-.cms-google-sso-btn {
+.cms-submit-btn.cms-google-btn {
   width: 100%;
+  height: 52px;
+  margin-top: 0;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #0b1528;
+  border: none;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 12px 20px;
-  border-radius: 9999px;
-  background: #ffffff;
-  color: #1e293b;
-  font-size: 0.92rem;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  cursor: pointer;
-  transition: all 180ms ease;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 
-.cms-google-sso-btn:hover:not(:disabled) {
-  background: #f8fafc;
+.cms-google-btn-wrapper:hover .cms-submit-btn.cms-google-btn,
+.cms-submit-btn.cms-google-btn:hover:not(:disabled) {
+  background: #f1f5f9;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
 }
 
-.cms-google-sso-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.cms-google-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 
-.cms-google-note {
-  font-size: 0.74rem;
-  color: #94a3b8;
-  text-align: center;
-  line-height: 1.4;
-  max-width: 90%;
+.cms-google-native-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.0001;
+  overflow: hidden;
+  border-radius: 9999px;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cms-google-native-overlay iframe {
+  width: 100% !important;
+  height: 100% !important;
+  transform: scale(1.6);
+  transform-origin: center center;
+  cursor: pointer !important;
 }
 
 /* Banned State Card */
