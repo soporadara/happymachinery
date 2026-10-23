@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { getV900ProductId, getV900ProductPath } from '../data/v900Urls'
 
 const SITE_URL = 'https://happymachinery.com'
-const DEFAULT_IMAGE = `${SITE_URL}/images/why-choose-v900-jobsite.png`
+const DEFAULT_IMAGE = `${SITE_URL}/images/v900/v900-compact-track-loader-hero.webp`
 
 const productSeo: Record<string, {
   name: string
@@ -53,8 +53,8 @@ export default function Seo() {
     const productId = getV900ProductId(productKey)
     const product = productId ? productSeo[productId] : undefined
 
-    let title = 'TYPHON STOMP V900 Skid Steer | Happy Machinery'
-    let description = 'Explore the TYPHON STOMP V900 compact skid steer with Kubota diesel power, attachments, specifications, field videos, and nationwide USA delivery.'
+    let title = 'V900 Compact Track Loader | Engine, Hydraulics and Lifting Capacity | Happy Machinery'
+    let description = 'Explore the V900 compact track loader, featuring a Kubota D1105 engine, 3-pump / 3-valve hydraulic system, triangular track design, protective side guards, and 460 kg rated operating capacity.'
     let image = DEFAULT_IMAGE
     let canonicalPath = pathname === '/' ? '/' : pathname.replace(/\/+$/, '')
     let robots = 'index, follow, max-image-preview:large'
