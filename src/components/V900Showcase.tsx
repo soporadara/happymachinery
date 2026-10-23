@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import './V900Showcase.css'
 
 declare global {
   namespace JSX {
+    interface IntrinsicElements {
+      'model-viewer': any
+    }
+  }
+  namespace React.JSX {
     interface IntrinsicElements {
       'model-viewer': any
     }
@@ -150,17 +155,8 @@ function PrecisionProductStage({
 
 export default function V900Showcase() {
   const [activeTab, setActiveTab] = useState<'both' | 'engine' | 'track'>('both')
-  const [engineMode, setEngineMode] = useState<'diagram' | '3d'>('diagram')
-  const [hasGlbModel, setHasGlbModel] = useState<boolean>(false)
+  const [engineMode, setEngineMode] = useState<'diagram' | '3d'>('3d')
   const [activeCallout, setActiveCallout] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/models/kubota-d1105.glb', { method: 'HEAD' })
-      .then(res => {
-        if (res.ok) setHasGlbModel(true)
-      })
-      .catch(() => setHasGlbModel(false))
-  }, [])
 
   // 1. Kubota D1105 (25 HP) Engine - Exact Points Calibrated to Product Image
   const engineCallouts: AccurateCallout[] = [
@@ -313,57 +309,61 @@ export default function V900Showcase() {
                   />
                 ) : (
                   <div className="v900-3d-model-card">
-                    {hasGlbModel ? (
-                      // @ts-expect-error Google model-viewer custom element
-                      <model-viewer
-                        src="/models/kubota-d1105.glb"
-                        alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
-                        auto-rotate
-                        camera-controls
-                        shadow-intensity="1.2"
-                        style={{ width: '100%', height: '100%', minHeight: '440px' }}
-                      />
-                    ) : (
-                      <div className="v900-3d-interactive-card">
-                        <div className="v900-3d-card-top-tag">
-                          <span className="v900-3d-radar-pulse" />
-                          <span>3D INTERACTIVE MESHY MODEL</span>
-                        </div>
+                    {/* Top Status Tag */}
+                    <div className="v900-3d-card-top-tag">
+                      <span className="v900-3d-radar-pulse" />
+                      <span>3D INTERACTIVE ENGINE • ROTATE 360°</span>
+                    </div>
 
-                        <div className="v900-3d-orbit-visual">
-                          <img
-                            src="/images/v900/v900-kubota-d1105-engine.webp"
-                            alt="Kubota D1105 25 HP Engine 3D Model"
-                            className="v900-3d-preview-img"
-                          />
-                          <div className="v900-3d-orbit-ring" />
-                        </div>
-
-                        <div className="v900-3d-action-box">
-                          <a
-                            href="https://www.meshy.ai/3d-models/f249cbd6-7e0d-40cf-a4a2-9d99b2c5ba66?utm_medium=referral-program&utm_source=meshy&utm_content=2RJKFJ&share_type=3d-models"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="v900-3d-meshy-link-btn"
-                          >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                              <line x1="12" y1="22.08" x2="12" y2="12" />
-                            </svg>
-                            <span>Open 3D Model in Meshy.ai</span>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                              <polyline points="15 3 21 3 21 9" />
-                              <line x1="10" y1="14" x2="21" y2="3" />
-                            </svg>
-                          </a>
-                          <span className="v900-3d-micro-hint">
-                            Opens 360° interactive rotation, zoom, & wireframe in full screen
-                          </span>
+                    <model-viewer
+                      src="/models/kubota-d1105.glb"
+                      alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
+                      auto-rotate
+                      auto-rotate-delay="300"
+                      rotation-per-second="25deg"
+                      camera-controls
+                      touch-action="pan-y"
+                      shadow-intensity="1.5"
+                      shadow-softness="0.5"
+                      exposure="1.0"
+                      poster="/images/v900/v900-kubota-d1105-engine.webp"
+                      loading="eager"
+                      reveal="auto"
+                      className="v900-model-viewer-elem"
+                    >
+                      <div slot="poster" className="v900-3d-loading-poster">
+                        <img
+                          src="/images/v900/v900-kubota-d1105-engine.webp"
+                          alt="Kubota D1105 Engine"
+                          className="v900-3d-preview-img"
+                        />
+                        <div className="v900-3d-loading-spinner">
+                          <span className="v900-spinner-ring" />
+                          <span>Loading 3D Engine...</span>
                         </div>
                       </div>
-                    )}
+                    </model-viewer>
+
+                    {/* Bottom Action / Hint Bar */}
+                    <div className="v900-3d-bottom-bar">
+                      <span className="v900-3d-hint-text">
+                        🖱️ Drag to rotate 360° • Scroll to zoom
+                      </span>
+                      <a
+                        href="https://www.meshy.ai/3d-models/f249cbd6-7e0d-40cf-a4a2-9d99b2c5ba66?utm_medium=referral-program&utm_source=meshy&utm_content=2RJKFJ&share_type=3d-models"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="v900-3d-link-mini"
+                        title="View on Meshy.ai"
+                      >
+                        <span>Meshy Source</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                      </a>
+                    </div>
                   </div>
                 )}
               </div>
