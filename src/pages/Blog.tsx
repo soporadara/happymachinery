@@ -113,10 +113,10 @@ export function getHeadingMatch(line: string, fallbackSuffix: number = 0): Headi
     return { level: md[1].length, text, id: slugifyHeading(text) || `section-${fallbackSuffix}` }
   }
 
-  // 2. HTML: <h1>Heading</h1> etc.
-  const html = trimmed.match(/^<h([1-6])>(.*?)<\/h\1>$/i)
+  // 2. HTML: <h1>Heading</h1> or <h2 class="...">Heading</h2> etc.
+  const html = trimmed.match(/^<h([1-6])(?:\s+[^>]*)?>(.*?)<\/h\1>$/i)
   if (html) {
-    const text = html[2].trim()
+    const text = html[2].replace(/<[^>]+>/g, '').trim()
     return { level: parseInt(html[1], 10), text, id: slugifyHeading(text) || `section-${fallbackSuffix}` }
   }
 

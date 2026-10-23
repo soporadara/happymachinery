@@ -682,3 +682,134 @@ div[class*="fixed inset-0 z-50"] pre {
     flex-shrink: 0;
   }
 }
+
+/* ==============================================================================
+   LIGHT MODE OVERRIDES FOR CMS EDITORIAL WORKSPACE
+   Guarantees crisp white background, readable dark text, and sleek light ribbon
+   ============================================================================== */
+.cms-theme-light .tiptap-editor-root,
+.cms-theme-light .tw-scope,
+.cms-theme-light .cms-tiptap-editor-wrap,
+html.cms-theme-light .tiptap-editor-root,
+html.cms-theme-light .tw-scope,
+html:not(.dark) .tiptap-editor-root,
+html:not(.dark) .tw-scope {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.cms-theme-light .tiptap-ribbon-menubar,
+.cms-theme-light .tiptap-menubar,
+.cms-theme-light .tw-scope .tiptap-ribbon-menubar,
+html.cms-theme-light .tiptap-ribbon-menubar,
+html.cms-theme-light .tiptap-menubar,
+html:not(.dark) .tiptap-ribbon-menubar {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.cms-theme-light .tiptap-ribbon-btn,
+.cms-theme-light .tiptap-tb-btn,
+html.cms-theme-light .tiptap-ribbon-btn,
+html:not(.dark) .tiptap-ribbon-btn {
+  background: transparent !important;
+  color: #475569 !important;
+}
+
+.cms-theme-light .tiptap-ribbon-btn:hover,
+.cms-theme-light .tiptap-tb-btn:hover,
+html.cms-theme-light .tiptap-ribbon-btn:hover,
+html:not(.dark) .tiptap-ribbon-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.cms-theme-light .tiptap-ribbon-btn.is-active,
+.cms-theme-light .tiptap-ribbon-btn.active,
+html.cms-theme-light .tiptap-ribbon-btn.is-active,
+html:not(.dark) .tiptap-ribbon-btn.is-active {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #dc2626 !important;
+}
+
+.cms-theme-light .tiptap-ribbon-divider,
+html.cms-theme-light .tiptap-ribbon-divider,
+html:not(.dark) .tiptap-ribbon-divider {
+  background: #e2e8f0 !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror,
+.cms-theme-light .ProseMirror,
+.cms-theme-light .tw-scope .ProseMirror,
+html.cms-theme-light .tiptap.ProseMirror,
+html.cms-theme-light .ProseMirror,
+html:not(.dark) .tiptap.ProseMirror,
+html:not(.dark) .ProseMirror {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror h1,
+.cms-theme-light .tiptap.ProseMirror h2,
+.cms-theme-light .tiptap.ProseMirror h3,
+.cms-theme-light .tiptap.ProseMirror h4,
+html.cms-theme-light .tiptap.ProseMirror h1,
+html.cms-theme-light .tiptap.ProseMirror h2,
+html.cms-theme-light .tiptap.ProseMirror h3,
+html:not(.dark) .tiptap.ProseMirror h1,
+html:not(.dark) .tiptap.ProseMirror h2,
+html:not(.dark) .tiptap.ProseMirror h3 {
+  color: #0f172a !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror p,
+.cms-theme-light .tiptap.ProseMirror li,
+html.cms-theme-light .tiptap.ProseMirror p,
+html.cms-theme-light .tiptap.ProseMirror li,
+html:not(.dark) .tiptap.ProseMirror p,
+html:not(.dark) .tiptap.ProseMirror li {
+  color: #334155 !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror strong,
+html.cms-theme-light .tiptap.ProseMirror strong,
+html:not(.dark) .tiptap.ProseMirror strong {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror blockquote,
+html.cms-theme-light .tiptap.ProseMirror blockquote,
+html:not(.dark) .tiptap.ProseMirror blockquote {
+  background: #f8fafc !important;
+  border-left-color: #3b82f6 !important;
+  color: #475569 !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror table,
+html.cms-theme-light .tiptap.ProseMirror table,
+html:not(.dark) .tiptap.ProseMirror table {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror th,
+html.cms-theme-light .tiptap.ProseMirror th,
+html:not(.dark) .tiptap.ProseMirror th {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.cms-theme-light .tiptap.ProseMirror td,
+html.cms-theme-light .tiptap.ProseMirror td,
+html:not(.dark) .tiptap.ProseMirror td {
+  border-color: #e2e8f0 !important;
+  color: #334155 !important;
+}
+

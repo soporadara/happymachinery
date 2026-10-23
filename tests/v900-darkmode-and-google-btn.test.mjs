@@ -120,3 +120,27 @@ test('6. Redundant inquiry CTA buttons are completely removed from V900 showcase
   assert.ok(!homeContent.includes("'Inquire About Package Deals'"), 'Must remove Inquire About Package Deals default text')
 })
 
+test('7. Blog post editor has light mode support and auto-formats headings & images', async () => {
+  const editorCssPath = path.join(projectRoot, 'src/components/Editor/TiptapEditor.css')
+  const helperPath = path.join(projectRoot, 'src/utils/editorContentHelper.ts')
+
+  assert.ok(fs.existsSync(editorCssPath), 'TiptapEditor.css must exist')
+  assert.ok(fs.existsSync(helperPath), 'editorContentHelper.ts must exist')
+
+  const css = fs.readFileSync(editorCssPath, 'utf8')
+  assert.ok(css.includes('.cms-theme-light .tiptap-ribbon-menubar'), 'Must have light mode menubar override')
+  assert.ok(css.includes('.cms-theme-light .tiptap.ProseMirror'), 'Must have light mode ProseMirror override')
+  assert.ok(css.includes('background: #ffffff !important;'), 'Must have white background for light mode')
+
+  const { convertContentToHtml } = await import('../src/utils/editorContentHelper.ts')
+  const rawSample = [
+    'Comparing Lifting and Working Functions',
+    'https://img.miniexcavator.org/ebay/Blog/class7/17thSep/ScissorLiftVsForkLift-02.webp',
+    'Although both machines lift, they are engineered for fundamentally different purposes.'
+  ]
+  const converted = convertContentToHtml(rawSample)
+  assert.ok(converted.includes('<h2>Comparing Lifting and Working Functions</h2>'), 'Must convert standalone heading to <h2>')
+  assert.ok(converted.includes('<img src="https://img.miniexcavator.org/ebay/Blog/class7/17thSep/ScissorLiftVsForkLift-02.webp"'), 'Must convert raw image URL to <img> tag')
+  assert.ok(converted.includes('<p>Although both machines lift'), 'Must wrap text in <p>')
+})
+

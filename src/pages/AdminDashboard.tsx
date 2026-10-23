@@ -57,6 +57,7 @@ import HomePageCmsEditor from '../components/HomePageCmsEditor'
 import TopBlogsManager from '../components/TopBlogsManager'
 import TiptapEditor from '../components/Editor/TiptapEditor'
 import { renderMarkdownToReact } from './Blog'
+import { convertContentToHtml } from '../utils/editorContentHelper'
 import { getMaintenanceConfig, saveMaintenanceConfig } from '../data/maintenanceConfig'
 import { cacheSiteSettings, updateBrowserFavicon } from '../data/siteBranding'
 import './AdminDashboard.css'
@@ -1644,6 +1645,13 @@ export default function AdminDashboard() {
     localStorage.setItem('hm_cms_theme', theme)
     document.documentElement.classList.remove('cms-theme-light', 'cms-theme-neon', 'cms-theme-dark')
     document.documentElement.classList.add(`cms-theme-${theme}`)
+    if (theme === 'light') {
+      document.documentElement.classList.remove('dark')
+      document.body.classList.remove('dark')
+    } else {
+      document.documentElement.classList.add('dark')
+      document.body.classList.add('dark')
+    }
   }, [theme])
 
   // Load All Collections from Backend
@@ -2333,10 +2341,9 @@ export default function AdminDashboard() {
     setEditorTitle(post.title)
     setEditorSlug(post.slug || '')
     setEditorExcerpt(post.excerpt)
-    const rawParagraphs = Array.isArray(post.content) ? post.content : [post.content || '']
-    const contentText = rawParagraphs.join('\n\n')
-    setEditorContent(contentText)
-    setEditorBlocks(parseContentToVisualBlocks(contentText))
+    const formattedHtml = convertContentToHtml(post.content)
+    setEditorContent(formattedHtml)
+    setEditorBlocks(parseContentToVisualBlocks(formattedHtml))
     setEditorMode('visual')
     setActiveVisualBlockIndex(null)
     setEditingBlockIndex(null)

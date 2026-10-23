@@ -11,6 +11,7 @@ import ImageNodeView from './ImageNodeView';
 import YoutubeNodeView, { getYoutubeVideoId } from './YoutubeNodeView';
 import TerminalNodeView from './TerminalNodeView';
 import LinkCardNodeView from './LinkCardNodeView';
+import { convertContentToHtml } from '../../utils/editorContentHelper';
 import './TiptapEditor.css';
 
 const CustomImage = Image.extend({
@@ -692,10 +693,13 @@ export default function TiptapEditor({
           const parsed = JSON.parse(trimmed);
           if (parsed && typeof parsed === 'object') return parsed;
         } catch {
-          return content;
+          // Fall through to convertContentToHtml
         }
       }
-      return content;
+      return convertContentToHtml(content);
+    }
+    if (Array.isArray(content)) {
+      return convertContentToHtml(content);
     }
     return content;
   }, [content]);
@@ -801,6 +805,15 @@ export default function TiptapEditor({
       onChangeHtml?.(editor.getHTML());
     },
   });
+
+  useEffect(() => {
+    if (editor && safeContent) {
+      const currentHtml = editor.getHTML();
+      if (typeof safeContent === 'string' && safeContent !== currentHtml && !editor.isFocused) {
+        editor.commands.setContent(safeContent, { emitUpdate: false });
+      }
+    }
+  }, [editor, safeContent]);
 
   // Load Media Library images when browser tab opens or path changes
   const loadMediaLibrary = async (folderPath: string = '') => {
