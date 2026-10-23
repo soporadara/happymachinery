@@ -90,6 +90,15 @@ export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantPro
   const [isContactOpen, setIsContactOpen] = useState(false)
   const [input, setInput] = useState('')
 
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: 1,
+      from: 'assistant',
+      text: 'Hi — ask me a direct question about buying the V900, specifications, attachments, delivery, warranty, or support. I’ll answer directly and won’t ask about your work unless you want a recommendation.',
+    },
+  ])
+  const nextId = useRef(2)
+
   // Close popups on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -105,15 +114,6 @@ export default function EquipmentAssistant({ isCartOpen }: EquipmentAssistantPro
   if (isCartOpen) {
     return null
   }
-
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      from: 'assistant',
-      text: 'Hi — ask me a direct question about buying the V900, specifications, attachments, delivery, warranty, or support. I’ll answer directly and won’t ask about your work unless you want a recommendation.',
-    },
-  ])
-  const nextId = useRef(2)
 
   const sendMessage = (text: string) => {
     const cleanText = text.trim()

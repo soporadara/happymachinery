@@ -45,6 +45,14 @@ export default function CartDrawer({
           {cartItems.length === 0 ? (
             <div className="empty-cart-state">
               <p>Your cart is empty.</p>
+              <a
+                href="/store#!/~/cart"
+                onClick={onClose}
+                className="checkout-btn"
+                style={{ display: 'inline-block', marginTop: '14px', textDecoration: 'none', textAlign: 'center' }}
+              >
+                Open Ecwid Store & Cart &rarr;
+              </a>
             </div>
           ) : (
             <ul className="cart-items-list">
@@ -84,9 +92,11 @@ export default function CartDrawer({
           <div className="cart-footer">
             <div className="cart-summary-row">
               <span>Total:</span>
-              <span className="total-price">${totalPrice}</span>
+              <span className="total-price">${totalPrice.toLocaleString()}</span>
             </div>
-            <button className="checkout-btn" onClick={onCheckout}>Checkout</button>
+            <button className="checkout-btn" onClick={onCheckout}>
+              Checkout via Ecwid &rarr;
+            </button>
           </div>
         )}
       </div>

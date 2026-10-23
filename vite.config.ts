@@ -217,8 +217,8 @@ const sharedContentApi = () => {
 
           void readDatabase().then((database) => {
             if (!(key in database)) {
-              response.statusCode = 404
-              response.end(JSON.stringify({ error: 'Content has not been initialized.' }))
+              response.statusCode = 200
+              response.end(JSON.stringify({ value: null, initialized: false }))
               return
             }
 

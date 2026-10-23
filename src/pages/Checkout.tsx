@@ -86,11 +86,10 @@ export default function Checkout() {
         products: resolvedItems.map(({ id, quantity }) => ({ id, quantity }))
       }
       const ecwidCartHash = `!/~/cart/create=${encodeURIComponent(JSON.stringify(ecwidCart))}`
-      window.history.replaceState(
-        window.history.state,
-        '',
-        `${window.location.pathname}#${ecwidCartHash}`
-      )
+      window.location.hash = ecwidCartHash
+      try {
+        window.dispatchEvent(new Event('hashchange'))
+      } catch {}
     }
 
     const scriptId = 'ecwid-script';

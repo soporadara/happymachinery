@@ -343,8 +343,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     if (!array_key_exists($key, $database)) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Content has not been initialized.']);
+        http_response_code(200);
+        echo json_encode(['value' => null, 'initialized' => false], JSON_UNESCAPED_SLASHES);
         exit;
     }
 
