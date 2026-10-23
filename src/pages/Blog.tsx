@@ -15,6 +15,63 @@ export const slugifyHeading = (text: string): string => {
     .replace(/(^-|-$)/g, '')
 }
 
+/**
+ * Resolves a verified user profile avatar based on email address.
+ * Integrates with:
+ * 1. Active CMS Admin session & default admin accounts
+ * 2. Firebase Auth user in localStorage (matches Google / Firebase photoURL)
+ * 3. Gravatar / Google / GitHub unavatar service
+ * 4. UI-Avatars branded initials fallback
+ */
+export const getUserProfileAvatar = (email?: string, name?: string): string => {
+  if (!email || typeof email !== 'string') {
+    const fallbackName = name ? encodeURIComponent(name.trim()) : 'User'
+    return `https://ui-avatars.com/api/?name=${fallbackName}&background=0284c7&color=fff&bold=true&size=128`
+  }
+
+  const cleanEmail = email.trim().toLowerCase()
+  const fallbackName = name ? encodeURIComponent(name.trim()) : encodeURIComponent(cleanEmail.split('@')[0])
+
+  // 1. Check logged-in CMS admin session
+  try {
+    const session = getStoredSession()
+    if (session?.user && (session.user.email?.toLowerCase() === cleanEmail || session.user.username?.toLowerCase() === cleanEmail)) {
+      if (session.user.avatar) return session.user.avatar
+    }
+  } catch {}
+
+  // 2. Check Firebase Authentication user object stored in localStorage
+  if (typeof localStorage !== 'undefined') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || ''
+        if (key.startsWith('firebase:authUser') || key.includes('firebase:user') || key.includes('authUser')) {
+          const raw = localStorage.getItem(key)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (parsed.email?.toLowerCase() === cleanEmail && parsed.photoURL) {
+              return parsed.photoURL
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Known administrator accounts
+  if (cleanEmail === 'soporadara@kiuq.com' || cleanEmail === 'admin@happymachinery.com') {
+    return 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
+  }
+  if (cleanEmail === 'support@happymachinery.com') {
+    return '/images/favicon.webp'
+  }
+
+  // 4. Resolve via Unavatar (automatically searches Gravatar, Google, GitHub, and Firebase connected profiles)
+  const defaultFallback = encodeURIComponent(`https://ui-avatars.com/api/?name=${fallbackName}&background=0284c7&color=fff&bold=true&size=128`)
+  return `https://unavatar.io/${encodeURIComponent(cleanEmail)}?fallback=${defaultFallback}`
+}
+
+
 export function isStandaloneHeading(line: string): boolean {
   const trimmed = line.trim()
   if (trimmed.length < 3 || trimmed.length > 75) return false
@@ -591,12 +648,15 @@ export default function Blog() {
     }
 
     setCommentError('')
+    const authorEmail = commentEmail.trim()
+    const authorName = commentName.trim()
     const newComment: BlogComment = {
       id: Date.now(),
       postId: selectedPost.id,
       postTitle: selectedPost.title,
-      author: commentName.trim(),
-      email: commentEmail.trim(),
+      author: authorName,
+      email: authorEmail,
+      avatar: getUserProfileAvatar(authorEmail, authorName),
       text: commentText.trim(),
       date: new Date().toISOString().slice(0, 10),
       status: isAdmin ? 'Approved' : 'Pending',
@@ -658,6 +718,7 @@ export default function Blog() {
       id: Date.now(),
       author: authorName,
       email: authorEmail,
+      avatar: isSeller ? '/images/favicon.webp' : getUserProfileAvatar(authorEmail, authorName),
       text: replyText.trim(),
       date: new Date().toISOString().slice(0, 10),
       isSeller: Boolean(isSeller),
@@ -1105,74 +1166,133 @@ export default function Blog() {
                       <h3 id="raf-discussion-heading">Comments & Discussion ({approvedComments.length})</h3>
                       <a href="#leave-comment-form" className="raf-jump-comment-link">+ Add Comment</a>
                     </div>
-                    {approvedComments.map((comment) => (
-                      <article className="raf-comment-card" key={comment.id}>
-                        <div className="raf-comment-avatar">
-                          {comment.author.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="raf-comment-content">
-                          <div className="raf-comment-meta">
-                            <strong>{comment.author}</strong>
-                            <time>{comment.date}</time>
+                    {approvedComments.map((comment) => {
+                      const avatarUrl = comment.avatar || getUserProfileAvatar(comment.email, comment.author)
+                      return (
+                        <article className="raf-comment-card" key={comment.id}>
+                          <div className="raf-comment-avatar">
+                            {avatarUrl ? (
+                              <img
+                                src={avatarUrl}
+                                alt={comment.author}
+                                className="raf-comment-avatar-img"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none'
+                                  const parent = (e.currentTarget as HTMLElement).parentElement
+                                  if (parent) {
+                                    parent.textContent = comment.author.charAt(0).toUpperCase()
+                                  }
+                                }}
+                              />
+                            ) : (
+                              comment.author.charAt(0).toUpperCase()
+                            )}
                           </div>
-                          <p className="raf-comment-body-text">{comment.text}</p>
-
-                          {/* Backward compatibility for legacy single reply */}
-                          {comment.reply && (
-                            <div className="raf-seller-reply is-official-support">
-                              <div className="raf-reply-meta">
-                                <div className="raf-reply-author-info">
-                                  <span className="raf-reply-mini-avatar">H</span>
-                                  <strong>Happy Machinery</strong>
-                                  <span className="raf-seller-tag">✓ Support</span>
-                                </div>
-                                <small className="raf-reply-date">{comment.reply.date}</small>
-                              </div>
-                              <p className="raf-reply-text">{comment.reply.text}</p>
-                            </div>
-                          )}
-
-                          {/* Threaded multi-user replies */}
-                          {(comment.replies || []).map((reply) => (
-                            <div
-                              className={`raf-seller-reply ${reply.isSeller ? 'is-official-support' : 'is-user-reply'}`}
-                              key={reply.id}
-                            >
-                              <div className="raf-reply-meta">
-                                <div className="raf-reply-author-info">
-                                  <span className={`raf-reply-mini-avatar ${reply.isSeller ? 'seller' : ''}`}>
-                                    {reply.author.charAt(0).toUpperCase()}
+                          <div className="raf-comment-content">
+                            <div className="raf-comment-meta">
+                              <div className="raf-comment-author-badge">
+                                <strong className="raf-comment-author-name">{comment.author}</strong>
+                                {comment.email && (
+                                  <span className="raf-comment-email-chip" title={`Verified email: ${comment.email}`}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                      <polyline points="22,6 12,13 2,6" />
+                                    </svg>
+                                    <span>{comment.email}</span>
                                   </span>
-                                  <strong>{reply.author}</strong>
-                                  {reply.isSeller && (
-                                    <span className="raf-seller-tag">✓ Support</span>
-                                  )}
-                                  {reply.replyToAuthor && (
-                                    <span className="raf-reply-target-tag">
-                                      @{reply.replyToAuthor}
-                                    </span>
-                                  )}
-                                </div>
-                                <small className="raf-reply-date">{reply.date}</small>
+                                )}
                               </div>
-                              <p className="raf-reply-text">{reply.text}</p>
-                              <div className="raf-subreply-action">
-                                <button
-                                  type="button"
-                                  className="raf-subreply-btn"
-                                  onClick={() => {
-                                    setReplyingTo(comment.id)
-                                    setReplyToUser(reply.author)
-                                    setReplyText('')
-                                    setReplyName('')
-                                    setReplyEmail('')
-                                  }}
-                                >
-                                  ↩ Reply to {reply.author}
-                                </button>
-                              </div>
+                              <time>{comment.date}</time>
                             </div>
-                          ))}
+                            <p className="raf-comment-body-text">{comment.text}</p>
+
+                            {/* Backward compatibility for legacy single reply */}
+                            {comment.reply && (
+                              <div className="raf-seller-reply is-official-support">
+                                <div className="raf-reply-meta">
+                                  <div className="raf-reply-author-info">
+                                    <span className="raf-reply-mini-avatar seller">
+                                      <img src="/images/favicon.webp" alt="Support" className="raf-reply-avatar-img" />
+                                    </span>
+                                    <strong>Happy Machinery</strong>
+                                    <span className="raf-seller-tag">✓ Support</span>
+                                  </div>
+                                  <small className="raf-reply-date">{comment.reply.date}</small>
+                                </div>
+                                <p className="raf-reply-text">{comment.reply.text}</p>
+                              </div>
+                            )}
+
+                            {/* Threaded multi-user replies */}
+                            {(comment.replies || []).map((reply) => {
+                              const replyAvatar = reply.avatar || (reply.isSeller ? '/images/favicon.webp' : getUserProfileAvatar(reply.email, reply.author))
+                              return (
+                                <div
+                                  className={`raf-seller-reply ${reply.isSeller ? 'is-official-support' : 'is-user-reply'}`}
+                                  key={reply.id}
+                                >
+                                  <div className="raf-reply-meta">
+                                    <div className="raf-reply-author-info">
+                                      <span className={`raf-reply-mini-avatar ${reply.isSeller ? 'seller' : ''}`}>
+                                        {replyAvatar ? (
+                                          <img
+                                            src={replyAvatar}
+                                            alt={reply.author}
+                                            className="raf-reply-avatar-img"
+                                            onError={(e) => {
+                                              (e.currentTarget as HTMLElement).style.display = 'none'
+                                              const parent = (e.currentTarget as HTMLElement).parentElement
+                                              if (parent) {
+                                                parent.textContent = reply.author.charAt(0).toUpperCase()
+                                              }
+                                            }}
+                                          />
+                                        ) : (
+                                          reply.author.charAt(0).toUpperCase()
+                                        )}
+                                      </span>
+                                      <div className="raf-reply-author-text">
+                                        <strong>{reply.author}</strong>
+                                        {reply.email && !reply.isSeller && (
+                                          <span className="raf-comment-email-chip reply" title={`Email: ${reply.email}`}>
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                              <polyline points="22,6 12,13 2,6" />
+                                            </svg>
+                                            <span>{reply.email}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                      {reply.isSeller && (
+                                        <span className="raf-seller-tag">✓ Support</span>
+                                      )}
+                                      {reply.replyToAuthor && (
+                                        <span className="raf-reply-target-tag">
+                                          @{reply.replyToAuthor}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <small className="raf-reply-date">{reply.date}</small>
+                                  </div>
+                                  <p className="raf-reply-text">{reply.text}</p>
+                                  <div className="raf-subreply-action">
+                                    <button
+                                      type="button"
+                                      className="raf-subreply-btn"
+                                      onClick={() => {
+                                        setReplyingTo(comment.id)
+                                        setReplyToUser(reply.author)
+                                        setReplyText('')
+                                        setReplyName('')
+                                        setReplyEmail('')
+                                      }}
+                                    >
+                                      ↩ Reply to {reply.author}
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
 
                           <div className="raf-comment-actions-row">
                             <button
@@ -1243,7 +1363,7 @@ export default function Blog() {
                                     type="email"
                                     value={replyEmail}
                                     onChange={(e) => setReplyEmail(e.target.value)}
-                                    placeholder="Your Email * (never published)"
+                                    placeholder="Your Email * (verified profile)"
                                     maxLength={80}
                                     required
                                     className="raf-form-input raf-reply-input"
@@ -1296,7 +1416,8 @@ export default function Blog() {
                           )}
                         </div>
                       </article>
-                    ))}
+                    )
+                  })}
                   </div>
                 )}
 
@@ -1337,7 +1458,7 @@ export default function Blog() {
                     </div>
                     <div className="raf-form-field">
                       <label htmlFor="comment-email" className="raf-field-label">
-                        Email Address <span className="raf-req-star">*</span> <span className="raf-field-hint">(never published)</span>
+                        Email Address <span className="raf-req-star">*</span> <span className="raf-field-hint">(verified profile photo & email)</span>
                       </label>
                       <input
                         id="comment-email"

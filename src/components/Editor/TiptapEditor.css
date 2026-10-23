@@ -1,17 +1,18 @@
 /* ==============================================================================
    Happy Machinery — Modern Tiptap WYSIWYG Editor Styles
-   Seamless fluid writing, inline media controls, drag & drop, clipboard paste
+   Pixel-Matched to Rafelblog State-of-the-Art Editorial CMS
    ============================================================================== */
 
-/* Editor Container */
+/* Editor Root Container */
 .tiptap-editor-root {
   background: var(--cms-card-bg, #ffffff);
   border: 1px solid var(--cms-border, #e2e8f0);
-  border-radius: 16px;
-  overflow: visible;
+  border-radius: 18px;
+  overflow: hidden;
   position: relative;
   transition: border-color 150ms ease, box-shadow 150ms ease;
   font-family: inherit;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .cms-theme-dark .tiptap-editor-root,
@@ -22,102 +23,306 @@ html.dark .tiptap-editor-root,
   color: #f1f5f9;
 }
 
-/* Sticky MenuBar */
+/* ==============================================================================
+   1. SLEEK HORIZONTAL RIBBON TOOLBAR (Matches Rafelblog Screenshot 2)
+   ============================================================================== */
+.tiptap-ribbon-menubar,
 .tiptap-menubar {
-  position: sticky;
-  top: 72px;
-  z-index: 25;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-  padding: 8px 12px;
-  background: rgba(248, 250, 252, 0.96);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--cms-border, #e2e8f0);
-  border-top-left-radius: 16px;
-  border-top-right-radius: 16px;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 25 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 8px 12px !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-top-left-radius: 16px !important;
+  border-top-right-radius: 16px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04) !important;
 }
 
+.cms-theme-dark .tiptap-ribbon-menubar,
 .cms-theme-dark .tiptap-menubar,
+html.dark .tiptap-ribbon-menubar,
 html.dark .tiptap-menubar,
+.dark .tiptap-ribbon-menubar,
 .dark .tiptap-menubar {
-  background: rgba(15, 23, 42, 0.96);
-  border-bottom-color: #334155;
+  background: #0f172a !important;
+  border-bottom-color: #334155 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
 }
 
-.tiptap-tb-btn {
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  padding: 6px 8px;
-  color: #475569;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 120ms ease;
-  font-size: 13px;
-  font-weight: 600;
-  user-select: none;
+/* Ribbon Standard Buttons (Bold, Italic, H1, Lists, Link, etc.) */
+.tiptap-ribbon-btn,
+.tiptap-tb-btn,
+.tiptap-ribbon-menubar > button:not(.tiptap-terminal-pill):not([title*="Terminal"]):not([title*="YouTube"]):not([title*="Table"]):not([title*="Styles"]):not([title*="Callout"]),
+div[class*="backdrop-blur-md rounded-t-2xl"] > button:not([title*="Terminal"]):not([title*="YouTube"]):not([title*="Table"]):not([title*="Styles"]):not([title*="Callout"]) {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 7px 8px !important;
+  color: #475569 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 120ms ease !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  user-select: none !important;
+  outline: none !important;
+  line-height: 1 !important;
 }
 
-.tiptap-tb-btn:hover {
-  background: #e2e8f0;
-  color: #0f172a;
+.tiptap-ribbon-btn:hover,
+.tiptap-tb-btn:hover,
+div[class*="backdrop-blur-md rounded-t-2xl"] > button:not([title*="Terminal"]):not([title*="YouTube"]):not([title*="Table"]):not([title*="Styles"]):not([title*="Callout"]):hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 
+.tiptap-ribbon-btn.is-active,
+.tiptap-ribbon-btn.active,
 .tiptap-tb-btn.is-active,
-.tiptap-tb-btn.active {
-  background: rgba(220, 38, 38, 0.1);
+.tiptap-tb-btn.active,
+div[class*="backdrop-blur-md rounded-t-2xl"] > button[class*="bg-red-50"] {
+  background: rgba(239, 68, 68, 0.12) !important;
   color: #dc2626 !important;
-  font-weight: 700;
+  font-weight: 700 !important;
 }
 
+.cms-theme-dark .tiptap-ribbon-btn,
 .cms-theme-dark .tiptap-tb-btn,
-html.dark .tiptap-tb-btn,
-.dark .tiptap-tb-btn {
-  color: #94a3b8;
+html.dark .tiptap-ribbon-btn,
+.dark .tiptap-ribbon-btn,
+.dark div[class*="backdrop-blur-md rounded-t-2xl"] > button:not([title*="Terminal"]):not([title*="YouTube"]):not([title*="Table"]):not([title*="Styles"]):not([title*="Callout"]) {
+  color: #94a3b8 !important;
 }
 
+.cms-theme-dark .tiptap-ribbon-btn:hover,
 .cms-theme-dark .tiptap-tb-btn:hover,
-html.dark .tiptap-tb-btn:hover,
-.dark .tiptap-tb-btn:hover {
-  background: #1e293b;
-  color: #f8fafc;
+html.dark .tiptap-ribbon-btn:hover,
+.dark .tiptap-ribbon-btn:hover,
+.dark div[class*="backdrop-blur-md rounded-t-2xl"] > button:not([title*="Terminal"]):not([title*="YouTube"]):not([title*="Table"]):not([title*="Styles"]):not([title*="Callout"]):hover {
+  background: #1e293b !important;
+  color: #f8fafc !important;
 }
 
-.cms-theme-dark .tiptap-tb-btn.is-active,
-html.dark .tiptap-tb-btn.is-active,
-.dark .tiptap-tb-btn.is-active {
-  background: rgba(239, 68, 68, 0.18);
+.cms-theme-dark .tiptap-ribbon-btn.is-active,
+html.dark .tiptap-ribbon-btn.is-active,
+.dark .tiptap-ribbon-btn.is-active,
+.dark div[class*="backdrop-blur-md rounded-t-2xl"] > button[class*="bg-red-50"] {
+  background: rgba(239, 68, 68, 0.22) !important;
   color: #f87171 !important;
 }
 
-.tiptap-tb-sep {
-  width: 1px;
-  height: 20px;
-  background: #cbd5e1;
-  margin: 0 4px;
+/* Vertical Hairline Dividers */
+.tiptap-ribbon-divider,
+.tiptap-tb-sep,
+div[class*="backdrop-blur-md rounded-t-2xl"] > div[class*="w-px"] {
+  width: 1px !important;
+  height: 20px !important;
+  background: #cbd5e1 !important;
+  margin: 0 4px !important;
+  flex-shrink: 0 !important;
 }
 
+.cms-theme-dark .tiptap-ribbon-divider,
 .cms-theme-dark .tiptap-tb-sep,
-html.dark .tiptap-tb-sep,
-.dark .tiptap-tb-sep {
-  background: #334155;
+html.dark .tiptap-ribbon-divider,
+.dark .tiptap-ribbon-divider,
+.dark div[class*="backdrop-blur-md rounded-t-2xl"] > div[class*="w-px"] {
+  background: #334155 !important;
 }
 
-/* Prose Content editable area */
+/* Image Tool Button */
+button[title*="Insert Image"] {
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #dc2626 !important;
+}
+
+button[title*="Insert Image"]:hover {
+  background: rgba(239, 68, 68, 0.16) !important;
+}
+
+/* ==============================================================================
+   2. SPECIAL BADGE PILL BUTTONS (TERMINAL, YOUTUBE, TABLE, STYLES)
+   ============================================================================== */
+
+/* macOS Code Terminal Pill Button (🔴 🟡 🟢  >_ Terminal) */
+.tiptap-terminal-pill,
+button[title*="Insert macOS Code Terminal"],
+button[title*="Terminal Block"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 5px 12px !important;
+  border-radius: 11px !important;
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(51, 65, 85, 0.8) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  cursor: pointer !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  transition: all 120ms ease !important;
+  user-select: none !important;
+  line-height: 1.4 !important;
+}
+
+.tiptap-terminal-pill:hover,
+button[title*="Insert macOS Code Terminal"]:hover,
+button[title*="Terminal Block"]:hover {
+  background: #1e293b !important;
+  border-color: #475569 !important;
+  transform: translateY(-0.5px) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25) !important;
+}
+
+.tiptap-terminal-pill:active,
+button[title*="Insert macOS Code Terminal"]:active {
+  transform: scale(0.97) !important;
+}
+
+/* Three macOS Traffic Light Dots */
+.tiptap-terminal-dots,
+button[title*="Insert macOS Code Terminal"] span:has(.rounded-full) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+span[class*="bg-[#ef4444]"] {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 50% !important;
+  background: #ef4444 !important;
+  display: inline-block !important;
+}
+
+span[class*="bg-[#f59e0b]"] {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 50% !important;
+  background: #f59e0b !important;
+  display: inline-block !important;
+}
+
+span[class*="bg-[#10b981]"] {
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 50% !important;
+  background: #10b981 !important;
+  display: inline-block !important;
+}
+
+/* Dedicated YouTube Video Tool Button */
+.tiptap-youtube-pill,
+button[title*="Insert YouTube Video"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 5px 12px !important;
+  border-radius: 9px !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #dc2626 !important;
+  border: 1px solid rgba(239, 68, 68, 0.22) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 120ms ease !important;
+  user-select: none !important;
+  line-height: 1.4 !important;
+}
+
+.tiptap-youtube-pill:hover,
+button[title*="Insert YouTube Video"]:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  color: #b91c1c !important;
+}
+
+.tiptap-youtube-pill svg,
+button[title*="Insert YouTube Video"] svg {
+  width: 15px !important;
+  height: 15px !important;
+  fill: currentColor !important;
+}
+
+/* Table Style & Manager Button */
+.tiptap-table-pill,
+button[title*="Insert & Style Tables"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 5px 11px !important;
+  border-radius: 9px !important;
+  background: rgba(37, 99, 235, 0.08) !important;
+  color: #2563eb !important;
+  border: 1px solid rgba(37, 99, 235, 0.2) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 120ms ease !important;
+  user-select: none !important;
+  line-height: 1.4 !important;
+}
+
+.tiptap-table-pill:hover,
+button[title*="Insert & Style Tables"]:hover {
+  background: rgba(37, 99, 235, 0.16) !important;
+  border-color: rgba(37, 99, 235, 0.35) !important;
+  color: #1d4ed8 !important;
+}
+
+/* Special Content Styles & Callouts Button */
+.tiptap-styles-pill,
+button[title*="Callout Boxes & Rich Styles"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 5px 11px !important;
+  border-radius: 9px !important;
+  background: rgba(217, 119, 6, 0.08) !important;
+  color: #d97706 !important;
+  border: 1px solid rgba(217, 119, 6, 0.22) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 120ms ease !important;
+  user-select: none !important;
+  line-height: 1.4 !important;
+}
+
+.tiptap-styles-pill:hover,
+button[title*="Callout Boxes & Rich Styles"]:hover {
+  background: rgba(217, 119, 6, 0.16) !important;
+  border-color: rgba(217, 119, 6, 0.35) !important;
+  color: #b45309 !important;
+}
+
+/* Ribbon Spacer */
+.tiptap-ribbon-spacer,
+div[class*="backdrop-blur-md rounded-t-2xl"] > div[class*="flex-1"] {
+  flex: 1 1 auto !important;
+}
+
+/* ==============================================================================
+   3. PROSE WRITING CANVAS (RICH TYPOGRAPHY & LAYOUT)
+   ============================================================================== */
 .tiptap.ProseMirror,
 .ProseMirror {
-  min-height: 480px;
-  padding: 24px 28px;
+  min-height: 520px !important;
+  padding: 28px 32px !important;
   outline: none !important;
-  color: #1e293b;
-  font-size: 16px;
-  line-height: 1.8;
-  word-break: break-word;
+  color: #1e293b !important;
+  font-size: 16px !important;
+  line-height: 1.85 !important;
+  word-break: break-word !important;
+  background: #ffffff !important;
 }
 
 .cms-theme-dark .tiptap.ProseMirror,
@@ -126,39 +331,42 @@ html.dark .tiptap.ProseMirror,
 html.dark .ProseMirror,
 .dark .tiptap.ProseMirror,
 .dark .ProseMirror {
-  color: #e2e8f0;
+  background: #0f172a !important;
+  color: #e2e8f0 !important;
 }
 
 .tiptap.ProseMirror p,
 .ProseMirror p {
-  margin: 0 0 1.25em 0;
+  margin: 0 0 1.25em 0 !important;
 }
 
 .tiptap.ProseMirror h1,
 .ProseMirror h1 {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1.25;
-  margin: 1.6em 0 0.6em 0;
-  color: #0f172a;
+  font-size: 2.2rem !important;
+  font-weight: 800 !important;
+  line-height: 1.25 !important;
+  margin: 1.6em 0 0.6em 0 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.02em !important;
 }
 
 .tiptap.ProseMirror h2,
 .ProseMirror h2 {
-  font-size: 1.5rem;
-  font-weight: 750;
-  line-height: 1.35;
-  margin: 1.4em 0 0.5em 0;
-  color: #0f172a;
+  font-size: 1.6rem !important;
+  font-weight: 750 !important;
+  line-height: 1.35 !important;
+  margin: 1.4em 0 0.5em 0 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.015em !important;
 }
 
 .tiptap.ProseMirror h3,
 .ProseMirror h3 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  line-height: 1.4;
-  margin: 1.2em 0 0.4em 0;
-  color: #0f172a;
+  font-size: 1.3rem !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  margin: 1.2em 0 0.4em 0 !important;
+  color: #0f172a !important;
 }
 
 .cms-theme-dark .tiptap.ProseMirror h1,
@@ -170,395 +378,307 @@ html.dark .tiptap.ProseMirror h3,
 .dark .tiptap.ProseMirror h1,
 .dark .tiptap.ProseMirror h2,
 .dark .tiptap.ProseMirror h3 {
-  color: #f8fafc;
+  color: #f8fafc !important;
 }
 
 .tiptap.ProseMirror ul,
 .ProseMirror ul {
-  list-style-type: disc;
-  padding-left: 1.6em;
-  margin: 0 0 1.25em 0;
+  list-style-type: disc !important;
+  padding-left: 1.6em !important;
+  margin: 0 0 1.25em 0 !important;
 }
 
 .tiptap.ProseMirror ol,
 .ProseMirror ol {
-  list-style-type: decimal;
-  padding-left: 1.6em;
-  margin: 0 0 1.25em 0;
+  list-style-type: decimal !important;
+  padding-left: 1.6em !important;
+  margin: 0 0 1.25em 0 !important;
 }
 
 .tiptap.ProseMirror li,
 .ProseMirror li {
-  margin-bottom: 0.4em;
+  margin-bottom: 0.4em !important;
 }
 
 .tiptap.ProseMirror blockquote,
 .ProseMirror blockquote {
-  border-left: 4px solid #ef4444;
-  padding: 10px 18px;
-  margin: 1.5em 0;
-  background: rgba(239, 68, 68, 0.05);
-  border-radius: 0 10px 10px 0;
-  color: #475569;
-  font-style: italic;
+  border-left: 4px solid #ef4444 !important;
+  padding: 12px 20px !important;
+  margin: 1.6em 0 !important;
+  background: rgba(239, 68, 68, 0.05) !important;
+  border-radius: 0 12px 12px 0 !important;
+  color: #475569 !important;
+  font-style: italic !important;
 }
 
 .cms-theme-dark .tiptap.ProseMirror blockquote,
 html.dark .tiptap.ProseMirror blockquote,
 .dark .tiptap.ProseMirror blockquote {
-  background: rgba(239, 68, 68, 0.12);
-  color: #cbd5e1;
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #cbd5e1 !important;
 }
 
 .tiptap.ProseMirror hr,
 .ProseMirror hr {
-  border: 0;
-  border-top: 2px dashed #cbd5e1;
-  margin: 2em 0;
+  border: 0 !important;
+  border-top: 2px dashed #cbd5e1 !important;
+  margin: 2em 0 !important;
 }
 
 .cms-theme-dark .tiptap.ProseMirror hr,
 html.dark .tiptap.ProseMirror hr,
 .dark .tiptap.ProseMirror hr {
-  border-top-color: #334155;
+  border-top-color: #334155 !important;
 }
 
 .tiptap.ProseMirror code,
 .ProseMirror code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.88em;
-  background: rgba(148, 163, 184, 0.18);
-  padding: 2px 6px;
-  border-radius: 5px;
-  color: #dc2626;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 0.88em !important;
+  background: rgba(148, 163, 184, 0.18) !important;
+  padding: 2px 6px !important;
+  border-radius: 5px !important;
+  color: #dc2626 !important;
 }
 
-.cms-theme-dark .tiptap.ProseMirror code,
-html.dark .tiptap.ProseMirror code,
-.dark .tiptap.ProseMirror code {
-  background: rgba(148, 163, 184, 0.22);
-  color: #f87171;
+/* Callout Boxes Rendered in Content */
+.callout-box,
+div[data-callout] {
+  margin: 1.6em 0 !important;
+  padding: 16px 20px !important;
+  border-radius: 14px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
 }
 
-/* Tables inside Editor */
+.callout-box.protip,
+div[data-callout="protip"] {
+  background: rgba(37, 99, 235, 0.06) !important;
+  border-color: rgba(37, 99, 235, 0.25) !important;
+  color: #1e3a8a !important;
+}
+
+.callout-box.warning,
+div[data-callout="warning"] {
+  background: rgba(217, 119, 6, 0.06) !important;
+  border-color: rgba(217, 119, 6, 0.25) !important;
+  color: #78350f !important;
+}
+
+.callout-box.success,
+div[data-callout="success"] {
+  background: rgba(16, 185, 129, 0.06) !important;
+  border-color: rgba(16, 185, 129, 0.25) !important;
+  color: #064e3b !important;
+}
+
+.callout-box.danger,
+div[data-callout="danger"] {
+  background: rgba(239, 68, 68, 0.06) !important;
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  color: #7f1d1d !important;
+}
+
+/* Tables inside ProseMirror */
 .tiptap.ProseMirror table,
 .ProseMirror table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1.5em 0;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  overflow: hidden;
+  border-collapse: collapse !important;
+  width: 100% !important;
+  margin: 1.6em 0 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
 }
 
 .tiptap.ProseMirror table th,
 .ProseMirror table th {
-  background: #f1f5f9;
-  font-weight: 700;
-  text-align: left;
-  padding: 10px 14px;
-  border: 1px solid #cbd5e1;
-  color: #0f172a;
+  background: #f1f5f9 !important;
+  font-weight: 700 !important;
+  text-align: left !important;
+  padding: 12px 16px !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  font-size: 13.5px !important;
 }
 
 .tiptap.ProseMirror table td,
 .ProseMirror table td {
-  padding: 10px 14px;
-  border: 1px solid #e2e8f0;
-  color: #334155;
+  padding: 11px 16px !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+  font-size: 14px !important;
 }
 
 .tiptap.ProseMirror table tr:nth-child(even),
 .ProseMirror table tr:nth-child(even) {
-  background: #f8fafc;
-}
-
-.cms-theme-dark .tiptap.ProseMirror table,
-html.dark .tiptap.ProseMirror table,
-.dark .tiptap.ProseMirror table {
-  border-color: #334155;
-}
-
-.cms-theme-dark .tiptap.ProseMirror table th,
-html.dark .tiptap.ProseMirror table th,
-.dark .tiptap.ProseMirror table th {
-  background: #1e293b;
-  border-color: #334155;
-  color: #f8fafc;
-}
-
-.cms-theme-dark .tiptap.ProseMirror table td,
-html.dark .tiptap.ProseMirror table td,
-.dark .tiptap.ProseMirror table td {
-  border-color: #334155;
-  color: #cbd5e1;
-}
-
-.cms-theme-dark .tiptap.ProseMirror table tr:nth-child(even),
-html.dark .tiptap.ProseMirror table tr:nth-child(even),
-.dark .tiptap.ProseMirror table tr:nth-child(even) {
-  background: rgba(30, 41, 59, 0.4);
-}
-
-/* Image Node Views */
-.tiptap-image-wrapper {
-  margin: 1.75em 0;
-  position: relative;
-  transition: all 150ms ease;
-}
-
-.tiptap-image-wrapper[data-alignment="center"] {
-  text-align: center;
-}
-
-.tiptap-image-wrapper[data-alignment="left"] {
-  text-align: left;
-}
-
-.tiptap-image-wrapper[data-alignment="right"] {
-  text-align: right;
-}
-
-.tiptap-image-wrapper img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 14px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--cms-border, #e2e8f0);
-  transition: transform 140ms ease, box-shadow 140ms ease;
-}
-
-.tiptap-image-wrapper img:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.tiptap-image-caption {
-  margin-top: 8px;
-  font-size: 13.5px;
-  color: #64748b;
-  font-style: italic;
-  text-align: center;
-}
-
-.cms-theme-dark .tiptap-image-caption,
-html.dark .tiptap-image-caption,
-.dark .tiptap-image-caption {
-  color: #94a3b8;
-}
-
-/* Youtube Embed Node */
-.tiptap-youtube-wrapper {
-  margin: 1.75em 0;
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-  border: 1px solid var(--cms-border, #e2e8f0);
-}
-
-.tiptap-youtube-wrapper iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
+  background: #f8fafc !important;
 }
 
 /* Terminal Node View */
-.code-terminal-block {
-  margin: 1.75em 0;
-  background: #090d16;
-  border: 1px solid #1e293b;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  color: #f8fafc;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+.code-terminal-block,
+div[data-terminal-block] {
+  margin: 1.8em 0 !important;
+  background: #090d16 !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35) !important;
+  color: #f8fafc !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
 }
 
-.code-terminal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  background: #0f172a;
-  border-bottom: 1px solid #1e293b;
+.code-terminal-block pre,
+div[data-terminal-block] pre {
+  padding: 18px 22px !important;
+  font-size: 13.5px !important;
+  line-height: 1.65 !important;
+  margin: 0 !important;
+  background: #090d16 !important;
+  color: #e2e8f0 !important;
+  overflow-x: auto !important;
 }
 
-.code-terminal-dots {
-  display: flex;
-  gap: 6px;
+/* Image Wrappers */
+.tiptap-image-wrapper,
+.article-image-card {
+  margin: 2em 0 !important;
+  position: relative !important;
+  text-align: center !important;
 }
 
-.code-terminal-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
+.tiptap-image-wrapper img,
+.article-image-card img {
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid #e2e8f0 !important;
 }
 
-.code-terminal-dot.red { background: #ef4444; }
-.code-terminal-dot.yellow { background: #f59e0b; }
-.code-terminal-dot.green { background: #10b981; }
-
-.code-terminal-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #94a3b8;
-  letter-spacing: 0.04em;
+/* YouTube Video Wrapper */
+.article-youtube-wrapper,
+div[data-youtube-video] {
+  margin: 2em auto !important;
+  max-width: 900px !important;
+  width: 100% !important;
 }
 
-.code-terminal-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.article-youtube-wrapper iframe,
+div[data-youtube-video] iframe {
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
 }
 
-.code-terminal-copy-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* ==============================================================================
+   4. EDITOR MODALS — RESPONSIVE LAYER
+   The look (colors, radius, spacing, dark mode) comes from the Tailwind utilities
+   on each modal (see src/tailwind.css). This block only adds what utilities
+   can't: stacking above the CMS chrome, safe scrolling and small-screen tweaks.
+   ============================================================================== */
+div[class*="fixed inset-0 z-50"] {
+  z-index: 100000 !important;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
-.code-terminal-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+/* Every modal card: never taller than the viewport, scroll inside instead of clipping */
+div[class*="fixed inset-0 z-50"] > div[class*="bg-white"] {
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
-.code-terminal-body {
-  padding: 16px 20px;
-  font-size: 13.5px;
-  line-height: 1.6;
+/* Embedded YouTube preview must never overflow the card */
+div[class*="fixed inset-0 z-50"] iframe {
+  max-width: 100%;
+}
+
+/* Long URLs / file names must wrap instead of stretching the card */
+div[class*="fixed inset-0 z-50"] code,
+div[class*="fixed inset-0 z-50"] pre {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+div[class*="fixed inset-0 z-50"] pre {
   overflow-x: auto;
 }
 
-/* Link Card Node View */
-.rich-link-card {
-  margin: 1.5em 0;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  background: #ffffff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
-  transition: all 140ms ease;
-  overflow: hidden;
+/* Tablets & phones */
+@media (max-width: 640px) {
+  div[class*="fixed inset-0 z-50"] {
+    padding: 8px !important;
+    align-items: flex-end !important;
+  }
+
+  div[class*="fixed inset-0 z-50"] > div[class*="bg-white"] {
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+    width: 100%;
+    max-width: 100% !important;
+    padding: 16px !important;
+    border-radius: 18px !important;
+  }
+
+  /* Footer action rows: full-width, tappable buttons */
+  div[class*="fixed inset-0 z-50"] > div[class*="bg-white"] .border-t.justify-end,
+  div[class*="fixed inset-0 z-50"] > div[class*="bg-white"] [class*="justify-end"][class*="border-t"] {
+    flex-wrap: wrap;
+  }
+
+  div[class*="fixed inset-0 z-50"] > div[class*="bg-white"] [class*="justify-end"][class*="border-t"] > button {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  /* 4-up segmented controls become 2x2 */
+  div[class*="fixed inset-0 z-50"] .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Inputs: 16px stops iOS from zooming the page on focus */
+  div[class*="fixed inset-0 z-50"] input,
+  div[class*="fixed inset-0 z-50"] textarea,
+  div[class*="fixed inset-0 z-50"] select {
+    font-size: 16px;
+  }
 }
 
-.rich-link-card:hover {
-  border-color: #ef4444;
-  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.12);
-  transform: translateY(-1px);
+/* Very small phones */
+@media (max-width: 380px) {
+  div[class*="fixed inset-0 z-50"] > div[class*="bg-white"] {
+    padding: 12px !important;
+  }
 }
 
-.cms-theme-dark .rich-link-card,
-html.dark .rich-link-card,
-.dark .rich-link-card {
-  background: #0f172a;
-  border-color: #334155;
+/* Embedded media inside the article column is always fluid */
+.tiptap.ProseMirror iframe,
+.tiptap.ProseMirror video,
+.tiptap.ProseMirror img {
+  max-width: 100%;
 }
 
-/* Modals Overlay & Box */
-.tiptap-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
+.tiptap.ProseMirror table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
-.tiptap-modal-dialog {
-  background: #ffffff;
-  border-radius: 20px;
-  max-width: 820px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-}
+/* Editor ribbon scrolls horizontally on small screens instead of wrapping into a tall mess */
+@media (max-width: 768px) {
+  .tiptap-ribbon-menubar {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
 
-.cms-theme-dark .tiptap-modal-dialog,
-html.dark .tiptap-modal-dialog,
-.dark .tiptap-modal-dialog {
-  background: #0f172a;
-  border-color: #334155;
-  color: #f1f5f9;
-}
-
-.tiptap-modal-header {
-  padding: 18px 24px;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.cms-theme-dark .tiptap-modal-header,
-html.dark .tiptap-modal-header,
-.dark .tiptap-modal-header {
-  border-bottom-color: #334155;
-}
-
-.tiptap-modal-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 12px 24px 0 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.cms-theme-dark .tiptap-modal-tabs,
-html.dark .tiptap-modal-tabs,
-.dark .tiptap-modal-tabs {
-  border-bottom-color: #334155;
-}
-
-.tiptap-modal-tab-btn {
-  padding: 8px 16px;
-  border-radius: 10px 10px 0 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: #64748b;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-}
-
-.tiptap-modal-tab-btn.active {
-  color: #dc2626;
-  border-bottom-color: #dc2626;
-  background: rgba(220, 38, 38, 0.05);
-}
-
-.tiptap-modal-body {
-  padding: 24px;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.tiptap-modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.cms-theme-dark .tiptap-modal-footer,
-html.dark .tiptap-modal-footer,
-.dark .tiptap-modal-footer {
-  border-top-color: #334155;
+  .tiptap-ribbon-menubar > * {
+    flex-shrink: 0;
+  }
 }

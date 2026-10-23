@@ -246,7 +246,7 @@ export default function ImageNodeView({
 
   return (
     <NodeViewWrapper 
-      className="relative my-6 group/img transition-all select-none"
+      className="tw-scope relative my-6 group/img transition-all select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

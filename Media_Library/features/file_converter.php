@@ -130,6 +130,14 @@ function file_converter_send_json(array $payload): void {
         header('Cache-Control: no-cache, no-store, must-revalidate');
     }
     echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    // Send the response to the browser right now; anything registered with register_shutdown_function (e.g. backups) runs afterwards
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+    } elseif (function_exists('litespeed_finish_request')) {
+        @litespeed_finish_request();
+    } else {
+        @flush();
+    }
     exit;
 }
 
@@ -195,8 +203,12 @@ function file_converter_convert_file(string $sourcePath, string $outputPath, str
                     $im->setSamplingFactors(['1x1', '1x1', '1x1']);
                 } catch (\Throwable $e) {}
 
-                // Flatten on solid white background in case source image has alpha channel
-                try {
+                // Flatten on solid white background only when the image really has transparency
+                $hasAlpha = true;
+                try { $hasAlpha = (bool)$im->getImageAlphaChannel(); } catch (\Throwable $e) {}
+                if (!$hasAlpha) {
+                    $im->writeImage($outputPath);
+                } else try {
                     $im->setImageBackgroundColor('white');
                     $flattened = $im->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
                     $flattened->writeImage($outputPath);
@@ -304,8 +316,8 @@ function file_converter_convert_file(string $sourcePath, string $outputPath, str
             $cmd = sprintf(
                 '%s -s format png %s --out %s 2>&1',
                 escapeshellarg($sipsPath),
-                $sourcePathEsc,
-                $outputPathEsc
+                escapeshellarg($sourcePath),
+                escapeshellarg($outputPath)
             );
         }
 
@@ -412,7 +424,14 @@ function file_converter_handle(
     string $baseUrl,
     ?callable $autoBackup = null
 ): void {
-    file_converter_cleanup_old_jobs();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        @session_write_close();
+    }
+    $cleanupMarker = sys_get_temp_dir() . '/kiuq_convert_cleanup.stamp';
+    if (!is_file($cleanupMarker) || (time() - (int)@filemtime($cleanupMarker)) > 300) {
+        @touch($cleanupMarker);
+        file_converter_cleanup_old_jobs();
+    }
     $tempBase = file_converter_ensure_temp_dir();
 
     // ── Direct Download Streaming ──
@@ -522,12 +541,10 @@ function file_converter_handle(
                 if (@copy($tempOutput, $destination)) {
                     $savedToLibrary = true;
                     if ($autoBackup && is_callable($autoBackup)) {
-                        try {
-                            $backupList = is_array($destination) ? $destination : [(string)$destination];
-                            @$autoBackup($backupList);
-                        } catch (\Throwable $e) {
-                            // Suppress backup exceptions so conversion response is always cleanly returned
-                        }
+                        $backupList = [(string)$destination];
+                        register_shutdown_function(function () use ($autoBackup, $backupList) {
+                            try { @$autoBackup($backupList); } catch (\Throwable $e) {}
+                        });
                     }
                     $relPath = $current ? ($current . '/' . $finalName) : $finalName;
                     $publicUrl = rtrim($baseUrl, '/') . '/' . ltrim($relPath, '/');
@@ -536,7 +553,9 @@ function file_converter_handle(
 
             // Prepare download token
             $dlToken = bin2hex(random_bytes(12)) . '.' . $targetFormat;
-            @copy($tempOutput, $tempBase . '/' . $dlToken);
+            if (!@rename($tempOutput, $tempBase . '/' . $dlToken)) {
+                @copy($tempOutput, $tempBase . '/' . $dlToken);
+            }
             file_converter_delete_tree($jobDir);
 
             file_converter_send_json([
@@ -717,17 +736,15 @@ function file_converter_handle(
                 if (@copy($convertedPath, $destination)) {
                     $savedToLibrary = true;
                     if ($autoBackup && is_callable($autoBackup)) {
-                        try {
-                            $backupList = is_array($destination) ? $destination : [(string)$destination];
-                            @$autoBackup($backupList);
-                        } catch (\Throwable $e) {
-                            // Suppress backup exceptions
-                        }
+                        $backupList = [(string)$destination];
+                        register_shutdown_function(function () use ($autoBackup, $backupList) {
+                            try { @$autoBackup($backupList); } catch (\Throwable $e) {}
+                        });
                     }
                 }
             }
 
-            // Update manifest
+            // Update manifest (locked read-modify-write so parallel steps don't overwrite each other)
             $convertedRecord = [
                 'index' => $fileIndex,
                 'original_name' => $origName,
@@ -738,8 +755,13 @@ function file_converter_handle(
                 'saved' => $savedToLibrary,
                 'duration' => $duration,
             ];
+            $lockFp = @fopen($jobDir . '/manifest.lock', 'c');
+            if ($lockFp) @flock($lockFp, LOCK_EX);
+            $fresh = json_decode((string)file_get_contents($manifestFile), true);
+            if (is_array($fresh)) $manifest = $fresh;
             $manifest['converted_files'][$fileIndex] = $convertedRecord;
-            file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT));
+            file_put_contents($manifestFile, json_encode($manifest));
+            if ($lockFp) { @flock($lockFp, LOCK_UN); @fclose($lockFp); }
 
             // Create individual download token
             $dlToken = bin2hex(random_bytes(10)) . '.' . $targetFormat;

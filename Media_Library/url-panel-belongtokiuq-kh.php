@@ -4752,8 +4752,11 @@ if (!$isPjax):
 <head>
 <meta charset="UTF-8">
 <title><?php echo htmlspecialchars($appSettings["app_name"]); ?> - Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<?php if (!empty($appSettings["favicon_url"])): ?><link rel="icon" href="<?php echo htmlspecialchars($appSettings["favicon_url"]); ?>"><?php endif; ?>
+<link rel="icon" type="image/x-icon" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon.ico?v=20" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon-32x32.png?v=20" sizes="32x32">
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon-16x16.png?v=20" sizes="16x16">
+<link rel="shortcut icon" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon.png?v=20">
+<link rel="apple-touch-icon" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/apple-touch-icon.png?v=20">
 <style>
 :root, html {
     color-scheme: <?php echo $preferredTheme === 'dark' ? 'dark' : 'light'; ?>;

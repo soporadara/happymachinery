@@ -1,0 +1,31 @@
+{
+    "items": [
+        {
+            "id": "1083a12d7d38fcd5",
+            "user_id": "main-admin",
+            "username": "admin@kiuq (CMS SSO)",
+            "ip": "",
+            "user_agent": "",
+            "status": "success",
+            "created_at": 1792659900
+        },
+        {
+            "id": "6b51ec435d383912",
+            "user_id": "main-admin",
+            "username": "admin@kiuq (CMS SSO)",
+            "ip": "",
+            "user_agent": "",
+            "status": "success",
+            "created_at": 1792659891
+        },
+        {
+            "id": "7fdaa3eed4298cc8",
+            "user_id": "main-admin",
+            "username": "admin@kiuq (CMS SSO)",
+            "ip": "127.0.0.1",
+            "user_agent": "",
+            "status": "success",
+            "created_at": 1792654817
+        }
+    ]
+}

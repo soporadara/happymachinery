@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /happymachinery/
+
+  # Allow direct access to existing files, PHP scripts, and folders
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Route SPA pages (e.g. /ourcmskiuq) to index.html
+  RewriteRule ^ index.html [L]
+</IfModule>

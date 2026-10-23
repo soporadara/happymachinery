@@ -387,15 +387,16 @@
 }
 
 /* Recovery Modal */
-.cms-modal-backdrop {
+.cms-login-viewport .cms-modal-backdrop {
   position: fixed !important;
   inset: 0 !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  width: 100vw !important;
+  width: 100% !important;
   height: 100vh !important;
+  height: 100dvh !important;
   background: rgba(3, 7, 18, 0.78) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
@@ -467,3 +468,54 @@
 .cms-modal-btn.primary:hover {
   background: #2563eb;
 }
+
+/* ==============================================================================
+   Responsive: tablets, phones & short (landscape) screens
+   ============================================================================== */
+@media (max-width: 640px), (max-height: 720px) {
+  .cms-login-viewport {
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    justify-content: flex-start;
+    padding-top: 84px;
+    padding-bottom: 32px;
+  }
+
+  /* Top bar becomes part of the flow's top gutter instead of floating over the logo */
+  .cms-login-top-bar {
+    top: 16px;
+    left: 16px;
+  }
+
+  .cms-login-card-container {
+    margin: auto 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .cms-login-viewport {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .cms-login-title {
+    font-size: 1.85rem;
+  }
+
+  .cms-login-brand-logo {
+    height: 46px;
+    max-width: 210px;
+  }
+
+  .cms-return-btn {
+    padding: 8px 14px;
+    font-size: 0.82rem;
+  }
+
+  .cms-recovery-modal {
+    padding: 22px 18px;
+  }
+}
+

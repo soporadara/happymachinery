@@ -63,6 +63,7 @@ export interface BlogReply {
   id: number
   author: string
   email?: string
+  avatar?: string
   text: string
   date: string
   isSeller?: boolean
@@ -75,12 +76,64 @@ export interface BlogComment {
   postTitle: string
   author: string
   email?: string
+  avatar?: string
   text: string
   date: string
   status: 'Pending' | 'Approved' | 'Spam'
   reply?: { author: string; text: string; date: string }
   replies?: BlogReply[]
   likes?: number
+}
+
+export const getUserProfileAvatar = (email?: string, name?: string): string => {
+  if (!email || typeof email !== 'string') {
+    const fallbackName = name ? encodeURIComponent(name.trim()) : 'User'
+    return `https://ui-avatars.com/api/?name=${fallbackName}&background=0284c7&color=fff&bold=true&size=128`
+  }
+
+  const cleanEmail = email.trim().toLowerCase()
+  const fallbackName = name ? encodeURIComponent(name.trim()) : encodeURIComponent(cleanEmail.split('@')[0])
+
+  // 1. Check logged-in CMS admin session
+  try {
+    const raw = typeof localStorage !== 'undefined' ? (localStorage.getItem('hm_admin_session') || sessionStorage.getItem('hm_admin_session')) : null
+    if (raw) {
+      const session = JSON.parse(raw)
+      if (session?.user && (session.user.email?.toLowerCase() === cleanEmail || session.user.username?.toLowerCase() === cleanEmail)) {
+        if (session.user.avatar) return session.user.avatar
+      }
+    }
+  } catch {}
+
+  // 2. Check Firebase Authentication user object stored in localStorage
+  if (typeof localStorage !== 'undefined') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || ''
+        if (key.startsWith('firebase:authUser') || key.includes('firebase:user') || key.includes('authUser')) {
+          const raw = localStorage.getItem(key)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (parsed.email?.toLowerCase() === cleanEmail && parsed.photoURL) {
+              return parsed.photoURL
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Known administrator accounts
+  if (cleanEmail === 'soporadara@kiuq.com' || cleanEmail === 'admin@happymachinery.com') {
+    return 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
+  }
+  if (cleanEmail === 'support@happymachinery.com') {
+    return '/images/favicon.webp'
+  }
+
+  // 4. Resolve via Unavatar (automatically searches Gravatar, Google, GitHub, and Firebase connected profiles)
+  const defaultFallback = encodeURIComponent(`https://ui-avatars.com/api/?name=${fallbackName}&background=0284c7&color=fff&bold=true&size=128`)
+  return `https://unavatar.io/${encodeURIComponent(cleanEmail)}?fallback=${defaultFallback}`
 }
 
 export interface CartOrder {
@@ -280,7 +333,7 @@ export const DEFAULT_POSTS: BlogPost[] = [
     image: '/images/why-choose-v900-jobsite.png',
     date: 'July 18, 2026',
     readTime: '5 min read',
-    author: 'Antigravity Machinery Team'
+    author: 'Happy Machinery'
   },
   {
     id: 2,
@@ -304,7 +357,7 @@ export const DEFAULT_POSTS: BlogPost[] = [
     image: '/images/fork-red-jobsite.png',
     date: 'July 12, 2026',
     readTime: '6 min read',
-    author: 'Field Engineering Dept.'
+    author: 'Happy Machinery'
   },
   {
     id: 3,
@@ -329,7 +382,7 @@ export const DEFAULT_POSTS: BlogPost[] = [
     image: '/images/fork-blue-jobsite.png',
     date: 'July 05, 2026',
     readTime: '4 min read',
-    author: 'Technical Service Division'
+    author: 'Happy Machinery'
   }
 ]
 

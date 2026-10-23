@@ -248,3 +248,49 @@
   border-color: #2563eb;
   color: #ffffff;
 }
+
+/* ==============================================================================
+   Responsive
+   ============================================================================== */
+@media (max-width: 560px) {
+  .maintenance-splash-overlay {
+    padding: 14px;
+    align-items: flex-start;
+  }
+
+  .maintenance-splash-card {
+    margin: auto 0;
+    padding: 30px 20px;
+    border-radius: 20px;
+  }
+
+  .maintenance-splash-message {
+    font-size: 0.92rem;
+    margin-bottom: 22px;
+  }
+
+  .maintenance-countdown-box {
+    padding: 14px 12px;
+  }
+
+  .maintenance-countdown-digits {
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .maintenance-countdown-unit {
+    min-width: 44px;
+  }
+
+  .maintenance-countdown-unit strong {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .maintenance-splash-card {
+    padding: 24px 14px;
+  }
+}
+

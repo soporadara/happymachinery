@@ -878,8 +878,8 @@ html.dark .blog-body-image-caption {
 }
 
 .raf-comment-avatar {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: #e2e8f0;
   color: #475569;
@@ -887,8 +887,27 @@ html.dark .blog-body-image-caption {
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: 1rem;
   flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border: 2px solid #ffffff;
+  outline: 1.5px solid #cbd5e1;
+}
+
+.app-shell.dark .raf-comment-avatar {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-color: #0f172a;
+  outline-color: #334155;
+}
+
+.raf-comment-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .raf-comment-content {
@@ -898,17 +917,58 @@ html.dark .blog-body-image-caption {
 .raf-comment-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 6px;
 }
 
-.raf-comment-meta strong {
-  font-size: 0.92rem;
+.raf-comment-author-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.raf-comment-author-name {
+  font-size: 0.94rem;
+  font-weight: 700;
   color: #0f172a;
 }
 
-.app-shell.dark .raf-comment-meta strong {
+.app-shell.dark .raf-comment-author-name {
   color: #f1f5f9;
+}
+
+.raf-comment-email-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4.5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.22);
+  color: #0284c7;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.35;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.raf-comment-email-chip:hover {
+  background: rgba(2, 132, 199, 0.14);
+  border-color: rgba(2, 132, 199, 0.35);
+}
+
+.app-shell.dark .raf-comment-email-chip {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.app-shell.dark .raf-comment-email-chip:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.45);
 }
 
 .raf-comment-meta time {
@@ -1011,21 +1071,41 @@ html.dark .blog-body-image-caption {
 }
 
 .raf-reply-mini-avatar {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #e2e8f0;
   color: #475569;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #cbd5e1;
+}
+
+.raf-reply-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.raf-reply-author-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .raf-reply-mini-avatar.seller {
   background: #0066ff;
   color: #ffffff;
+  border-color: #0066ff;
 }
 
 .app-shell.dark .raf-reply-mini-avatar {

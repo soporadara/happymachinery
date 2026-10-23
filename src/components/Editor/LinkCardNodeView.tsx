@@ -162,7 +162,7 @@ export default function LinkCardNodeView({
 
   return (
     <NodeViewWrapper 
-      className="relative my-6 group/linkcard transition-all select-none"
+      className="tw-scope relative my-6 group/linkcard transition-all select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

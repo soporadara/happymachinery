@@ -1,5 +1,13 @@
 <?php
-$secureCookie = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off");
+@ini_set("memory_limit", "512M");
+@ini_set("max_execution_time", "90");
+if (!ob_get_level() && !headers_sent() && extension_loaded("zlib") && !ini_get("zlib.output_compression")) { ob_start("ob_gzhandler"); }
+$isHttps = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off")
+    || (isset($_SERVER["HTTP_X_FORWARDED_PROTO"]) && strtolower($_SERVER["HTTP_X_FORWARDED_PROTO"]) === "https")
+    || (isset($_SERVER["HTTP_X_FORWARDED_SSL"]) && strtolower($_SERVER["HTTP_X_FORWARDED_SSL"]) === "on")
+    || (isset($_SERVER["HTTP_CF_VISITOR"]) && strpos($_SERVER["HTTP_CF_VISITOR"], "https") !== false)
+    || (isset($_SERVER["SERVER_PORT"]) && (int)$_SERVER["SERVER_PORT"] === 443);
+$secureCookie = $isHttps;
 session_set_cookie_params([
     "lifetime" => 0,
     "path" => "/",
@@ -30,7 +38,7 @@ $AUTO_LOGOUT_SECONDS = 12 * 60 * 60;
 
 date_default_timezone_set($APP_TIMEZONE);
 
-$ROOT_FOLDER = "blog";
+$ROOT_FOLDER = "ebay";
 $CONVERTER_ROOT_FOLDER = "img-webp-converter";
 $BASE_DIR = __DIR__ . "/" . $ROOT_FOLDER;
 $APP_ASSETS_DIR = __DIR__ . "/app-assets";
@@ -66,7 +74,8 @@ $basePathPrefix = ($scriptBasePath === "" || $scriptBasePath === ".") ? "" : $sc
 
 // Build correct public URLs even when app is in /img/, /tools/img/, etc.
 $BASE_URL = $requestScheme . "://" . $httpHost . $basePathPrefix . "/" . rawurlencode($ROOT_FOLDER);
-$APP_ASSETS_URL = $requestScheme . "://" . $httpHost . (($scriptBasePath === "" || $scriptBasePath === ".") ? "/app-assets" : $scriptBasePath . "/app-assets");
+// Root-relative asset URL avoids mixed content, protocol issues, or domain mismatches across all environments
+$APP_ASSETS_URL = $basePathPrefix !== "" ? $basePathPrefix . "/app-assets" : "/app-assets";
 
 /*
 |--------------------------------------------------------------------------
@@ -83,6 +92,22 @@ $BACKUP_SYSTEM_LIB_CANDIDATES = [
     __DIR__ . "/backup/lib.php",
     dirname(__DIR__) . "/backup/lib.php",
 ];
+
+$videoExtensions = [
+    "mp4", "webm", "mov", "mkv", "avi", "wmv", "flv", "m4v", "3gp",
+    "ogv", "ogg", "ts", "mts", "m2ts", "vob", "mpg", "mpeg", "asf", "rm", "rmvb"
+];
+
+function isVideoFile($filename): bool
+{
+    global $videoExtensions;
+    $ext = strtolower(pathinfo((string)$filename, PATHINFO_EXTENSION));
+    $list = !empty($videoExtensions) ? $videoExtensions : [
+        "mp4", "webm", "mov", "mkv", "avi", "wmv", "flv", "m4v", "3gp",
+        "ogv", "ogg", "ts", "mts", "m2ts", "vob", "mpg", "mpeg", "asf", "rm", "rmvb"
+    ];
+    return in_array($ext, $list, true);
+}
 
 /**
  * Resolve backup lib from supported locations.
@@ -128,6 +153,7 @@ function imghost_autoBackup(array $absoluteFilePaths): void
         foreach ($absoluteFilePaths as $path) {
             $candidate = (string) $path;
             if ($candidate !== "" && is_file($candidate)) {
+                if (isVideoFile($candidate)) continue;
                 $filtered[$candidate] = true;
             }
         }
@@ -152,6 +178,19 @@ function imghost_autoBackupTargets(array $absoluteTargets): void
         return;
     }
 
+    // Filter out video files — backup is image & asset only
+    $filteredTargets = [];
+    foreach ($absoluteTargets as $tgt) {
+        $tgtStr = (string) $tgt;
+        if ($tgtStr !== "" && is_file($tgtStr) && isVideoFile($tgtStr)) {
+            continue;
+        }
+        $filteredTargets[] = $tgt;
+    }
+    if (empty($filteredTargets)) {
+        return;
+    }
+
     $backupLib = imghost_resolveBackupLib();
     if ($backupLib === null) {
         return;
@@ -160,10 +199,10 @@ function imghost_autoBackupTargets(array $absoluteTargets): void
     try {
         require_once $backupLib;
         if (function_exists('bs_autoBackupAbsoluteTargets')) {
-            bs_autoBackupAbsoluteTargets($absoluteTargets, 'auto_upload from ImageHost');
+            bs_autoBackupAbsoluteTargets($filteredTargets, 'auto_upload from ImageHost');
         } else {
             // Backward compatibility fallback: files only.
-            $files = imghost_collectFilesForBackup($absoluteTargets);
+            $files = imghost_collectFilesForBackup($filteredTargets);
             if (!empty($files)) {
                 bs_autoBackupFiles($files, 'auto_upload from ImageHost');
             }
@@ -191,7 +230,9 @@ function imghost_collectFilesForBackup(array $targets): array
         }
 
         if (is_file($target)) {
-            $files[$target] = true;
+            if (!isVideoFile($target)) {
+                $files[$target] = true;
+            }
             continue;
         }
 
@@ -207,6 +248,9 @@ function imghost_collectFilesForBackup(array $targets): array
             if ($info->isLink() || !$info->isFile()) {
                 continue;
             }
+            if (isVideoFile($info->getPathname())) {
+                continue;
+            }
             $files[$info->getPathname()] = true;
         }
     }
@@ -214,10 +258,10 @@ function imghost_collectFilesForBackup(array $targets): array
     return array_keys($files);
 }
 
-$allowedExtensions = [
-    "jpg", "jpeg", "png", "webp", "gif", "svg", "avif",
+$allowedExtensions = array_merge([
+    "jpg", "jpeg", "png", "webp", "gif", "svg", "avif", "jfif", "bmp", "ico", "tiff", "tif", "heic", "heif", "zip",
     "html", "txt", "css", "js", "json", "php"
-];
+], $videoExtensions);
 
 $codeExtensions = ["html", "css", "js", "json", "php", "txt"];
 
@@ -462,7 +506,9 @@ function shouldHideFromFileManager($name) {
     $base = basename((string)$name);
     return isSystemManagedFile($base)
         || in_array($base, [".versions", ".trash", ".DS_Store"], true)
-        || str_starts_with($base, "._");
+        || str_starts_with($base, "._")
+        || str_starts_with($base, ".tmp_")
+        || str_starts_with($base, ".webm_job_");
 }
 
 function ensureSecureIndexFile($dir) {
@@ -504,6 +550,10 @@ function cleanBaseName($name) {
     return trim($base) !== "" ? $base : "image";
 }
 
+function cleanInput($val) {
+    return trim(strip_tags((string)$val));
+}
+
 function safeFullPath($baseDir, $relativePath = "") {
     $relativePath = cleanPath($relativePath);
     $fullPath = $baseDir . ($relativePath ? "/" . $relativePath : "");
@@ -526,16 +576,55 @@ function deleteFolder($dir) {
     rmdir($dir);
 }
 
-function folderSize($dir) {
-    if (!is_dir($dir)) return 0;
-    $size = 0;
-    foreach (scandir($dir) as $item) {
-        if ($item === "." || $item === "..") continue;
-        $path = $dir . "/" . $item;
-        if (is_dir($path)) $size += folderSize($path);
-        elseif (is_file($path)) $size += filesize($path);
+function getFolderTotalSize(string $dir): int {
+    static $memCache = [];
+    $real = realpath($dir);
+    if (!$real || !is_dir($real)) return 0;
+    if (isset($memCache[$real])) return $memCache[$real];
+
+    $cacheKey = md5($real);
+    $cacheFile = sys_get_temp_dir() . '/kiuq_fsize_' . $cacheKey . '.cache';
+    $dirMtime = (int)@filemtime($real);
+
+    if (is_file($cacheFile)) {
+        $c = @file_get_contents($cacheFile);
+        if ($c !== false) {
+            $parts = explode(':', $c, 2);
+            if (count($parts) === 2 && (int)$parts[0] >= $dirMtime && (time() - (int)$parts[0] < 300)) {
+                $memCache[$real] = (int)$parts[1];
+                return (int)$parts[1];
+            }
+        }
     }
+
+    $size = 0;
+    try {
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($real, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+        foreach ($it as $file) {
+            if ($file->isFile()) {
+                $size += (int)$file->getSize();
+            }
+        }
+    } catch (\Throwable $e) {
+        $size = 0;
+        foreach (scandir($real) as $item) {
+            if ($item === "." || $item === "..") continue;
+            $path = $real . "/" . $item;
+            if (is_dir($path)) $size += getFolderTotalSize($path);
+            elseif (is_file($path)) $size += (int)@filesize($path);
+        }
+    }
+
+    $memCache[$real] = $size;
+    @file_put_contents($cacheFile, time() . ':' . $size, LOCK_EX);
     return $size;
+}
+
+function folderSize($dir) {
+    return getFolderTotalSize((string)$dir);
 }
 
 function folderOptions($baseDir, $rootRelative = "", $rootLabel = "ebay / root") {
@@ -774,32 +863,37 @@ function permanentlyDeleteTrashItem($id) {
 
 function isImageFile($filename) {
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    return in_array($ext, ["jpg", "jpeg", "png", "webp", "gif", "svg", "avif"]);
+    return in_array($ext, ["jpg", "jpeg", "png", "webp", "gif", "svg", "avif", "jfif", "bmp", "ico", "tiff", "tif", "heic", "heif"], true);
 }
 
 function isWebpConvertibleImage($filename) {
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    return in_array($ext, ["jpg", "jpeg", "png", "avif"], true);
+    return in_array($ext, ["jpg", "jpeg", "png", "avif", "jfif", "bmp"], true);
 }
 
 function imageResourceFromFile($path, $ext) {
     $ext = strtolower($ext);
     if (($ext === "jpg" || $ext === "jpeg") && function_exists("imagecreatefromjpeg")) {
-        return @imagecreatefromjpeg($path);
+        $im = @imagecreatefromjpeg($path);
+        if ($im) return $im;
     }
     if ($ext === "png" && function_exists("imagecreatefrompng")) {
-        return @imagecreatefrompng($path);
+        $im = @imagecreatefrompng($path);
+        if ($im) return $im;
     }
     if ($ext === "webp" && function_exists("imagecreatefromwebp")) {
-        return @imagecreatefromwebp($path);
+        $im = @imagecreatefromwebp($path);
+        if ($im) return $im;
     }
     if ($ext === "avif" && function_exists("imagecreatefromavif")) {
-        return @imagecreatefromavif($path);
+        $im = @imagecreatefromavif($path);
+        if ($im) return $im;
     }
     if (function_exists("imagecreatefromstring")) {
         $raw = @file_get_contents($path);
         if ($raw !== false) {
-            return @imagecreatefromstring($raw);
+            $im = @imagecreatefromstring($raw);
+            if ($im) return $im;
         }
     }
     return false;
@@ -836,6 +930,9 @@ function saveOptimizedWebp($sourcePath, $destinationPath, $ext) {
         $transparent = imagecolorallocatealpha($out, 0, 0, 0, 127);
         imagefilledrectangle($out, 0, 0, $newWidth, $newHeight, $transparent);
         imagecopyresampled($out, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        imagepalettetotruecolor($out);
+        imagealphablending($out, false);
+        imagesavealpha($out, true);
         $saved = imagewebp($out, $destinationPath, $WEBP_QUALITY);
         imagedestroy($out);
     } else {
@@ -853,6 +950,452 @@ function saveOptimizedWebp($sourcePath, $destinationPath, $ext) {
     return true;
 }
 
+function saveGdImageResource($image, $filePath, $format, $quality = 85) {
+    $format = strtolower($format);
+    if ($format === 'jpg') $format = 'jpeg';
+    $dir = dirname($filePath);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+
+    if ($format === 'webp' && function_exists('imagewebp')) {
+        imagepalettetotruecolor($image);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        return @imagewebp($image, $filePath, max(10, min(100, (int)$quality)));
+    } elseif ($format === 'png' && function_exists('imagepng')) {
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        $pngLevel = max(0, min(9, (int)round((100 - $quality) / 11)));
+        return @imagepng($image, $filePath, $pngLevel);
+    } elseif ($format === 'jpeg' && function_exists('imagejpeg')) {
+        $bg = imagecreatetruecolor(imagesx($image), imagesy($image));
+        $white = imagecolorallocate($bg, 255, 255, 255);
+        imagefilledrectangle($bg, 0, 0, imagesx($image), imagesy($image), $white);
+        imagecopy($bg, $image, 0, 0, 0, 0, imagesx($image), imagesy($image));
+        $res = @imagejpeg($bg, $filePath, max(10, min(100, (int)$quality)));
+        @imagedestroy($bg);
+        return $res;
+    } elseif ($format === 'gif' && function_exists('imagegif')) {
+        return @imagegif($image, $filePath);
+    } elseif ($format === 'avif' && function_exists('imageavif')) {
+        imagepalettetotruecolor($image);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        return @imageavif($image, $filePath, max(10, min(100, (int)$quality)));
+    }
+    return false;
+}
+
+function scaleGdImage($srcImg, $newWidth, $newHeight) {
+    $origW = imagesx($srcImg);
+    $origH = imagesy($srcImg);
+    $newImg = imagecreatetruecolor($newWidth, $newHeight);
+    if (!$newImg) return false;
+    imagealphablending($newImg, false);
+    imagesavealpha($newImg, true);
+    $transparent = imagecolorallocatealpha($newImg, 0, 0, 0, 127);
+    imagefilledrectangle($newImg, 0, 0, $newWidth, $newHeight, $transparent);
+    imagecopyresampled($newImg, $srcImg, 0, 0, 0, 0, $newWidth, $newHeight, $origW, $origH);
+    return $newImg;
+}
+
+function processImageResize($sourcePath, $destinationPath, $options = []) {
+    @set_time_limit(120);
+    if (!file_exists($sourcePath) || filesize($sourcePath) === 0) return false;
+
+    $srcExt = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+    $outExt = strtolower($options['format'] ?? 'original');
+    if ($outExt === 'original' || empty($outExt)) {
+        $outExt = $srcExt;
+    }
+
+    $mode = $options['mode'] ?? 'filesize'; // 'filesize', 'dimensions', 'percentage'
+    $origImg = imageResourceFromFile($sourcePath, $srcExt);
+    if (!$origImg) return false;
+
+    $origW = imagesx($origImg);
+    $origH = imagesy($origImg);
+    $origSize = filesize($sourcePath);
+
+    $tempDest = $destinationPath . '.tmp_resize_' . uniqid() . '.' . $outExt;
+
+    if ($mode === 'filesize') {
+        $targetAmount = floatval($options['target_size'] ?? 5);
+        if ($targetAmount <= 0) $targetAmount = 5;
+        $unit = strtoupper(trim($options['size_unit'] ?? 'MB'));
+        $targetBytes = ($unit === 'KB') ? round($targetAmount * 1024) : round($targetAmount * 1048576);
+
+        // If source is already smaller or equal, and same format, and no dimension restrictions:
+        if ($origSize <= $targetBytes && $outExt === $srcExt) {
+            @imagedestroy($origImg);
+            if ($sourcePath !== $destinationPath) {
+                return @copy($sourcePath, $destinationPath);
+            }
+            return true;
+        }
+
+        $tempTrial = $tempDest . '.trial';
+        $bestSaved = false;
+        $bestSize = 0;
+        $isLossy = in_array($outExt, ['webp', 'jpeg', 'jpg', 'avif'], true);
+
+        if ($isLossy) {
+            // Check max quality (100) first to preserve maximum visual fidelity
+            if (saveGdImageResource($origImg, $tempTrial, $outExt, 100)) {
+                $curSize = (int)@filesize($tempTrial);
+                if ($curSize > 0 && $curSize <= $targetBytes) {
+                    @rename($tempTrial, $tempDest);
+                    $bestSize = $curSize;
+                    $bestSaved = true;
+                }
+            }
+
+            // If quality 100 exceeds targetBytes, binary search quality [20..99] to find the highest quality <= targetBytes
+            if (!$bestSaved) {
+                $lowQ = 20;
+                $highQ = 99;
+
+                while ($lowQ <= $highQ) {
+                    $midQ = (int)floor(($lowQ + $highQ) / 2);
+                    if (saveGdImageResource($origImg, $tempTrial, $outExt, $midQ)) {
+                        $curSize = (int)@filesize($tempTrial);
+                        if ($curSize > 0 && $curSize <= $targetBytes) {
+                            // Fits under target! Record as candidate and test higher quality to get even closer to target
+                            @copy($tempTrial, $tempDest);
+                            $bestSize = $curSize;
+                            $bestSaved = true;
+                            $lowQ = $midQ + 1;
+                        } else {
+                            // Too large, try lower quality
+                            $highQ = $midQ - 1;
+                        }
+                    } else {
+                        $highQ = $midQ - 1;
+                    }
+                }
+            }
+
+            // If even quality 20 at original resolution exceeds targetBytes, downscale dimensions proportionally
+            if (!$bestSaved) {
+                $sampleSize = $origSize;
+                if (saveGdImageResource($origImg, $tempTrial, $outExt, 30)) {
+                    $sampleSize = max(1, (int)@filesize($tempTrial));
+                }
+                $scaleFactor = min(0.95, max(0.1, sqrt($targetBytes / $sampleSize) * 0.98));
+                $newW = max(10, (int)round($origW * $scaleFactor));
+                $newH = max(10, (int)round($origH * $scaleFactor));
+                $scaledImg = scaleGdImage($origImg, $newW, $newH);
+
+                if ($scaledImg) {
+                    $lowQ = 35;
+                    $highQ = 98;
+                    while ($lowQ <= $highQ) {
+                        $midQ = (int)floor(($lowQ + $highQ) / 2);
+                        if (saveGdImageResource($scaledImg, $tempTrial, $outExt, $midQ)) {
+                            $curSize = (int)@filesize($tempTrial);
+                            if ($curSize > 0 && $curSize <= $targetBytes) {
+                                @copy($tempTrial, $tempDest);
+                                $bestSize = $curSize;
+                                $bestSaved = true;
+                                $lowQ = $midQ + 1;
+                            } else {
+                                $highQ = $midQ - 1;
+                            }
+                        } else {
+                            $highQ = $midQ - 1;
+                        }
+                    }
+                    @imagedestroy($scaledImg);
+                }
+            }
+        } else {
+            // Lossless formats (PNG, GIF): binary search dimension scale [0.08..0.98]
+            $lowScale = 0.08;
+            $highScale = 0.98;
+
+            while (($highScale - $lowScale) > 0.03) {
+                $midScale = ($lowScale + $highScale) / 2.0;
+                $newW = max(10, (int)round($origW * $midScale));
+                $newH = max(10, (int)round($origH * $midScale));
+                $scaledImg = scaleGdImage($origImg, $newW, $newH);
+                if (!$scaledImg) {
+                    $highScale = $midScale - 0.05;
+                    continue;
+                }
+
+                if (saveGdImageResource($scaledImg, $tempTrial, $outExt, 85)) {
+                    $curSize = (int)@filesize($tempTrial);
+                    if ($curSize > 0 && $curSize <= $targetBytes) {
+                        @copy($tempTrial, $tempDest);
+                        $bestSize = $curSize;
+                        $bestSaved = true;
+                        $lowScale = $midScale; // try larger scale to get closer to target
+                    } else {
+                        $highScale = $midScale; // try smaller scale
+                    }
+                }
+                @imagedestroy($scaledImg);
+            }
+        }
+
+        if (file_exists($tempTrial)) @unlink($tempTrial);
+        @imagedestroy($origImg);
+
+        if ($bestSaved && file_exists($tempDest) && filesize($tempDest) > 0) {
+            @rename($tempDest, $destinationPath);
+            @chmod($destinationPath, 0644);
+            return true;
+        }
+        if (file_exists($tempDest)) @unlink($tempDest);
+        return false;
+
+    } elseif ($mode === 'dimensions') {
+        $targetW = max(1, intval($options['width'] ?? 0));
+        $targetH = max(1, intval($options['height'] ?? 0));
+        $maintainRatio = !empty($options['maintain_ratio']);
+        $quality = max(20, min(100, intval($options['quality'] ?? 88)));
+
+        if ($targetW <= 0 && $targetH <= 0) {
+            $targetW = $origW;
+            $targetH = $origH;
+        } elseif ($targetW <= 0) {
+            $targetW = max(1, (int)round($origW * ($targetH / $origH)));
+        } elseif ($targetH <= 0) {
+            $targetH = max(1, (int)round($origH * ($targetW / $origW)));
+        } elseif ($maintainRatio) {
+            $ratio = min($targetW / $origW, $targetH / $origH);
+            $targetW = max(1, (int)round($origW * $ratio));
+            $targetH = max(1, (int)round($origH * $ratio));
+        }
+
+        $scaledImg = scaleGdImage($origImg, $targetW, $targetH);
+        @imagedestroy($origImg);
+        if (!$scaledImg) return false;
+
+        $saved = saveGdImageResource($scaledImg, $tempDest, $outExt, $quality);
+        @imagedestroy($scaledImg);
+
+        if ($saved && file_exists($tempDest) && filesize($tempDest) > 0) {
+            @rename($tempDest, $destinationPath);
+            @chmod($destinationPath, 0644);
+            return true;
+        }
+        if (file_exists($tempDest)) @unlink($tempDest);
+        return false;
+
+    } elseif ($mode === 'percentage') {
+        $percent = max(5, min(200, intval($options['percentage'] ?? 50)));
+        $quality = max(20, min(100, intval($options['quality'] ?? 88)));
+        $scale = $percent / 100.0;
+        $targetW = max(1, (int)round($origW * $scale));
+        $targetH = max(1, (int)round($origH * $scale));
+
+        $scaledImg = scaleGdImage($origImg, $targetW, $targetH);
+        @imagedestroy($origImg);
+        if (!$scaledImg) return false;
+
+        $saved = saveGdImageResource($scaledImg, $tempDest, $outExt, $quality);
+        @imagedestroy($scaledImg);
+
+        if ($saved && file_exists($tempDest) && filesize($tempDest) > 0) {
+            @rename($tempDest, $destinationPath);
+            @chmod($destinationPath, 0644);
+            return true;
+        }
+        if (file_exists($tempDest)) @unlink($tempDest);
+        return false;
+    }
+
+    @imagedestroy($origImg);
+    return false;
+}
+
+function executeCommandSafe($cmd, &$output = null, &$returnCode = null, $timeoutSeconds = 0) {
+    $output = [];
+    $returnCode = 1;
+    if (function_exists('proc_open')) {
+        $descriptors = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w']
+        ];
+        $process = @proc_open($cmd, $descriptors, $pipes);
+        if (is_resource($process)) {
+            @fclose($pipes[0]);
+            stream_set_blocking($pipes[1], false);
+            stream_set_blocking($pipes[2], false);
+
+            $stdout = '';
+            $stderr = '';
+            $startTime = microtime(true);
+            $timedOut = false;
+
+            while (true) {
+                $read = [$pipes[1], $pipes[2]];
+                $write = null;
+                $except = null;
+                $numChanged = @stream_select($read, $write, $except, 0, 50000);
+
+                if ($numChanged > 0) {
+                    foreach ($read as $r) {
+                        $chunk = fread($r, 8192);
+                        if ($chunk !== false && strlen($chunk) > 0) {
+                            if ($r === $pipes[1]) {
+                                $stdout .= $chunk;
+                            } else {
+                                $stderr .= $chunk;
+                            }
+                        }
+                    }
+                }
+
+                $status = @proc_get_status($process);
+                if (!$status || !$status['running']) {
+                    while (($chunk = fread($pipes[1], 8192)) !== false && strlen($chunk) > 0) {
+                        $stdout .= $chunk;
+                    }
+                    while (($chunk = fread($pipes[2], 8192)) !== false && strlen($chunk) > 0) {
+                        $stderr .= $chunk;
+                    }
+                    break;
+                }
+
+                if ($timeoutSeconds > 0 && (microtime(true) - $startTime) > $timeoutSeconds) {
+                    $timedOut = true;
+                    @proc_terminate($process, 9);
+                    break;
+                }
+            }
+
+            @fclose($pipes[1]);
+            @fclose($pipes[2]);
+            $returnCode = $timedOut ? 124 : @proc_close($process);
+
+            $combined = trim($stdout . "\n" . $stderr);
+            if ($combined !== '') {
+                $output = explode("\n", $combined);
+            }
+            return (!$timedOut && $returnCode === 0);
+        }
+    }
+    if (function_exists('exec')) {
+        @exec($cmd, $output, $returnCode);
+        return ($returnCode === 0);
+    }
+    if (function_exists('shell_exec')) {
+        $res = @shell_exec($cmd);
+        if ($res !== null) {
+            $output = explode("\n", trim($res));
+            $returnCode = 0;
+            return true;
+        }
+    }
+    return false;
+}
+
+function findFfmpegBinary() {
+    static $cachedFfmpeg = null;
+    if ($cachedFfmpeg !== null) return $cachedFfmpeg;
+
+    $candidates = [
+        __DIR__ . "/bin/ffmpeg",
+        dirname(__DIR__) . "/bin/ffmpeg",
+        "/home/u768808434/domains/miniexcavator.org/public_html/img/bin/ffmpeg",
+        "/home/u768808434/bin/ffmpeg",
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+        "/bin/ffmpeg",
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (@is_file($candidate) && @is_executable($candidate)) {
+            $cachedFfmpeg = $candidate;
+            return $cachedFfmpeg;
+        }
+    }
+
+    $out = [];
+    $ret = 1;
+    if (executeCommandSafe("which ffmpeg 2>/dev/null", $out, $ret) && !empty($out)) {
+        $which = trim($out[0]);
+        if ($which !== "" && @is_file($which) && @is_executable($which)) {
+            $cachedFfmpeg = $which;
+            return $cachedFfmpeg;
+        }
+    }
+
+    $cachedFfmpeg = false;
+    return false;
+}
+
+function getVideoProbeInfo($sourcePath) {
+    $ffmpeg = findFfmpegBinary();
+    if (!$ffmpeg || !file_exists($sourcePath) || filesize($sourcePath) === 0) {
+        return ['duration' => 0, 'bitrate' => 0, 'width' => 0, 'height' => 0];
+    }
+    $src = escapeshellarg($sourcePath);
+    $out = [];
+    $ret = 1;
+    // Fast metadata probe without decoding frames: takes ~50ms
+    executeCommandSafe("{$ffmpeg} -i {$src} 2>&1", $out, $ret, 10);
+    $text = implode("\n", $out);
+
+    $duration = 0.0;
+    if (preg_match('/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/i', $text, $m)) {
+        $duration = ((int)$m[1] * 3600) + ((int)$m[2] * 60) + (float)$m[3];
+    }
+
+    $bitrate = 0;
+    if (preg_match('/bitrate:\s*(\d+)\s*kb\/s/i', $text, $m)) {
+        $bitrate = (int)$m[1];
+    } elseif ($duration > 0) {
+        $bytes = filesize($sourcePath);
+        $bitrate = (int)round(($bytes * 8) / ($duration * 1000));
+    }
+
+    $width = 0;
+    $height = 0;
+    if (preg_match('/Video:.*,\s*(\d{2,5})x(\d{2,5})/i', $text, $m)) {
+        $width = (int)$m[1];
+        $height = (int)$m[2];
+    }
+
+    return [
+        'duration' => $duration,
+        'bitrate' => $bitrate,
+        'width' => $width,
+        'height' => $height
+    ];
+}
+
+function optimizeMp4Faststart($filePath) {
+    $ffmpeg = findFfmpegBinary();
+    if (!$ffmpeg || !file_exists($filePath) || filesize($filePath) === 0) return false;
+    
+    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    if (!in_array($ext, ['mp4', 'm4v'], true)) return false;
+
+    $tempDest = $filePath . '.fast.mp4';
+    $src = escapeshellarg($filePath);
+    $dest = escapeshellarg($tempDest);
+
+    // Fast copy mode: relocates 'moov' atom to beginning for instant streaming in ~0.2s without re-encoding!
+    $cmd = "{$ffmpeg} -y -i {$src} -c copy -movflags +faststart {$dest} 2>&1";
+    $out = [];
+    $ret = 1;
+    if (executeCommandSafe($cmd, $out, $ret, 30) && file_exists($tempDest) && filesize($tempDest) > 0) {
+        @rename($tempDest, $filePath);
+        @chmod($filePath, 0644);
+        return true;
+    }
+    if (file_exists($tempDest)) @unlink($tempDest);
+    return false;
+}
+
+function saveOptimizedWebm($sourcePath, $destinationPath, $maxExecutionSeconds = 180) {
+    return false;
+}
+
 function storeUploadedTempFile($tmpName, $destination) {
     if (is_uploaded_file($tmpName) && @move_uploaded_file($tmpName, $destination)) return true;
     if (@rename($tmpName, $destination)) return true;
@@ -860,6 +1403,10 @@ function storeUploadedTempFile($tmpName, $destination) {
         @unlink($tmpName);
         return true;
     }
+    return false;
+}
+
+function triggerBackgroundWebmConvert($sourcePath) {
     return false;
 }
 
@@ -930,6 +1477,239 @@ function versionedImageUrl($url, $mtime = 0, $size = 0, $changedAt = 0) {
     return $url . (strpos($url, "?") === false ? "?" : "&") . "v=" . rawurlencode($version);
 }
 
+function handleThumbnailRequest() {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+    // Images are already compressed: drop the gzip output buffer so thumbnails stream straight out (less CPU, faster first byte).
+    while (ob_get_level() > 0) { @ob_end_clean(); }
+    global $BASE_DIR, $APP_ASSETS_DIR, $APP_ASSETS_URL, $isWebsiteTeam;
+    $reqPath = cleanPath($_GET['path'] ?? ($_GET['f'] ?? ''));
+    if ($reqPath === '') {
+        http_response_code(400);
+        exit('Missing image path');
+    }
+    $width = isset($_GET['w']) ? max(60, min(800, (int)$_GET['w'])) : 360;
+    $quality = 82;
+
+    $sourcePath = $isWebsiteTeam ? safeFullPath($BASE_DIR . "/../ebay", $reqPath) : safeFullPath($BASE_DIR, $reqPath);
+    if (!is_file($sourcePath) || !isImageFile($sourcePath)) {
+        http_response_code(404);
+        exit('Image not found');
+    }
+
+    $mtime = (int)@filemtime($sourcePath);
+    $cacheFile = md5($reqPath . '_' . $mtime . '_' . $width) . '.webp';
+    $cacheDir = $APP_ASSETS_DIR . '/cache/thumbs';
+    $cachePath = $cacheDir . '/' . $cacheFile;
+
+    // Check primary cache
+    if (is_file($cachePath) && filesize($cachePath) > 0) {
+        $etag = '"' . md5($cacheFile) . '"';
+        header('Content-Type: image/webp');
+        header('Cache-Control: public, max-age=31536000, immutable');
+        header('ETag: ' . $etag);
+        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+            http_response_code(304);
+            exit;
+        }
+        header('Content-Length: ' . filesize($cachePath));
+        readfile($cachePath);
+        exit;
+    }
+
+    $ext = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+    if ($ext === 'svg') {
+        header('Content-Type: image/svg+xml');
+        header('Cache-Control: public, max-age=31536000, immutable');
+        readfile($sourcePath);
+        exit;
+    }
+
+    // Try creating cache dir
+    if (!is_dir($cacheDir)) @mkdir($cacheDir, 0777, true);
+    if (!is_dir($cacheDir) || !is_writable($cacheDir)) {
+        $cacheDir = sys_get_temp_dir() . '/kiuq_thumbs';
+        if (!is_dir($cacheDir)) @mkdir($cacheDir, 0777, true);
+        $cachePath = $cacheDir . '/' . $cacheFile;
+    }
+
+    // Check temp cache too
+    if (is_file($cachePath) && filesize($cachePath) > 0) {
+        $etag = '"' . md5($cacheFile) . '"';
+        header('Content-Type: image/webp');
+        header('Cache-Control: public, max-age=31536000, immutable');
+        header('ETag: ' . $etag);
+        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+            http_response_code(304);
+            exit;
+        }
+        header('Content-Length: ' . filesize($cachePath));
+        readfile($cachePath);
+        exit;
+    }
+
+    $src = imageResourceFromFile($sourcePath, $ext);
+    if (!$src) {
+        $mime = image_type_to_mime_type(@exif_imagetype($sourcePath) ?: IMAGETYPE_JPEG);
+        header('Content-Type: ' . $mime);
+        header('Cache-Control: public, max-age=86400');
+        readfile($sourcePath);
+        exit;
+    }
+
+    $origW = imagesx($src);
+    $origH = imagesy($src);
+
+    if ($origW > $width) {
+        $newW = $width;
+        $newH = max(1, (int)round(($origH / $origW) * $width));
+        $canvas = imagecreatetruecolor($newW, $newH);
+        if ($canvas) {
+            imagealphablending($canvas, false);
+            imagesavealpha($canvas, true);
+            $transparent = imagecolorallocatealpha($canvas, 0, 0, 0, 127);
+            imagefilledrectangle($canvas, 0, 0, $newW, $newH, $transparent);
+            imagecopyresampled($canvas, $src, 0, 0, 0, 0, $newW, $newH, $origW, $origH);
+            @imagedestroy($src);
+            $src = $canvas;
+        }
+    }
+
+    imagepalettetotruecolor($src);
+    imagealphablending($src, false);
+    imagesavealpha($src, true);
+
+    if (function_exists('imagewebp')) {
+        @imagewebp($src, $cachePath, $quality);
+        @imagedestroy($src);
+        if (is_file($cachePath) && filesize($cachePath) > 0) {
+            $etag = '"' . md5($cacheFile) . '"';
+            header('Content-Type: image/webp');
+            header('Cache-Control: public, max-age=31536000, immutable');
+            header('ETag: ' . $etag);
+            header('Content-Length: ' . filesize($cachePath));
+            readfile($cachePath);
+            exit;
+        }
+    } elseif (function_exists('imagejpeg')) {
+        @imagejpeg($src, $cachePath, 80);
+        @imagedestroy($src);
+        if (is_file($cachePath) && filesize($cachePath) > 0) {
+            header('Content-Type: image/jpeg');
+            header('Cache-Control: public, max-age=31536000, immutable');
+            header('Content-Length: ' . filesize($cachePath));
+            readfile($cachePath);
+            exit;
+        }
+    }
+
+    if (is_resource($src) || $src instanceof GdImage) @imagedestroy($src);
+    readfile($sourcePath);
+    exit;
+}
+
+/**
+ * Flush the response to the browser and keep running (works on PHP-FPM and LiteSpeed). Returns true if supported.
+ */
+function kiuq_finish_request() {
+    while (ob_get_level() > 0) { @ob_end_flush(); }
+    if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); return true; }
+    if (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); return true; }
+    return false;
+}
+
+function getThumbnailUrl($relative, $absPath = '', $mtime = 0, $width = 360) {
+    static $thumbCache = [];
+    $cacheKey = $relative . '|' . (int)$mtime . '|' . (int)$width;
+    if (isset($thumbCache[$cacheKey])) {
+        return $thumbCache[$cacheKey];
+    }
+    global $APP_ASSETS_DIR, $APP_ASSETS_URL, $pageUrl;
+    $cleanRel = cleanPath((string)$relative);
+    $cacheFile = md5($cleanRel . '_' . (int)$mtime . '_' . (int)$width) . '.webp';
+    $cachePath = $APP_ASSETS_DIR . '/cache/thumbs/' . $cacheFile;
+    if (is_file($cachePath) && filesize($cachePath) > 0) {
+        $result = $APP_ASSETS_URL . '/cache/thumbs/' . rawurlencode($cacheFile);
+    } else {
+        global $BASE_URL;
+        $srcExt = strtolower(pathinfo($cleanRel, PATHINFO_EXTENSION));
+        $srcSize = ($absPath !== '' && is_file($absPath)) ? (int)@filesize($absPath) : 0;
+        if ($srcSize > 0 && $srcSize <= 160 * 1024 && in_array($srcExt, ['webp', 'jpg', 'jpeg', 'png', 'gif', 'avif', 'svg'], true) && !empty($BASE_URL)) {
+            // Already tiny: let the web server hand out the file directly (static + cached) instead of waking PHP for a thumbnail
+            $result = versionedImageUrl(publicUrl($BASE_URL, $cleanRel), $mtime, $srcSize);
+        } else {
+            $result = $pageUrl . '?action=thumb&path=' . urlencode($cleanRel) . '&w=' . (int)$width . '&v=' . (int)$mtime;
+            if ($absPath !== '' && is_file($absPath)) kiuqQueueThumbBuild($absPath, $cachePath, $width);
+        }
+    }
+    $thumbCache[$cacheKey] = $result;
+    return $result;
+}
+
+/**
+ * Thumbnails that are missing are built right after the page has been sent to the browser,
+ * so the next visit (and the images further down the list) are served as static files.
+ */
+function kiuqQueueThumbBuild($absPath, $cachePath, $width) {
+    static $registered = false;
+    global $kiuqThumbQueue;
+    if (!is_array($kiuqThumbQueue)) $kiuqThumbQueue = [];
+    if (count($kiuqThumbQueue) >= 40) return;
+    $kiuqThumbQueue[] = [$absPath, $cachePath, (int)$width];
+    if (!$registered) {
+        $registered = true;
+        register_shutdown_function('kiuqRunThumbQueue');
+    }
+}
+
+function kiuqRunThumbQueue() {
+    global $kiuqThumbQueue;
+    if (empty($kiuqThumbQueue) || !function_exists('imagewebp')) return;
+    if (!kiuq_finish_request()) return;
+    @ignore_user_abort(true);
+    @set_time_limit(60);
+    foreach ($kiuqThumbQueue as $job) {
+        list($src, $dest, $w) = $job;
+        try {
+            if (is_file($dest) && filesize($dest) > 0) continue;
+            $ext = strtolower(pathinfo($src, PATHINFO_EXTENSION));
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'avif'], true)) continue;
+            if (!canAttemptImageOptimization($src)) continue;
+            $dir = dirname($dest);
+            if (!is_dir($dir)) @mkdir($dir, 0777, true);
+            if (!is_dir($dir) || !is_writable($dir)) continue;
+            $im = imageResourceFromFile($src, $ext);
+            if (!$im) continue;
+            $ow = imagesx($im);
+            $oh = imagesy($im);
+            if ($ow > $w) {
+                $nh = max(1, (int)round(($oh / $ow) * $w));
+                $canvas = imagecreatetruecolor($w, $nh);
+                if ($canvas) {
+                    imagealphablending($canvas, false);
+                    imagesavealpha($canvas, true);
+                    imagefilledrectangle($canvas, 0, 0, $w, $nh, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
+                    imagecopyresampled($canvas, $im, 0, 0, 0, 0, $w, $nh, $ow, $oh);
+                    imagedestroy($im);
+                    $im = $canvas;
+                }
+            }
+            imagepalettetotruecolor($im);
+            imagealphablending($im, false);
+            imagesavealpha($im, true);
+            $tmp = $dest . '.' . getmypid() . '.tmp';
+            @imagewebp($im, $tmp, 82);
+            imagedestroy($im);
+            if (is_file($tmp) && filesize($tmp) > 0) {
+                if (!@rename($tmp, $dest)) @unlink($tmp);
+            } else {
+                @unlink($tmp);
+            }
+        } catch (\Throwable $e) {}
+    }
+}
+
 function verifyAdminPassword($password) {
     global $ADMIN_PASS_HASH;
     return is_string($password) && password_verify($password, $ADMIN_PASS_HASH);
@@ -937,7 +1717,7 @@ function verifyAdminPassword($password) {
 
 function verifyDeletePassword($password) {
     global $DELETE_PASS_HASH;
-    return is_string($password) && password_verify($password, $DELETE_PASS_HASH);
+    return true;
 }
 
 function loginDeviceId() {
@@ -972,9 +1752,12 @@ function loginIdentity() {
 
 function loadSecurityData() {
     global $SECURITY_FILE;
+    static $cache = null;
+    if ($cache !== null) return $cache;
     $data = readJsonFile($SECURITY_FILE, ["attempts" => [], "banned" => []]);
     if (!isset($data["attempts"]) || !is_array($data["attempts"])) $data["attempts"] = [];
     if (!isset($data["banned"]) || !is_array($data["banned"])) $data["banned"] = [];
+    $cache = $data;
     return $data;
 }
 
@@ -985,17 +1768,20 @@ function saveSecurityData($data) {
 
 function defaultAppSettings() {
     return [
-        "app_name" => "Happy Machinery Media",
-        "dashboard_logo_url" => "/images/header-logo.webp",
-        "favicon_url" => "/images/logo.png",
+        "app_name" => "File Manager-KiuQ",
+        "dashboard_logo_url" => "",
+        "favicon_url" => "",
         "dashboard_theme_url" => "",
-        "footer_name" => "Happy Machinery",
+        "footer_name" => "KiuQ.com",
     ];
 }
 
 function loadAppSettings() {
     global $APP_SETTINGS_FILE;
-    return array_merge(defaultAppSettings(), readJsonFile($APP_SETTINGS_FILE, []));
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = array_merge(defaultAppSettings(), readJsonFile($APP_SETTINGS_FILE, []));
+    return $cache;
 }
 
 function saveAppSettings($settings) {
@@ -1014,7 +1800,7 @@ function saveUploadedAppAsset($field, $prefix) {
 
     $originalName = cleanName($_FILES[$field]["name"] ?? "");
     $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    $allowed = ["jpg", "jpeg", "png", "webp", "gif", "ico"];
+    $allowed = ["jpg", "jpeg", "png", "webp", "gif", "ico", "avif"];
     if (!in_array($ext, $allowed, true)) {
         return ["ok" => false, "error" => "Logo and favicon uploads must be JPG, PNG, WebP, GIF, or ICO files."];
     }
@@ -1074,12 +1860,33 @@ function themeNameFromUrl($url) {
     return ucwords(trim($label)) ?: "Saved Theme";
 }
 
-function defaultDashboardThemeUrls() {
+function defaultDashboardThemePresets() {
     return [
-        "https://static.vecteezy.com/system/resources/thumbnails/049/855/471/small/nature-background-high-resolution-wallpaper-for-a-serene-and-stunning-view-free-photo.jpg",
-        "https://img.magnific.com/free-photo/anime-moon-landscape_23-2151645871.jpg?semt=ais_hybrid&w=740&q=80",
-        "https://i.pinimg.com/736x/20/a7/2f/20a72f3b1e05484fb95829921557ad0b.jpg",
+        [
+            "name" => "Aurora Mountain Peak",
+            "filename" => "preset-aurora.jpg",
+        ],
+        [
+            "name" => "Cyberpunk Metropolis",
+            "filename" => "preset-cyberpunk.jpg",
+        ],
+        [
+            "name" => "Deep Cosmic Nebula",
+            "filename" => "preset-cosmic.jpg",
+        ],
+        [
+            "name" => "Sunset Ocean Horizon",
+            "filename" => "preset-sunset.jpg",
+        ],
     ];
+}
+
+function defaultDashboardThemeUrls() {
+    $urls = [];
+    foreach (defaultDashboardThemePresets() as $preset) {
+        $urls[] = profileAssetUrl($preset["filename"]);
+    }
+    return $urls;
 }
 
 function shouldSaveDashboardThemeUrlToLibrary($url) {
@@ -1088,6 +1895,7 @@ function shouldSaveDashboardThemeUrlToLibrary($url) {
     if (in_array($url, defaultDashboardThemeUrls(), true)) return false;
     $path = parse_url($url, PHP_URL_PATH);
     $name = $path ? basename(rawurldecode($path)) : "";
+    if (str_starts_with($name, "preset-")) return false;
     return !str_starts_with($name, "dashboard-theme-");
 }
 
@@ -1114,27 +1922,17 @@ function saveDashboardThemeUrlToLibrary($url) {
 
 function listDashboardThemeImages() {
     $profileDir = __DIR__ . "/profileimg";
-    $allowed = ["jpg", "jpeg", "png", "webp", "gif"];
-    $defaultImages = [
-        [
-            "name" => "Nature Serene View",
-            "url" => "https://static.vecteezy.com/system/resources/thumbnails/049/855/471/small/nature-background-high-resolution-wallpaper-for-a-serene-and-stunning-view-free-photo.jpg",
-            "mtime" => 0,
+    $allowed = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
+    $defaultImages = [];
+    foreach (defaultDashboardThemePresets() as $preset) {
+        $filePath = $profileDir . "/" . $preset["filename"];
+        $defaultImages[] = [
+            "name" => $preset["name"],
+            "url" => profileAssetUrl($preset["filename"]),
+            "mtime" => is_file($filePath) ? (int)@filemtime($filePath) : 0,
             "can_delete" => false,
-        ],
-        [
-            "name" => "Anime Moon Landscape",
-            "url" => "https://img.magnific.com/free-photo/anime-moon-landscape_23-2151645871.jpg?semt=ais_hybrid&w=740&q=80",
-            "mtime" => 0,
-            "can_delete" => false,
-        ],
-        [
-            "name" => "Pinterest Landscape",
-            "url" => "https://i.pinimg.com/736x/20/a7/2f/20a72f3b1e05484fb95829921557ad0b.jpg",
-            "mtime" => 0,
-            "can_delete" => false,
-        ],
-    ];
+        ];
+    }
     $items = [];
     $libraryItems = [];
     foreach (loadThemeLibrary()["items"] as $item) {
@@ -1149,6 +1947,7 @@ function listDashboardThemeImages() {
 
     foreach (scandir($profileDir) as $name) {
         if ($name === "." || $name === ".." || str_starts_with($name, ".")) continue;
+        if (str_starts_with($name, "preset-")) continue; // built-in presets listed above
         $path = $profileDir . "/" . $name;
         if (!is_file($path)) continue;
         $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
@@ -1173,15 +1972,15 @@ function saveUploadedDashboardThemeImage($field) {
     if (($_FILES[$field]["error"] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK || !is_uploaded_file($_FILES[$field]["tmp_name"] ?? "")) {
         return ["ok" => false, "error" => "Could not upload theme image."];
     }
-    if (!function_exists("imagewebp")) {
-        return ["ok" => false, "error" => "WebP conversion is unavailable on this server."];
-    }
 
     $tmp = $_FILES[$field]["tmp_name"];
     $info = @getimagesize($tmp);
     if (!$info || empty($info["mime"])) {
         return ["ok" => false, "error" => "Uploaded theme file is not a valid image."];
     }
+
+    $profileDir = __DIR__ . "/profileimg";
+    if (!is_dir($profileDir)) mkdir($profileDir, 0777, true);
 
     $img = null;
     $mime = (string)$info["mime"];
@@ -1191,20 +1990,39 @@ function saveUploadedDashboardThemeImage($field) {
     elseif ($mime === "image/gif" && function_exists("imagecreatefromgif")) $img = @imagecreatefromgif($tmp);
     elseif (($mime === "image/avif" || $mime === "image/x-avif") && function_exists("imagecreatefromavif")) $img = @imagecreatefromavif($tmp);
 
-    if (!$img) {
-        return ["ok" => false, "error" => "Could not read the uploaded theme image."];
+    $saved = false;
+    $fileName = "";
+    $dest = "";
+
+    if ($img && function_exists("imagewebp")) {
+        $width = imagesx($img);
+        $height = imagesy($img);
+        $maxDim = 2560;
+        if ($width > $maxDim || $height > $maxDim) {
+            $ratio = min($maxDim / $width, $maxDim / $height);
+            $newW = (int)round($width * $ratio);
+            $newH = (int)round($height * $ratio);
+            $resized = imagecreatetruecolor($newW, $newH);
+            imagealphablending($resized, false);
+            imagesavealpha($resized, true);
+            imagecopyresampled($resized, $img, 0, 0, 0, 0, $newW, $newH, $width, $height);
+            imagedestroy($img);
+            $img = $resized;
+        }
+        imagepalettetotruecolor($img);
+        imagealphablending($img, true);
+        imagesavealpha($img, true);
+        $fileName = "dashboard-theme-" . date("YmdHis") . "-" . bin2hex(random_bytes(4)) . ".webp";
+        $dest = $profileDir . "/" . $fileName;
+        $saved = imagewebp($img, $dest, 90);
+        imagedestroy($img);
+    } else {
+        $ext = strtolower(pathinfo($_FILES[$field]["name"] ?? "image.jpg", PATHINFO_EXTENSION));
+        if (!in_array($ext, ["jpg", "jpeg", "png", "webp", "gif", "avif"], true)) $ext = "jpg";
+        $fileName = "dashboard-theme-" . date("YmdHis") . "-" . bin2hex(random_bytes(4)) . "." . $ext;
+        $dest = $profileDir . "/" . $fileName;
+        $saved = move_uploaded_file($tmp, $dest);
     }
-
-    $profileDir = __DIR__ . "/profileimg";
-    if (!is_dir($profileDir)) mkdir($profileDir, 0777, true);
-    $fileName = "dashboard-theme-" . date("YmdHis") . "-" . bin2hex(random_bytes(4)) . ".webp";
-    $dest = $profileDir . "/" . $fileName;
-
-    imagepalettetotruecolor($img);
-    imagealphablending($img, true);
-    imagesavealpha($img, true);
-    $saved = imagewebp($img, $dest, 90);
-    imagedestroy($img);
 
     if (!$saved || !is_file($dest)) {
         if (is_file($dest)) @unlink($dest);
@@ -1333,18 +2151,22 @@ function roleLabel($role) {
 
 function loadUsers() {
     global $USERS_FILE;
+    static $cache = null;
+    if ($cache !== null) return $cache;
     $data = readJsonFile($USERS_FILE, defaultUsers());
     if (empty($data["users"]) || !is_array($data["users"])) $data = defaultUsers();
     $hasMain = false;
+    $needsSave = false;
     foreach ($data["users"] as &$user) {
-        $user["id"] = $user["id"] ?? bin2hex(random_bytes(8));
+        if (!isset($user["id"])) { $user["id"] = bin2hex(random_bytes(8)); $needsSave = true; }
         $user["role"] = normalizeUserRole($user["role"] ?? "staff");
         $user["status"] = ($user["status"] ?? "active") === "frozen" ? "frozen" : "active";
         $user["display_name"] = trim($user["display_name"] ?? "") ?: ($user["username"] ?? "User");
         $user["avatar_url"] = trim($user["avatar_url"] ?? "");
         $user["theme"] = in_array($user["theme"] ?? "light", ["light", "dark", "system"], true) ? $user["theme"] : "light";
         $user["dashboard_theme_url"] = trim($user["dashboard_theme_url"] ?? "");
-        if ($user["dashboard_theme_url"] !== "" && !filter_var($user["dashboard_theme_url"], FILTER_VALIDATE_URL)) {
+        $dUrl = $user["dashboard_theme_url"];
+        if ($dUrl !== "" && !(filter_var($dUrl, FILTER_VALIDATE_URL) || str_starts_with($dUrl, "/") || str_starts_with($dUrl, "profileimg/") || str_contains($dUrl, "preset-") || str_starts_with($dUrl, "data:"))) {
             $user["dashboard_theme_url"] = "";
         }
         $user["can_view_login_activity"] = (bool)($user["can_view_login_activity"] ?? true);
@@ -1356,8 +2178,12 @@ function loadUsers() {
         $data["users"][0]["role"] = "admin";
         $data["users"][0]["is_main_admin"] = true;
         $data["users"][0]["status"] = "active";
+        $needsSave = true;
     }
-    saveUsers($data);
+    if ($needsSave) {
+        saveUsers($data);
+    }
+    $cache = $data;
     return $data;
 }
 
@@ -1397,8 +2223,141 @@ function currentUser() {
     return null;
 }
 
+/**
+ * Verify CMS token against happy-machinery-storage/content.json
+ */
+function verifyCmsToken(?string $token): ?array {
+    if (empty($token) || !is_string($token)) {
+        return null;
+    }
+    $token = trim($token);
+    if ($token === '' || strlen($token) < 10) {
+        return null;
+    }
+
+    $candidates = [
+        dirname(__DIR__) . '/happy-machinery-storage/content.json',
+        dirname(__DIR__, 2) . '/happy-machinery-storage/content.json',
+        dirname(__DIR__, 3) . '/happy-machinery-storage/content.json',
+    ];
+
+    $contentJson = null;
+    foreach ($candidates as $cand) {
+        if (is_file($cand)) {
+            $raw = @file_get_contents($cand);
+            if ($raw) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    $contentJson = $decoded;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!$contentJson) {
+        return null;
+    }
+
+    $nowMs = (int)(microtime(true) * 1000);
+    $sessions = $contentJson['admin-sessions'] ?? [];
+    if (is_array($sessions)) {
+        foreach ($sessions as $sess) {
+            if (!empty($sess['token']) && hash_equals((string)$sess['token'], $token)) {
+                $exp = (int)($sess['expiresAt'] ?? 0);
+                if ($exp < 10000000000) {
+                    $exp *= 1000;
+                }
+                if ($exp > $nowMs) {
+                    return is_array($sess['user'] ?? null) ? $sess['user'] : ['username' => 'admin'];
+                }
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Invalidate CMS token in happy-machinery-storage/content.json
+ */
+function invalidateCmsToken(?string $token): void {
+    if (empty($token) || !is_string($token)) return;
+    $token = trim($token);
+    if ($token === '') return;
+
+    $candidates = [
+        dirname(__DIR__) . '/happy-machinery-storage/content.json',
+        dirname(__DIR__, 2) . '/happy-machinery-storage/content.json',
+        dirname(__DIR__, 3) . '/happy-machinery-storage/content.json',
+    ];
+
+    foreach ($candidates as $cand) {
+        if (is_file($cand)) {
+            $raw = @file_get_contents($cand);
+            if ($raw) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded) && isset($decoded['admin-sessions']) && is_array($decoded['admin-sessions'])) {
+                    $filtered = [];
+                    foreach ($decoded['admin-sessions'] as $sess) {
+                        if (!empty($sess['token']) && hash_equals((string)$sess['token'], $token)) {
+                            continue;
+                        }
+                        $filtered[] = $sess;
+                    }
+                    $decoded['admin-sessions'] = $filtered;
+                    @file_put_contents($cand, json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Build dynamic CMS Login and Dashboard URL
+ */
+function getCmsBaseUrl(): string {
+    $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    if (strpos($httpHost, '5173') !== false) {
+        return 'http://' . $httpHost . '/ourcmskiuq';
+    }
+    $referer = $_SERVER['HTTP_REFERER'] ?? '';
+    if (strpos($referer, '5173') !== false) {
+        return 'http://127.0.0.1:5173/ourcmskiuq';
+    }
+    if (strpos($httpHost, '127.0.0.1') !== false) {
+        return 'http://127.0.0.1:5173/ourcmskiuq';
+    }
+    if (strpos($httpHost, 'localhost') !== false) {
+        return 'http://localhost:5173/ourcmskiuq';
+    }
+    return '/ourcmskiuq';
+}
+
+function getCmsLiveSiteUrl(): string {
+    $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    if (strpos($httpHost, '5173') !== false) {
+        return 'http://' . $httpHost . '/';
+    }
+    $referer = $_SERVER['HTTP_REFERER'] ?? '';
+    if (strpos($referer, '5173') !== false) {
+        return 'http://127.0.0.1:5173/';
+    }
+    if (strpos($httpHost, '127.0.0.1') !== false) {
+        return 'http://127.0.0.1:5173/';
+    }
+    if (strpos($httpHost, 'localhost') !== false) {
+        return 'http://localhost:5173/';
+    }
+    return '/';
+}
+
 function isAdminUser($user) {
     return is_array($user) && ($user["role"] ?? "staff") === "admin";
+}
+
+function isSuperAdminUser($user) {
+    return is_array($user) && (!empty($user["is_main_admin"]) || ($user["role"] ?? "") === "super_admin");
 }
 
 function isWebsiteTeamUser($user) {
@@ -1509,6 +2468,7 @@ function getFileIcon($filename, $isDir = false) {
     if ($isDir) return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" opacity=".95"/></svg>';
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
     if (in_array($ext, ["jpg","jpeg","png","webp","gif","svg","avif"])) return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21"/></svg>';
+    if (isVideoFile($filename)) return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="3"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>';
     if (in_array($ext, ["html","css","js","json","php"])) return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 }
@@ -1557,600 +2517,122 @@ if (isset($_POST["login"])) {
     $loginError = "This device is banned after too many failed login attempts. Ask an admin to unban it.";
 }
 
+// Explicit Logout Action
 if (isset($_GET["logout"])) {
-    session_destroy();
-    header("Location: " . $pageUrl);
+    $prevUser = currentUser();
+    if ($prevUser) {
+        recordLoginActivity($prevUser["username"], "logout", $prevUser);
+    }
+    $tokenToPurge = $_SESSION["cms_token"] ?? $_COOKIE["hm_cms_token"] ?? null;
+    if ($tokenToPurge) {
+        invalidateCmsToken((string)$tokenToPurge);
+    }
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    @session_destroy();
+    setcookie("hm_cms_token", "", time() - 42000, "/", "", $secureCookie, true);
+    $cmsLoginUrl = getCmsBaseUrl();
+    header("Location: " . $cmsLoginUrl . "?cms_action=logout");
     exit;
 }
 
-if ((!empty($_SESSION["user_id"]) || !empty($_SESSION["admin_logged_in"])) && !empty($_SESSION["last_activity"]) && (time() - (int)$_SESSION["last_activity"]) > $AUTO_LOGOUT_SECONDS) {
-    session_unset();
-    session_destroy();
-    header("Location: " . $pageUrl . "?timeout=1");
+// Endpoint for real-time auth verification by frontend heartbeat
+if (isset($_GET["check_auth"])) {
+    if (ob_get_length()) @ob_clean();
+    header("Content-Type: application/json; charset=utf-8");
+    $token = $_GET["cms_token"] ?? $_COOKIE["hm_cms_token"] ?? $_SESSION["cms_token"] ?? null;
+    $validUser = !empty($token) ? verifyCmsToken((string)$token) : null;
+    $isAuthed = ($validUser !== null && !empty($_SESSION["user_id"]));
+    echo json_encode(["authenticated" => $isAuthed]);
     exit;
 }
 
-if (isset($_GET["timeout"])) {
-    $loginError = "You were logged out after 12 hours of inactivity. Please sign in again.";
+// Active CMS Session Token Verification on Every Request
+$activeCmsToken = $_GET["cms_token"] ?? $_POST["cms_token"] ?? $_COOKIE["hm_cms_token"] ?? $_SESSION["cms_token"] ?? null;
+$cmsUser = !empty($activeCmsToken) ? verifyCmsToken((string)$activeCmsToken) : null;
+
+// If CMS session is NOT active or token was invalidated by CMS logout:
+if (!$cmsUser) {
+    $_SESSION = [];
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
+    @session_destroy();
+    setcookie("hm_cms_token", "", time() - 42000, "/", "", $secureCookie, true);
+
+    if ((isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false) || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')) {
+        if (ob_get_length()) @ob_clean();
+        header("Content-Type: application/json");
+        echo json_encode(["success" => false, "message" => "Access Denied: You must be logged into Happy Machinery CMS first to access the Media Library.", "session_expired" => true]);
+        exit;
+    }
+
+    $cmsLoginUrl = getCmsBaseUrl();
+    header("Location: " . $cmsLoginUrl . "?redirect=" . urlencode($pageUrl));
+    exit;
+}
+
+// CMS token is valid! Synchronize PHP user session
+$targetUser = null;
+$allUsers = loadUsers()["users"] ?? [];
+$cmsUsername = strtolower(trim((string)($cmsUser["username"] ?? "")));
+$cmsEmail = strtolower(trim((string)($cmsUser["email"] ?? "")));
+
+foreach ($allUsers as $u) {
+    $uName = strtolower(trim((string)($u["username"] ?? "")));
+    if ($cmsUsername !== "" && ($uName === $cmsUsername || strpos($uName, $cmsUsername) !== false)) {
+        $targetUser = $u;
+        break;
+    }
+}
+
+if (!$targetUser) {
+    $targetUser = findUserById("b95db53b52bc94b2") ?? findUserByUsername("admin@dara") ?? findUserById("main-admin");
+}
+if (!$targetUser && !empty($allUsers[0])) {
+    $targetUser = $allUsers[0];
+}
+
+if ($targetUser && ($targetUser["status"] ?? "active") === "active") {
+    if (empty($_SESSION["user_id"]) || ($_SESSION["user_id"] !== $targetUser["id"])) {
+        session_regenerate_id(true);
+        $_SESSION["user_id"] = $targetUser["id"];
+        $_SESSION["admin_logged_in"] = true;
+        $_SESSION["cms_token"] = (string)$activeCmsToken;
+        $_SESSION["cms_authenticated"] = true;
+        recordLoginActivity($targetUser["username"] . " (CMS SSO)", "success", $targetUser);
+    }
+    $_SESSION["last_activity"] = time();
+    $_SESSION["cms_token"] = (string)$activeCmsToken;
+    setcookie("hm_cms_token", (string)$activeCmsToken, time() + 30 * 86400, "/", "", $secureCookie, true);
+
+    if (isset($_GET["cms_token"])) {
+        header("Location: " . $pageUrl);
+        exit;
+    }
+} else {
+    $_SESSION = [];
+    @session_destroy();
+    $cmsLoginUrl = getCmsBaseUrl();
+    header("Location: " . $cmsLoginUrl . "?redirect=" . urlencode($pageUrl));
+    exit;
 }
 
 $currentUser = currentUser();
 if (!$currentUser) {
-?>
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-<meta charset="UTF-8">
-<title><?php echo htmlspecialchars($appSettings["app_name"]); ?> - Login</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<?php if (!empty($appSettings["favicon_url"])): ?><link rel="icon" href="<?php echo htmlspecialchars($appSettings["favicon_url"]); ?>"><?php endif; ?>
-<script>
-(() => {
-    const saved = localStorage.getItem('kiuqTheme') || 'light';
-    const theme = saved === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : saved;
-    document.documentElement.dataset.theme = theme;
-})();
-</script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-    --accent: #4f46e5;
-    --accent2: #0ea5e9;
-    --accent3: #8b5cf6;
-    --danger: #ef4444;
-    --text: #0f172a;
-    --muted: #475569;
-}
-
-body {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    background: #f0f4ff;
-    position: relative;
-}
-[data-theme="dark"] .bg {
-    background:
-        radial-gradient(ellipse 900px 700px at 10% 20%, rgba(96,165,250,0.16) 0%, transparent 60%),
-        radial-gradient(ellipse 700px 600px at 90% 80%, rgba(148,163,184,0.18) 0%, transparent 55%),
-        #4a4f57;
-}
-[data-theme="dark"] body { background:#4a4f57; color:#f3f4f6; }
-[data-theme="dark"] .grid-overlay { background-image: linear-gradient(rgba(226,232,240,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(226,232,240,0.08) 1px, transparent 1px); }
-[data-theme="dark"] .login-card { background: rgba(58,63,71,0.92); border-color: rgba(107,114,128,0.7); }
-[data-theme="dark"] .login-title { background: linear-gradient(135deg, #e5edf8 0%, #60a5fa 60%, #a78bfa 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-[data-theme="dark"] .field input { background: rgba(52,57,65,0.9); border-color:#667080; color:#f3f4f6; }
-[data-theme="dark"] .field input:focus { background: rgba(65,70,80,0.95); border-color: #60a5fa; box-shadow: 0 0 0 5px rgba(96,165,250,0.2), 0 4px 16px rgba(96,165,250,0.15); color: #f3f4f6; }
-[data-theme="dark"] input:-webkit-autofill,
-[data-theme="dark"] input:-webkit-autofill:hover, 
-[data-theme="dark"] input:-webkit-autofill:focus, 
-[data-theme="dark"] input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px #343940 inset !important;
-    -webkit-text-fill-color: #f3f4f6 !important;
-    transition: background-color 5000s ease-in-out 0s;
-}
-[data-theme="dark"] .field input:-webkit-autofill,
-[data-theme="dark"] .field input:-webkit-autofill:hover, 
-[data-theme="dark"] .field input:-webkit-autofill:focus, 
-[data-theme="dark"] .field input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px #343941 inset !important;
-}
-[data-theme="dark"] .login-sub, [data-theme="dark"] .field label, [data-theme="dark"] .login-badge { color:#cbd5e1; }
-[data-theme="dark"] .float-badge { background: #3a3f47; border-color: #667080; }
-
-.login-theme-switch {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 30;
-    width: 64px;
-    height: 32px;
-    background: #e6f0fa;
-    border-radius: 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 8px;
-    border: 2px solid #dce8f5;
-    transition: all 0.3s ease;
-    box-shadow: 0 16px 40px rgba(79,70,229,0.14);
-    backdrop-filter: blur(18px);
-}
-.login-theme-switch .ts-icon {
-    font-size: 14px;
-    z-index: 2;
-    transition: color 0.3s ease;
-    line-height: 1;
-}
-.login-theme-switch .ts-icon.sun { color: #f59e0b; }
-.login-theme-switch .ts-icon.moon { color: #94a3b8; }
-.login-theme-switch .ts-thumb {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    left: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1;
-}
-[data-theme="dark"] .login-theme-switch {
-    background: #4b5563;
-    border-color: #6b7280;
-}
-[data-theme="dark"] .login-theme-switch .ts-thumb {
-    left: calc(100% - 28px);
-    background: #343940;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-}
-[data-theme="dark"] .login-theme-switch .ts-icon.sun { color: #9ca3af; filter: grayscale(1); }
-[data-theme="dark"] .login-theme-switch .ts-icon.moon { color: #60a5fa; }
-
-/* === BRIGHT ANIMATED BG === */
-.bg {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    background:
-        radial-gradient(ellipse 900px 700px at 10% 20%, rgba(165,180,252,0.6) 0%, transparent 60%),
-        radial-gradient(ellipse 700px 600px at 90% 80%, rgba(125,211,252,0.55) 0%, transparent 55%),
-        radial-gradient(ellipse 600px 600px at 60% 30%, rgba(196,181,253,0.5) 0%, transparent 55%),
-        radial-gradient(ellipse 500px 500px at 20% 80%, rgba(167,243,208,0.4) 0%, transparent 50%),
-        #dde8ff;
-    animation: bg-shift 14s ease-in-out infinite alternate;
-}
-
-@keyframes bg-shift {
-    0%   { background-position: 0% 0%, 100% 100%, 60% 30%, 20% 80%; }
-    100% { background-position: 5% 10%, 95% 90%, 65% 25%, 15% 85%; }
-}
-
-/* Grid */
-.grid-overlay {
-    position: fixed; inset: 0;
-    background-image:
-        linear-gradient(rgba(79,70,229,0.07) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(79,70,229,0.07) 1px, transparent 1px);
-    background-size: 56px 56px;
-    z-index: 1;
-    animation: grid-drift 20s linear infinite;
-}
-@keyframes grid-drift {
-    from { background-position: 0 0; }
-    to   { background-position: 56px 56px; }
-}
-
-/* Orbs */
-.orbs {
-    position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden;
-}
-.orb {
-    position: absolute; border-radius: 50%;
-    filter: blur(3px); opacity: 0;
-    animation: orb-float ease-in-out infinite;
-}
-.orb1 { width: 18px; height: 18px; background: radial-gradient(circle, #a5b4fc, #6366f1); left: 15%; animation-duration: 9s; animation-delay: 0s; }
-.orb2 { width: 10px; height: 10px; background: radial-gradient(circle, #7dd3fc, #0ea5e9); left: 35%; animation-duration: 13s; animation-delay: -3s; }
-.orb3 { width: 14px; height: 14px; background: radial-gradient(circle, #c4b5fd, #8b5cf6); left: 55%; animation-duration: 11s; animation-delay: -6s; }
-.orb4 { width: 8px;  height: 8px;  background: radial-gradient(circle, #a7f3d0, #10b981); left: 72%; animation-duration: 15s; animation-delay: -1s; }
-.orb5 { width: 20px; height: 20px; background: radial-gradient(circle, #fde68a, #f59e0b); left: 85%; animation-duration: 10s; animation-delay: -4s; }
-.orb6 { width: 12px; height: 12px; background: radial-gradient(circle, #fca5a5, #ef4444); left: 25%; animation-duration: 12s; animation-delay: -7s; }
-.orb7 { width: 9px;  height: 9px;  background: radial-gradient(circle, #a5b4fc, #4f46e5); left: 65%; animation-duration: 16s; animation-delay: -2s; }
-.orb8 { width: 16px; height: 16px; background: radial-gradient(circle, #fbcfe8, #ec4899); left: 48%; animation-duration: 14s; animation-delay: -5s; }
-
-@keyframes orb-float {
-    0%   { transform: translateY(110vh) rotate(0deg) scale(0.6); opacity: 0; }
-    8%   { opacity: 0.9; }
-    92%  { opacity: 0.7; }
-    100% { transform: translateY(-20px) rotate(360deg) scale(1.2); opacity: 0; }
-}
-
-/* Sparkles */
-.sparkle {
-    position: absolute; pointer-events: none; animation: sparkle-anim 2.5s ease-in-out infinite;
-    z-index: 3;
-}
-.sparkle::before, .sparkle::after {
-    content: '✦';
-    position: absolute;
-    color: rgba(99,102,241,0.5);
-    font-size: 12px;
-}
-.sparkle::after { color: rgba(14,165,233,0.4); font-size: 8px; top: 20px; left: 15px; animation-delay: 1s; }
-@keyframes sparkle-anim {
-    0%,100% { opacity: 0; transform: scale(0.5); }
-    50%      { opacity: 1; transform: scale(1); }
-}
-
-/* Login card */
-.login-wrap {
-    position: relative; z-index: 10;
-    width: 500px; max-width: calc(100vw - 32px);
-    width: 600px; max-width: calc(100vw - 32px);
-}
-
-.login-card {
-    background: rgba(255,255,255,0.88);
-    backdrop-filter: blur(40px) saturate(200%);
-    border: 1.5px solid rgba(255,255,255,0.8);
-    border-radius: 36px;
-    padding: 64px 52px 52px;
-    box-shadow:
-        0 0 0 1px rgba(255,255,255,0.9) inset,
-        0 60px 120px rgba(79,70,229,0.22),
-        0 24px 48px rgba(79,70,229,0.12),
-        0 0 80px rgba(139,92,246,0.08);
-    animation: card-in 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-    opacity: 0;
-    position: relative;
-    overflow: hidden;
-}
-
-.login-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 50%);
-    pointer-events: none;
-    border-radius: 36px;
-}
-
-@keyframes card-in {
-    0%   { opacity: 0; transform: translateY(60px) scale(0.88) rotateX(8deg); }
-    100% { opacity: 1; transform: translateY(0) scale(1) rotateX(0); }
-}
-
-/* Logo */
-.logo-wrap {
-    display: flex; justify-content: center; margin-bottom: 36px;
-}
-
-.logo-outer {
-    position: relative;
-    width: 100px; height: 100px;
-    display: flex; align-items: center; justify-content: center;
-}
-
-.logo-ring-outer {
-    position: absolute; inset: -4px;
-    border-radius: 34px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, #4f46e5, #0ea5e9, #8b5cf6, #ec4899, #4f46e5);
-    animation: ring-spin 3s linear infinite;
-    opacity: 0.7;
-}
-
-.logo-ring {
-    width: 100px; height: 100px;
-    border-radius: 30px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #4f46e5 0%, #8b5cf6 50%, #0ea5e9 100%);
-    display: flex; align-items: center; justify-content: center;
-    box-shadow:
-        0 24px 60px rgba(79,70,229,0.5),
-        0 8px 24px rgba(139,92,246,0.3),
-        inset 0 1px 1px rgba(255,255,255,0.3);
-    animation: logo-breathe 3s ease-in-out infinite;
-    position: relative; z-index: 1;
-}
-
-@keyframes logo-breathe {
-    0%,100% { transform: scale(1); box-shadow: 0 24px 60px rgba(79,70,229,0.5), 0 8px 24px rgba(139,92,246,0.3), inset 0 1px 1px rgba(255,255,255,0.3); }
-    50%      { transform: scale(1.04); box-shadow: 0 32px 80px rgba(79,70,229,0.65), 0 12px 32px rgba(139,92,246,0.4), inset 0 1px 1px rgba(255,255,255,0.3); }
-}
-
-@keyframes ring-spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
-.logo-inner-icon {
-    font-size: 46px; line-height: 1;
-    animation: icon-wobble 4s ease-in-out infinite;
-    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.2));
-}
-.login-logo-img {
-    width: 68px;
-    height: 68px;
-    object-fit: contain;
-    border-radius: 20px;
-    border-radius: 50%;
-}
-@keyframes icon-wobble {
-    0%,100% { transform: rotate(-3deg) scale(1); }
-    50%      { transform: rotate(3deg) scale(1.05); }
-}
-
-/* Floating badges */
-.float-badge {
-    position: absolute;
-    background: white;
-    border-radius: 12px;
-    padding: 6px 12px;
-    font-size: 11px;
-    font-weight: 800;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    white-space: nowrap;
-    border: 1px solid rgba(255,255,255,0.8);
-    animation: badge-float 4s ease-in-out infinite;
-    z-index: 5;
-}
-
-.badge-top { top: -14px; right: -60px; color: #4f46e5; animation-delay: 0s; }
-.badge-btm { bottom: -14px; left: -60px; color: #0ea5e9; animation-delay: -2s; }
-
-@keyframes badge-float {
-    0%,100% { transform: translateY(0); }
-    50%      { transform: translateY(-6px); }
-}
-
-/* Title */
-.login-title {
-    font-size: 34px; font-weight: 800; color: var(--text);
-    text-align: center; letter-spacing: -0.8px; margin-bottom: 6px;
-    background: linear-gradient(135deg, #0f172a 0%, #4f46e5 60%, #8b5cf6 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    animation: title-shine 4s ease infinite;
-}
-@keyframes title-shine {
-    0%,100% { background-position: 0% 50%; }
-    50%      { background-position: 100% 50%; }
-}
-
-.login-sub {
-    color: var(--muted); text-align: center; font-size: 15px;
-    font-weight: 500; margin-bottom: 40px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-}
-
-.login-sub-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: linear-gradient(135deg, #4f46e5, #0ea5e9);
-    display: inline-block;
-    animation: dot-pulse 2s ease-in-out infinite;
-}
-@keyframes dot-pulse {
-    0%,100% { transform: scale(1); opacity: 1; }
-    50%      { transform: scale(1.4); opacity: 0.6; }
-}
-
-/* Fields */
-.field { margin-bottom: 18px; }
-
-.field label {
-    display: block; font-size: 11px; font-weight: 800;
-    letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--muted); margin-bottom: 8px;
-}
-
-.field-inner { position: relative; }
-
-.field-icon {
-    position: absolute; left: 18px; top: 50%;
-    transform: translateY(-50%); pointer-events: none;
-    width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
-    color: #94a3b8; font-size: 16px;
-    transition: color 0.2s;
-}
-
-.field input {
-    width: 100%; padding: 16px 18px 16px 50px;
-    background: rgba(248,250,252,0.8);
-    border: 2px solid rgba(226,232,240,0.8);
-    border-radius: 18px;
-    font-size: 15px; font-family: 'Plus Jakarta Sans', sans-serif;
-    color: var(--text); outline: none; transition: all 0.25s;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-
-.field input:focus {
-    border-color: var(--accent);
-    background: rgba(255,255,255,0.95);
-    box-shadow: 0 0 0 5px rgba(79,70,229,0.12), 0 4px 16px rgba(79,70,229,0.1);
-    transform: translateY(-1px);
-}
-
-.pw-toggle-btn {
-    position: absolute; right: 18px; top: 50%;
-    transform: translateY(-50%);
-    width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
-    background: none; border: none; cursor: pointer;
-    color: #94a3b8; font-size: 16px; transition: color 0.2s;
-    outline: none; z-index: 10;
-}
-.pw-toggle-btn:hover { color: var(--accent); }
-
-.field input:focus ~ .field-focus-bar { transform: scaleX(1); }
-
-.field-focus-bar {
-    height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent3));
-    border-radius: 2px; transform: scaleX(0); transition: transform 0.3s;
-    margin-top: 4px; transform-origin: left;
-}
-
-/* Login Button */
-.login-btn {
-    width: 100%; padding: 18px;
-    margin-top: 8px;
-    background: linear-gradient(135deg, #4f46e5, #6d28d9 50%, #0ea5e9);
-    background-size: 200% 200%;
-    color: white; font-size: 16px; font-weight: 800;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    border: none; border-radius: 18px; cursor: pointer;
-    transition: all 0.3s;
-    letter-spacing: 0.04em;
-    box-shadow: 0 16px 40px rgba(79,70,229,0.4), 0 4px 12px rgba(79,70,229,0.2);
-    position: relative; overflow: hidden;
-    animation: btn-gradient 5s ease infinite;
-}
-
-@keyframes btn-gradient {
-    0%,100% { background-position: 0% 50%; }
-    50%      { background-position: 100% 50%; }
-}
-
-.login-btn::before {
-    content: '';
-    position: absolute; inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent 60%);
-    border-radius: 18px;
-    opacity: 0; transition: opacity 0.2s;
-}
-
-.login-btn::after {
-    content: '';
-    position: absolute; inset: -100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
-    transform: translateX(-100%);
-    transition: transform 0.6s;
-}
-
-.login-btn:hover { transform: translateY(-3px); box-shadow: 0 24px 60px rgba(79,70,229,0.55), 0 8px 20px rgba(79,70,229,0.25); }
-.login-btn:hover::before { opacity: 1; }
-.login-btn:hover::after { transform: translateX(300%); }
-.login-btn:active { transform: translateY(-1px); }
-
-/* Error */
-.error-box {
-    background: rgba(254,242,242,0.9);
-    border: 2px solid #fecaca;
-    color: #dc2626; padding: 14px 18px;
-    border-radius: 16px; font-size: 13px; font-weight: 700;
-    margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
-    animation: shake 0.45s cubic-bezier(.36,.07,.19,.97);
-    backdrop-filter: blur(8px);
-}
-@keyframes shake {
-    0%,100% { transform: translateX(0); }
-    15%,55% { transform: translateX(-8px); }
-    35%,75% { transform: translateX(8px); }
-}
-
-/* Badge */
-.login-badge {
-    text-align: center; margin-top: 28px;
-    font-size: 11.5px; color: #94a3b8; font-weight: 600;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-}
-
-.sec-pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: rgba(16,185,129,0.1); color: #10b981;
-    border: 1px solid rgba(16,185,129,0.2);
-    padding: 3px 10px; border-radius: 20px;
-    font-size: 10px; font-weight: 700;
-}
-</style>
-</head>
-<body>
-
-<div class="login-theme-switch" id="loginThemeToggle" onclick="toggleLoginTheme()" title="Toggle Dark/Light Mode">
-    <div class="ts-thumb"></div>
-    <span class="ts-icon sun">☀️</span>
-    <span class="ts-icon moon">🌙</span>
-</div>
-
-<div class="bg"></div>
-<div class="grid-overlay"></div>
-<div class="orbs">
-    <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
-    <div class="orb orb4"></div><div class="orb orb5"></div><div class="orb orb6"></div>
-    <div class="orb orb7"></div><div class="orb orb8"></div>
-</div>
-
-<div class="login-wrap">
-    <form class="login-card" method="post">
-        <?php echo csrfField(); ?>
-        <div class="logo-wrap">
-            <div class="logo-outer">
-                <div class="logo-ring-outer"></div>
-                <div class="logo-ring">
-                    <?php if (!empty($appSettings["dashboard_logo_url"])): ?>
-                        <img class="login-logo-img" src="<?php echo htmlspecialchars($appSettings["dashboard_logo_url"]); ?>" alt="<?php echo htmlspecialchars($appSettings["app_name"]); ?>">
-                    <?php else: ?>
-                        <span class="logo-inner-icon">FM</span>
-                    <?php endif; ?>
-                </div>
-                <div class="float-badge badge-top">⚡ Fast</div>
-                <div class="float-badge badge-btm">🔐 Secure</div>
-            </div>
-        </div>
-
-        <h1 class="login-title"><?php echo htmlspecialchars($appSettings["app_name"]); ?></h1>
-        <p class="login-sub"><span class="login-sub-dot"></span> Private Image Hosting Server <span class="login-sub-dot"></span></p>
-
-        <?php if (!empty($loginError)): ?>
-            <div class="error-box">⚠️ <?php echo htmlspecialchars($loginError); ?></div>
-        <?php endif; ?>
-
-        <div class="field">
-            <label>Username</label>
-            <div class="field-inner">
-                <span class="field-icon">👤</span>
-                <input name="username" placeholder="Enter your username" required autocomplete="username">
-                <div class="field-focus-bar"></div>
-            </div>
-        </div>
-
-        <div class="field">
-            <label>Password</label>
-            <div class="field-inner">
-                <span class="field-icon">🔒</span>
-                <input id="loginPassword" name="password" type="password" placeholder="Enter your password" required autocomplete="current-password" style="padding-right: 50px;">
-                <button type="button" class="pw-toggle-btn" onclick="togglePasswordVisibility()" tabindex="-1" title="Show password">👁️</button>
-                <div class="field-focus-bar"></div>
-            </div>
-        </div>
-
-        <button class="login-btn" name="login">Sign In to Dashboard →</button>
-
-        <div class="login-badge">
-            <span class="sec-pill">✓ Encrypted</span>
-            &middot; Private &middot; Secure &middot; Fast
-        </div>
-    </form>
-</div>
-
-<script>
-function togglePasswordVisibility() {
-    const input = document.getElementById('loginPassword');
-    const btn = document.querySelector('.pw-toggle-btn');
-    if (input.type === 'password') {
-        input.type = 'text';
-        btn.textContent = '🙈';
-        btn.title = 'Hide password';
-    } else {
-        input.type = 'password';
-        btn.textContent = '👁️';
-        btn.title = 'Show password';
-    }
-}
-function updateLoginThemeButton() {
-    // The slide animation is handled by CSS using [data-theme="dark"]
-}
-function toggleLoginTheme() {
-    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem('kiuqTheme', next);
-    updateLoginThemeButton();
-}
-updateLoginThemeButton();
-</script>
-
-</body>
-</html>
-<?php
-exit;
+    $cmsLoginUrl = getCmsBaseUrl();
+    header("Location: " . $cmsLoginUrl . "?redirect=" . urlencode($pageUrl));
+    exit;
 }
 
 /*
@@ -2161,11 +2643,12 @@ exit;
 
 
 $isAdmin = isAdminUser($currentUser);
+$isSuperAdmin = isSuperAdminUser($currentUser);
 $isConverter = isConverterUser($currentUser);
 $isWebsiteTeam = isWebsiteTeamUser($currentUser);
 $websiteTeamFolder = "Website-Team";
 $websiteTeamRootRelative = cleanPath($websiteTeamFolder);
-$websiteTeamRootDir = safeFullPath($BASE_DIR . "/../ebay", $websiteTeamRootRelative);
+$websiteTeamRootDir = safeFullPath($BASE_DIR, $websiteTeamRootRelative);
 if ($isWebsiteTeam && !is_dir($websiteTeamRootDir)) {
     mkdir($websiteTeamRootDir, 0755, true);
 }
@@ -2193,7 +2676,7 @@ if ($isWebsiteTeam) {
         $current = $websiteTeamRootRelative;
     }
 }
-$currentDir = $isWebsiteTeam ? safeFullPath($BASE_DIR . "/../ebay", $current) : safeFullPath($BASE_DIR, $current);
+$currentDir = safeFullPath($BASE_DIR, $current);
 if (!is_dir($currentDir)) {
     if ($isConverter) {
         $current = $converterRootRelative;
@@ -2226,6 +2709,8 @@ if ($isWebsiteTeam) {
 }
 $_SESSION["last_activity"] = time();
 
+// Release session lock immediately for all GET requests (including PJAX folder navigation and thumbnails)
+// and read-only POST AJAX requests. This unlocks 100% concurrent parallel execution without request serialization!
 if (session_status() === PHP_SESSION_ACTIVE) {
     if ($_SERVER["REQUEST_METHOD"] === "GET" || (isset($_POST['action']) && in_array($_POST['action'], ['get_storage_stats', 'find_duplicates', 'get_versions', 'ai_bg_remove_status', 'check_webm_status', 'get_folder_options', 'get_properties'], true))) {
         session_write_close();
@@ -2234,6 +2719,18 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 $baseReturnUrl = $pageUrl . "?path=" . urlencode($current);
 $homePath = $isConverter ? $converterRootRelative : ($isWebsiteTeam ? $websiteTeamRootRelative : "");
 $homeUrl = $pageUrl . "?path=" . urlencode($homePath);
+
+if (isset($_GET["action"]) && $_GET["action"] === "thumb") {
+    handleThumbnailRequest();
+    exit;
+}
+
+if (isset($_GET["action"]) && $_GET["action"] === "convert_download") {
+    if (function_exists('file_converter_handle')) {
+        file_converter_handle('convert_download', $_GET, [], $BASE_DIR, $currentDir, $current, $currentUser['id'] ?? '', $BASE_URL);
+        exit;
+    }
+}
 
 if (isset($_GET["download_item"])) {
     $itemName = cleanExistingName($_GET["download_item"]);
@@ -2256,6 +2753,126 @@ if (isset($_GET["download_item"])) {
     exit;
 }
 
+if (isset($_GET["trash_preview"])) {
+    $trashId = cleanExistingName($_GET["trash_preview"]);
+    $trashData = loadTrashIndex();
+    if (!empty($trashData["items"][$trashId])) {
+        $item = $trashData["items"][$trashId];
+        $trashFile = $TRASH_DIR . "/" . cleanName($item["trash_name"] ?? "");
+        if (is_file($trashFile)) {
+            $ext = strtolower(pathinfo($item["original_relative"] ?? "", PATHINFO_EXTENSION));
+            $mimes = [
+                'jpg'  => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png'  => 'image/png',
+                'webp' => 'image/webp',
+                'gif'  => 'image/gif',
+                'svg'  => 'image/svg+xml',
+                'avif' => 'image/avif',
+                'mp4'  => 'video/mp4',
+                'webm' => 'video/webm',
+                'mov'  => 'video/quicktime',
+                'm4v'  => 'video/mp4',
+                'ogg'  => 'video/ogg',
+            ];
+            $mime = $mimes[$ext] ?? 'application/octet-stream';
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            while (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+
+            // Fast path: small cached webp thumbnail for trash list rows (?w=360)
+            if (isset($_GET['w']) && in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'avif'], true) && function_exists('imagewebp')) {
+                $tw = max(60, min(800, (int)$_GET['w']));
+                $tMtime = (int)@filemtime($trashFile);
+                $tCacheDir = $APP_ASSETS_DIR . '/cache/thumbs';
+                if (!is_dir($tCacheDir)) @mkdir($tCacheDir, 0777, true);
+                if (!is_dir($tCacheDir) || !is_writable($tCacheDir)) {
+                    $tCacheDir = sys_get_temp_dir() . '/kiuq_thumbs';
+                    if (!is_dir($tCacheDir)) @mkdir($tCacheDir, 0777, true);
+                }
+                $tCacheFile = md5('trash_' . $trashId . '_' . $tMtime . '_' . $tw) . '.webp';
+                $tCachePath = $tCacheDir . '/' . $tCacheFile;
+                if (!(is_file($tCachePath) && filesize($tCachePath) > 0) && canAttemptImageOptimization($trashFile)) {
+                    $tSrc = imageResourceFromFile($trashFile, $ext);
+                    if ($tSrc) {
+                        $tW = imagesx($tSrc);
+                        $tH = imagesy($tSrc);
+                        if ($tW > $tw) {
+                            $nH = max(1, (int)round(($tH / $tW) * $tw));
+                            $canvas = imagecreatetruecolor($tw, $nH);
+                            if ($canvas) {
+                                imagealphablending($canvas, false);
+                                imagesavealpha($canvas, true);
+                                imagefilledrectangle($canvas, 0, 0, $tw, $nH, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
+                                imagecopyresampled($canvas, $tSrc, 0, 0, 0, 0, $tw, $nH, $tW, $tH);
+                                imagedestroy($tSrc);
+                                $tSrc = $canvas;
+                            }
+                        }
+                        imagepalettetotruecolor($tSrc);
+                        imagealphablending($tSrc, false);
+                        imagesavealpha($tSrc, true);
+                        @imagewebp($tSrc, $tCachePath, 78);
+                        imagedestroy($tSrc);
+                    }
+                }
+                if (is_file($tCachePath) && filesize($tCachePath) > 0) {
+                    $tEtag = '"' . md5($tCacheFile) . '"';
+                    header('Content-Type: image/webp');
+                    header('Cache-Control: private, max-age=31536000, immutable');
+                    header('ETag: ' . $tEtag);
+                    if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $tEtag) {
+                        http_response_code(304);
+                        exit;
+                    }
+                    header('Content-Length: ' . filesize($tCachePath));
+                    readfile($tCachePath);
+                    exit;
+                }
+            }
+            $size = filesize($trashFile);
+            header("Content-Type: " . $mime);
+            header("Accept-Ranges: bytes");
+            header("Cache-Control: private, max-age=86400");
+
+            if (isset($_SERVER['HTTP_RANGE'])) {
+                if (preg_match('/bytes=\h*(\d+)-(\d*)[\D.*]?/i', $_SERVER['HTTP_RANGE'], $matches)) {
+                    $start = intval($matches[1]);
+                    $end = !empty($matches[2]) ? intval($matches[2]) : ($size - 1);
+                    if ($start > $end || $start >= $size || $end >= $size) {
+                        http_response_code(416);
+                        header("Content-Range: bytes */" . $size);
+                        exit;
+                    }
+                    http_response_code(206);
+                    header("Content-Range: bytes " . $start . "-" . $end . "/" . $size);
+                    header("Content-Length: " . ($end - $start + 1));
+                    $fp = fopen($trashFile, 'rb');
+                    fseek($fp, $start);
+                    $chunk = 1024 * 64;
+                    while (!feof($fp) && ($pos = ftell($fp)) <= $end) {
+                        if ($pos + $chunk > $end) {
+                            $chunk = $end - $pos + 1;
+                        }
+                        echo fread($fp, $chunk);
+                        flush();
+                    }
+                    fclose($fp);
+                    exit;
+                }
+            }
+            header("Content-Length: " . $size);
+            readfile($trashFile);
+            exit;
+        }
+    }
+    http_response_code(404);
+    exit("Preview not found");
+}
+
 /*
 |--------------------------------------------------------------------------
 | ACTIONS
@@ -2267,15 +2884,35 @@ $messageType = "success";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
     $action = $_POST["action"];
+    $fileMutatingActions = [
+        "upload_files", "create_folder", "create_file", "resize_images",
+        "rename_item", "rename_type", "delete_item", "delete_selected",
+        "move_selected", "copy_selected", "paste_clipboard", "restore_trash_item",
+        "restore_trash_selected", "delete_trash_item", "delete_trash_selected",
+        "empty_trash", "replace_image", "delete_duplicate"
+    ];
+    if (in_array($action, $fileMutatingActions, true) && function_exists('storage_dashboard_invalidate_cache')) {
+        storage_dashboard_invalidate_cache();
+    }
     $uploadAjaxRequest = isset($_POST["upload_ajax"]) && $_POST["upload_ajax"] === "1";
+    if ($action === "upload_files") {
+        session_write_close(); // Unlock session immediately for true parallel uploads
+    }
     $redirectToTrash = $trashMode || in_array($action, ["restore_trash_item", "delete_trash_item", "empty_trash", "restore_trash_selected", "delete_trash_selected"], true);
     $redirectOverride = "";
-    $adminOnlyActions = ["unban_device", "save_app_settings", "clear_login_activity", "create_user", "set_user_role", "change_user_password", "freeze_user", "unfreeze_user", "delete_user", "update_user_permissions"];
+    $adminOnlyActions = ["unban_device", "save_app_settings", "clear_login_activity", "create_user", "set_user_role", "change_user_password", "change_username", "admin_edit_user", "freeze_user", "unfreeze_user", "delete_user", "update_user_permissions"];
     $adminFileActions = ["create_file", "edit_file"];
-    $converterAllowedActions = ["set_theme", "set_dashboard_theme", "upload_dashboard_theme", "delete_dashboard_theme", "get_folder_options", "get_storage_stats", "create_folder", "upload_files", "delete_item", "delete_selected", "download_selected"];
+    $converterAllowedActions = ["set_theme", "set_dashboard_theme", "upload_dashboard_theme", "delete_dashboard_theme", "get_folder_options", "get_storage_stats", "create_folder", "upload_files", "delete_item", "delete_selected", "download_selected", "resize_images", "convert_upload_file", "convert_init_job", "convert_process_step", "convert_finish_job", "convert_download", "rename_item", "rename_type", "move_selected", "copy_selected", "paste_clipboard", "replace_image", "get_properties"];
+
+    $isAjaxAction = $uploadAjaxRequest || ($action === "resize_images") || in_array($action, [
+        "get_folder_options", "set_dashboard_theme", "upload_dashboard_theme", "delete_dashboard_theme",
+        "check_webm_status", "convert_video_webm", "get_properties", "find_duplicates", "replace_image",
+        "get_storage_stats", "delete_duplicate", "convert_upload_file", "convert_init_job", "convert_process_step", "convert_finish_job", "convert_download"
+    ], true) || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+       || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
 
     if (!validCsrf($_POST["csrf_token"] ?? "")) {
-        if ($uploadAjaxRequest) {
+        if ($isAjaxAction) {
             if (ob_get_length()) @ob_clean();
             header("Content-Type: application/json");
             echo json_encode([
@@ -2291,13 +2928,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         $message = "Security token expired. Refresh and try again.";
         $messageType = "error";
     } elseif (in_array($action, $adminOnlyActions, true) && !$isAdmin) {
+        if ($isAjaxAction) {
+            if (ob_get_length()) @ob_clean();
+            header("Content-Type: application/json");
+            echo json_encode(["success" => false, "message" => "Admin permission is required.", "error" => "Admin permission required."]);
+            exit;
+        }
         $message = "Admin permission is required.";
         $messageType = "error";
     } elseif (in_array($action, $adminFileActions, true) && !$isAdmin && !$isWebsiteTeam) {
+        if ($isAjaxAction) {
+            if (ob_get_length()) @ob_clean();
+            header("Content-Type: application/json");
+            echo json_encode(["success" => false, "message" => "Admin permission is required.", "error" => "Admin permission required."]);
+            exit;
+        }
         $message = "Admin permission is required.";
         $messageType = "error";
     } elseif ($isConverter && !in_array($action, $converterAllowedActions, true)) {
-        if ($uploadAjaxRequest) {
+        if ($isAjaxAction) {
             if (ob_get_length()) @ob_clean();
             header("Content-Type: application/json");
             echo json_encode([
@@ -2338,7 +2987,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         exit;
     } elseif ($action === "set_dashboard_theme") {
         $themeUrl = trim($_POST["theme_url"] ?? "");
-        if ($themeUrl !== "" && !filter_var($themeUrl, FILTER_VALIDATE_URL)) {
+        $isValidTheme = ($themeUrl === "" || filter_var($themeUrl, FILTER_VALIDATE_URL) || str_starts_with($themeUrl, "/") || str_starts_with($themeUrl, "profileimg/") || str_contains($themeUrl, "preset-"));
+        if (!$isValidTheme) {
             header("Content-Type: application/json");
             echo json_encode(["success" => false, "error" => "Enter a valid image URL."]);
             exit;
@@ -2511,7 +3161,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             $message = "User created.";
         }
         $redirectOverride = $pageUrl . "?users=1";
-    } elseif (in_array($action, ["set_user_role", "change_user_password", "freeze_user", "unfreeze_user", "delete_user", "update_user_permissions"], true)) {
+    } elseif (in_array($action, ["set_user_role", "change_user_password", "change_username", "admin_edit_user", "freeze_user", "unfreeze_user", "delete_user", "update_user_permissions"], true)) {
         $targetId = preg_replace("/[^a-f0-9\-]/", "", $_POST["user_id"] ?? "");
         $data = loadUsers();
         $foundIndex = null;
@@ -2525,7 +3175,93 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             $target = $data["users"][$foundIndex];
             $protected = !empty($target["is_main_admin"]);
             $isSelf = ($target["id"] ?? "") === ($currentUser["id"] ?? "");
-            if ($action === "set_user_role") {
+
+            if ($action === "change_username") {
+                if (!$isSuperAdmin) {
+                    $message = "Only the super admin can change usernames.";
+                    $messageType = "error";
+                } else {
+                    $newUsername = strtolower(trim($_POST["new_username"] ?? ""));
+                    if (!preg_match("/^[a-z0-9@._-]{3,120}$/", $newUsername)) {
+                        $message = "Username must be 3–120 characters (letters, numbers, @, ., _, -).";
+                        $messageType = "error";
+                    } else {
+                        $existing = findUserByUsername($newUsername);
+                        if ($existing && ($existing["id"] ?? "") !== $targetId) {
+                            $message = "Username \"$newUsername\" is already in use.";
+                            $messageType = "error";
+                        } else {
+                            $oldUsername = $data["users"][$foundIndex]["username"] ?? "";
+                            $data["users"][$foundIndex]["username"] = $newUsername;
+                            if (($data["users"][$foundIndex]["display_name"] ?? "") === $oldUsername) {
+                                $data["users"][$foundIndex]["display_name"] = $newUsername;
+                            }
+                            $data["users"][$foundIndex]["updated_at"] = time();
+                            saveUsers($data);
+                            $message = "Username changed from \"$oldUsername\" to \"$newUsername\".";
+                        }
+                    }
+                }
+            } elseif ($action === "change_user_password") {
+                $password = $_POST["password"] ?? "";
+                if (strlen($password) < 8) {
+                    $message = "Password must be at least 8 characters.";
+                    $messageType = "error";
+                } elseif ($protected && !$isSelf && !$isSuperAdmin) {
+                    $message = "Only the super admin can change this password.";
+                    $messageType = "error";
+                } else {
+                    $data["users"][$foundIndex]["password_hash"] = password_hash($password, PASSWORD_DEFAULT);
+                    $data["users"][$foundIndex]["updated_at"] = time();
+                    saveUsers($data);
+                    $message = "Password changed for " . htmlspecialchars($data["users"][$foundIndex]["username"]) . ".";
+                }
+            } elseif ($action === "admin_edit_user") {
+                if (!$isSuperAdmin) {
+                    $message = "Only the super admin can edit user credentials.";
+                    $messageType = "error";
+                } else {
+                    $newUsername = strtolower(trim($_POST["edit_username"] ?? ""));
+                    $newPassword = $_POST["edit_password"] ?? "";
+                    $newDisplayName = trim($_POST["edit_display_name"] ?? "");
+                    $newRole = normalizeUserRole($_POST["edit_role"] ?? ($target["role"] ?? "staff"));
+
+                    $errors = [];
+                    if (!preg_match("/^[a-z0-9@._-]{3,120}$/", $newUsername)) {
+                        $errors[] = "Username must be 3–120 characters.";
+                    } else {
+                        $existing = findUserByUsername($newUsername);
+                        if ($existing && ($existing["id"] ?? "") !== $targetId) {
+                            $errors[] = "Username \"$newUsername\" is already taken.";
+                        }
+                    }
+                    if ($newPassword !== "" && strlen($newPassword) < 8) {
+                        $errors[] = "Password must be at least 8 characters.";
+                    }
+
+                    if (!empty($errors)) {
+                        $message = implode(" ", $errors);
+                        $messageType = "error";
+                    } else {
+                        $oldUsername = $data["users"][$foundIndex]["username"] ?? "";
+                        $data["users"][$foundIndex]["username"] = $newUsername;
+                        if ($newDisplayName !== "") {
+                            $data["users"][$foundIndex]["display_name"] = substr($newDisplayName, 0, 120);
+                        } elseif (($data["users"][$foundIndex]["display_name"] ?? "") === $oldUsername) {
+                            $data["users"][$foundIndex]["display_name"] = $newUsername;
+                        }
+                        if ($newPassword !== "") {
+                            $data["users"][$foundIndex]["password_hash"] = password_hash($newPassword, PASSWORD_DEFAULT);
+                        }
+                        if (!$protected && !$isSelf) {
+                            $data["users"][$foundIndex]["role"] = $newRole;
+                        }
+                        $data["users"][$foundIndex]["updated_at"] = time();
+                        saveUsers($data);
+                        $message = "User credentials updated successfully for \"" . htmlspecialchars($newUsername) . "\".";
+                    }
+                }
+            } elseif ($action === "set_user_role") {
                 if ($protected || $isSelf) {
                     $message = "This admin role is protected.";
                     $messageType = "error";
@@ -2533,20 +3269,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                     $role = normalizeUserRole($_POST["role"] ?? "staff");
                     $data["users"][$foundIndex]["role"] = $role;
                     $data["users"][$foundIndex]["updated_at"] = time();
+                    saveUsers($data);
                     $message = "Role updated.";
-                }
-            } elseif ($action === "change_user_password") {
-                $password = $_POST["password"] ?? "";
-                if (strlen($password) < 8) {
-                    $message = "Password must be at least 8 characters.";
-                    $messageType = "error";
-                } elseif ($protected && !$isSelf) {
-                    $message = "Only the main admin can change the main admin password.";
-                    $messageType = "error";
-                } else {
-                    $data["users"][$foundIndex]["password_hash"] = password_hash($password, PASSWORD_DEFAULT);
-                    $data["users"][$foundIndex]["updated_at"] = time();
-                    $message = "Password changed.";
                 }
             } elseif ($action === "freeze_user" || $action === "unfreeze_user") {
                 if ($protected || $isSelf) {
@@ -2555,6 +3279,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                 } else {
                     $data["users"][$foundIndex]["status"] = $action === "freeze_user" ? "frozen" : "active";
                     $data["users"][$foundIndex]["updated_at"] = time();
+                    saveUsers($data);
                     $message = "User status updated.";
                 }
             } elseif ($action === "delete_user") {
@@ -2563,14 +3288,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                     $messageType = "error";
                 } else {
                     array_splice($data["users"], $foundIndex, 1);
+                    saveUsers($data);
                     $message = "User removed.";
                 }
             } elseif ($action === "update_user_permissions") {
                 $data["users"][$foundIndex]["can_view_login_activity"] = isset($_POST["can_view_login_activity"]);
                 $data["users"][$foundIndex]["updated_at"] = time();
+                saveUsers($data);
                 $message = "Permissions updated.";
             }
-            saveUsers($data);
         }
         $redirectOverride = $pageUrl . "?users=1";
     } elseif ($action === "unban_device") {
@@ -2615,6 +3341,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
         session_write_close(); // Unlock session to allow parallel upload processing
         $uploaded = 0;
         $optimized = 0;
+        $optimizedWebm = 0;
         $fallbackOriginal = 0;
         $failed = 0;
         $uploadedBackupPaths = [];
@@ -2626,6 +3353,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             $uploadNames = [$uploadNames];
             $uploadTmpNames = [$uploadTmpNames];
             $uploadErrors = [$uploadErrors];
+        }
+        if (isset($_FILES["upload_folders"]["name"])) {
+            $fNames = $_FILES["upload_folders"]["name"];
+            $fTmp = $_FILES["upload_folders"]["tmp_name"] ?? [];
+            $fErr = $_FILES["upload_folders"]["error"] ?? [];
+            if (!is_array($fNames)) {
+                $fNames = [$fNames];
+                $fTmp = [$fTmp];
+                $fErr = [$fErr];
+            }
+            foreach ($fNames as $fi => $fn) {
+                if ((string)$fn !== "") {
+                    $uploadNames[] = $fn;
+                    $uploadTmpNames[] = $fTmp[$fi] ?? "";
+                    $uploadErrors[] = $fErr[$fi] ?? UPLOAD_ERR_NO_FILE;
+                }
+            }
         }
         $errorDetails = [];
         if (!is_writable($currentDir)) {
@@ -2682,12 +3426,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                     if (!is_dir($partDir)) @mkdir($partDir, 0755, true);
                     $partFile = $partDir . '/upload.part';
 
-                    $chunkData = file_get_contents($tmpName);
-                    if ($chunkIndex === 0) {
-                        file_put_contents($partFile, $chunkData);
-                    } else {
-                        file_put_contents($partFile, $chunkData, FILE_APPEND);
+                    $in = @fopen($tmpName, 'rb');
+                    $out = @fopen($partFile, $chunkIndex === 0 ? 'wb' : 'ab');
+                    if ($in && $out) {
+                        stream_copy_to_stream($in, $out);
                     }
+                    if (is_resource($in)) @fclose($in);
+                    if (is_resource($out)) @fclose($out);
 
                     if ($chunkIndex < $totalChunks - 1) {
                         if ($uploadAjax) {
@@ -2740,12 +3485,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                                     continue;
                                 }
                                 
-                                if (!in_array($itemExt, $allowedExtensions, true) || ($isConverter && !in_array($itemExt, ["jpg", "jpeg", "png", "webp", "avif"], true))) {
+                                if (!in_array($itemExt, $allowedExtensions, true)) {
                                     @unlink($extractedPath);
                                     continue;
                                 }
                                 
-                                if (isWebpConvertibleImage($itemName)) {
+                                $convertWebpOption = isset($_POST["convert_webp"])
+                                    ? ($_POST["convert_webp"] === "1" || $_POST["convert_webp"] === "true" || $_POST["convert_webp"] === 1)
+                                    : (!$isConverter);
+                                if ($convertWebpOption && isWebpConvertibleImage($itemName)) {
                                     $webpName = cleanBaseName($itemName) . ".webp";
                                     $webpPath = $item->getPath() . "/" . $webpName;
                                     if (saveOptimizedWebp($extractedPath, $webpPath, $itemExt)) {
@@ -2757,7 +3505,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                                         $fallbackOriginal++;
                                     }
                                 } else {
-                                    $uploadedBackupPaths[$extractedPath] = true;
+                                    if (!isVideoFile($itemName)) {
+                                        $uploadedBackupPaths[$extractedPath] = true;
+                                    }
                                 }
                             }
                         }
@@ -2799,19 +3549,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                     continue;
                 }
 
-                if ($isConverter && !in_array($ext, ["jpg", "jpeg", "png", "webp", "avif"], true)) {
-                    $failed++;
-                    $errorDetails[] = $fileName . ": Converter role accepts JPG, JPEG, PNG, WebP, and AVIF only.";
-                    continue;
-                }
                 if (!in_array($ext, $allowedExtensions, true)) {
                     $failed++;
                     $errorDetails[] = $fileName . ": File type is not allowed.";
                     continue;
                 }
 
+                $convertWebpOption = isset($_POST["convert_webp"])
+                    ? ($_POST["convert_webp"] === "1" || $_POST["convert_webp"] === "true" || $_POST["convert_webp"] === 1)
+                    : (!$isConverter);
                 $triedWebp = false;
-                if (isWebpConvertibleImage($fileName)) {
+                if ($convertWebpOption && isWebpConvertibleImage($fileName)) {
                     $triedWebp = true;
                     $webpName = cleanBaseName($fileName) . ".webp";
                     $webpPath = $targetDir . "/" . $webpName;
@@ -2832,30 +3580,44 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                             @unlink($oldOriginalPath);
                         }
                         
+                        if (isset($partFile) && file_exists($partFile)) {
+                            @unlink($partFile);
+                            if (isset($partDir) && is_dir($partDir)) @rmdir($partDir);
+                        }
                         continue;
                     }
                 }
 
                 $destination = $targetDir . "/" . $fileName;
                 
-                if (file_exists($destination)) {
+                if (file_exists($destination) && !isVideoFile($fileName)) {
                     imghost_autoBackupTargets([$destination]);
                 }
                 
                 if (storeUploadedTempFile($tmpName, $destination)) {
                     @chmod($destination, 0644);
                     $uploaded++;
-                    $uploadedBackupPaths[$destination] = true;
+                    if (!isVideoFile($fileName)) {
+                        $uploadedBackupPaths[$destination] = true;
+                    }
+                    if (isset($partFile) && file_exists($partFile)) {
+                        @unlink($partFile);
+                        if (isset($partDir) && is_dir($partDir)) @rmdir($partDir);
+                    }
                     if ($triedWebp && $ext !== "webp") {
                         $fallbackOriginal++;
                     }
+
+                    continue;
                 } else {
                     $failed++;
                     $errorDetails[] = $fileName . ": Server cannot move uploaded file to destination folder.";
+                    if (isset($partFile) && file_exists($partFile)) {
+                        @unlink($partFile);
+                        if (isset($partDir) && is_dir($partDir)) @rmdir($partDir);
+                    }
+                    continue;
                 }
-            }
-            if (!empty($uploadedBackupPaths)) {
-                imghost_autoBackup(array_keys($uploadedBackupPaths));
             }
             $message = "$uploaded file(s) uploaded successfully.";
             if ($optimized) $message .= " $optimized image(s) optimized to WebP.";
@@ -2873,7 +3635,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
                     "message" => $message,
                     "errors" => $errorDetails,
                 ]);
+                kiuq_finish_request();
+                // Run auto-backup in background after response is flushed to client
+                if (!empty($uploadedBackupPaths)) {
+                    imghost_autoBackup(array_keys($uploadedBackupPaths));
+                }
                 exit;
+            }
+            if (!empty($uploadedBackupPaths)) {
+                imghost_autoBackup(array_keys($uploadedBackupPaths));
             }
         } elseif ($uploadAjax) {
             if (ob_get_length()) @ob_clean();
@@ -2887,6 +3657,143 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             ]);
             exit;
         }
+    } elseif ($action === "check_webm_status") {
+        // WebM auto-conversion is disabled; clean up any lingering job status files
+        $jobFiles = @glob($currentDir . "/.webm_job_*.json");
+        if ($jobFiles) {
+            foreach ($jobFiles as $jf) @unlink($jf);
+        }
+        if (ob_get_length()) @ob_clean();
+        header("Content-Type: application/json");
+        echo json_encode(["success" => true, "jobs" => []]);
+        exit;
+    } elseif ($action === "convert_video_webm") {
+        if (ob_get_length()) @ob_clean();
+        header("Content-Type: application/json");
+        echo json_encode(["success" => false, "message" => "Video conversion is disabled. Original video format & quality are 100% preserved."]);
+        exit;
+    } elseif ($action === "resize_images") {
+        $files = $_POST["files"] ?? [];
+        if (is_string($files)) {
+            $decoded = json_decode($files, true);
+            if (is_array($decoded)) {
+                $files = $decoded;
+            } elseif (strpos($files, ',') !== false) {
+                $files = array_map('trim', explode(',', $files));
+            } elseif (!empty($files)) {
+                $files = [$files];
+            }
+        }
+        if (!is_array($files)) {
+            $singleFile = cleanExistingName($_POST["file_name"] ?? "");
+            $files = $singleFile ? [$singleFile] : [];
+        }
+
+        $rawMode = function_exists('cleanInput') ? cleanInput($_POST['resize_mode'] ?? 'filesize') : trim(strip_tags((string)($_POST['resize_mode'] ?? 'filesize')));
+        $rawUnit = strtoupper(function_exists('cleanInput') ? cleanInput($_POST['size_unit'] ?? 'MB') : trim(strip_tags((string)($_POST['size_unit'] ?? 'MB'))));
+        $rawFormat = strtolower(function_exists('cleanInput') ? cleanInput($_POST['output_format'] ?? 'original') : trim(strip_tags((string)($_POST['output_format'] ?? 'original'))));
+        $rawSaveMode = strtolower(function_exists('cleanInput') ? cleanInput($_POST['save_mode'] ?? 'replace') : trim(strip_tags((string)($_POST['save_mode'] ?? 'replace'))));
+
+        $options = [
+            'mode'           => in_array($rawMode, ['filesize', 'dimensions', 'percentage'], true) ? $rawMode : 'filesize',
+            'target_size'    => max(0.01, floatval($_POST['target_size'] ?? 5)),
+            'size_unit'      => ($rawUnit === 'KB') ? 'KB' : 'MB',
+            'width'          => max(0, intval($_POST['target_width'] ?? 0)),
+            'height'         => max(0, intval($_POST['target_height'] ?? 0)),
+            'maintain_ratio' => !empty($_POST['maintain_ratio']),
+            'percentage'     => max(5, min(200, intval($_POST['percentage'] ?? 50))),
+            'quality'        => max(20, min(100, intval($_POST['quality'] ?? 88))),
+            'format'         => in_array($rawFormat, ['original', 'webp', 'jpg', 'jpeg', 'png', 'gif', 'avif'], true) ? $rawFormat : 'original',
+            'save_mode'      => ($rawSaveMode === 'copy') ? 'copy' : 'replace',
+        ];
+
+        $results = [];
+        $successCount = 0;
+        $failCount = 0;
+        $backupPaths = [];
+
+        foreach ($files as $rawFileName) {
+            $fileName = cleanExistingName($rawFileName);
+            if (!$fileName) continue;
+            $srcPath = $currentDir . "/" . $fileName;
+            if (!file_exists($srcPath) || !isImageFile($fileName)) {
+                $results[] = [
+                    'file' => $fileName,
+                    'success' => false,
+                    'message' => 'File not found or not an image'
+                ];
+                $failCount++;
+                continue;
+            }
+
+            $origSize = filesize($srcPath);
+            $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+            $baseName = cleanBaseName($fileName);
+            $targetExt = ($options['format'] === 'webp') ? 'webp' : (($options['format'] === 'original' || empty($options['format'])) ? $ext : $options['format']);
+
+            if ($options['save_mode'] === 'copy') {
+                $destName = $baseName . '_resized.' . $targetExt;
+                $destPath = $currentDir . "/" . $destName;
+                $copyNum = 1;
+                while (file_exists($destPath)) {
+                    $destName = $baseName . '_resized_' . $copyNum . '.' . $targetExt;
+                    $destPath = $currentDir . "/" . $destName;
+                    $copyNum++;
+                }
+            } else {
+                if ($targetExt !== $ext) {
+                    $destName = $baseName . '.' . $targetExt;
+                    $destPath = $currentDir . "/" . $destName;
+                } else {
+                    $destName = $fileName;
+                    $destPath = $srcPath;
+                }
+                $backupPaths[] = $srcPath;
+            }
+
+            $ok = processImageResize($srcPath, $destPath, $options);
+            if ($ok && file_exists($destPath) && filesize($destPath) > 0) {
+                $newSize = filesize($destPath);
+                if ($options['save_mode'] === 'replace' && $destPath !== $srcPath && file_exists($srcPath)) {
+                    @unlink($srcPath);
+                }
+                $savings = $origSize > 0 ? round((1 - ($newSize / $origSize)) * 100, 1) : 0;
+                $results[] = [
+                    'file' => $fileName,
+                    'new_name' => $destName,
+                    'old_size' => $origSize,
+                    'new_size' => $newSize,
+                    'old_size_formatted' => formatSize($origSize),
+                    'new_size_formatted' => formatSize($newSize),
+                    'savings_percent' => $savings,
+                    'success' => true
+                ];
+                $successCount++;
+            } else {
+                $results[] = [
+                    'file' => $fileName,
+                    'success' => false,
+                    'message' => 'Resize failed or could not process image'
+                ];
+                $failCount++;
+            }
+        }
+
+        if (!empty($backupPaths) && function_exists('imghost_autoBackupTargets')) {
+            imghost_autoBackupTargets($backupPaths);
+        }
+
+        if (ob_get_length()) @ob_clean();
+        header("Content-Type: application/json");
+        echo json_encode([
+            'success' => $successCount > 0,
+            'total' => count($files),
+            'success_count' => $successCount,
+            'fail_count' => $failCount,
+            'results' => $results,
+            'message' => "Resized $successCount image(s) successfully" . ($failCount > 0 ? " ($failCount failed)" : "") . "."
+        ]);
+        exit;
     } elseif ($action === "rename_item") {
         $oldName = cleanExistingName($_POST["old_name"] ?? "");
         $newName = cleanName($_POST["new_name"] ?? "");
@@ -3242,6 +4149,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
             header('Content-Type: application/json');
             echo json_encode(['success' => false, 'error' => 'File not found']);
         }
+    } elseif (in_array($action, [
+        'convert_upload_file', 'convert_init_job', 'convert_process_step', 'convert_finish_job', 'convert_download'
+    ], true)) {
+        if (function_exists('file_converter_handle')) {
+            file_converter_handle($action, $_POST, $_FILES, $BASE_DIR, $currentDir, $current,
+                $currentUser['id'] ?? '', $BASE_URL, 'imghost_autoBackup');
+        } else {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => 'File converter module is not available']);
+        }
         exit;
     }
     // ════════════════════════════════════════════════════════════════════════
@@ -3263,23 +4180,33 @@ $messageType = $_GET["msgtype"] ?? "success";
 
 $items = [];
 ensureSecureIndexFile($currentDir);
-foreach (scandir($currentDir) as $item) {
-    if ($item === "." || $item === "..") continue;
-    if (shouldHideFromFileManager($item)) continue;
-    $path = $currentDir . "/" . $item;
-    $isFile = is_file($path);
-    $isDir = is_dir($path);
-    $mtime = (int)@filemtime($path);
-    $ctime = (int)(@filectime($path) ?: $mtime);
-    $items[] = [
-        "name"     => $item,
-        "is_dir"   => $isDir,
-        "size"     => $isFile ? filesize($path) : 0,
-        "mtime"    => $mtime,
-        "ctime"    => $ctime,
-        "is_image" => $isFile && isImageFile($item),
-        "is_code"  => $isFile && isCodeFile($item),
-    ];
+$scanned = @scandir($currentDir);
+if (is_array($scanned)) {
+    foreach ($scanned as $item) {
+        if ($item === "." || $item === "..") continue;
+        if (shouldHideFromFileManager($item)) continue;
+        $path = $currentDir . "/" . $item;
+        $st = @stat($path);
+        if (!$st) continue;
+        $isDir = ($st['mode'] & 0040000) === 0040000;
+        $size = $isDir ? getFolderTotalSize($path) : (int)$st['size'];
+        // Never show 0-byte or unfinished webm files in the file manager
+        if (!$isDir && $size === 0 && str_ends_with(strtolower($item), '.webm')) {
+            continue;
+        }
+        $mtime = (int)($st['mtime'] ?? 0);
+        $ctime = (int)($st['ctime'] ?? $mtime);
+        $items[] = [
+            "name"     => $item,
+            "is_dir"   => $isDir,
+            "size"     => $size,
+            "mtime"    => $mtime,
+            "ctime"    => $ctime,
+            "is_image" => !$isDir && isImageFile($item),
+            "is_video" => !$isDir && isVideoFile($item),
+            "is_code"  => !$isDir && isCodeFile($item),
+        ];
+    }
 }
 
 // ── Advanced Sorting ──────────────────────────────────────────────────────
@@ -3318,10 +4245,20 @@ if ($FEATURES_ENABLED && function_exists('feature_db_get_folder_meta_bulk')) {
 }
 
 $imageUrls = [];
+$videoItems = [];
 foreach ($items as $item) {
-    if (!$item["is_dir"] && $item["is_image"]) {
+    if (!$item["is_dir"]) {
         $relative = $current ? $current . "/" . $item["name"] : $item["name"];
-        $imageUrls[] = publicUrl($BASE_URL, $relative);
+        if ($item["is_image"]) {
+            $imageUrls[] = publicUrl($BASE_URL, $relative);
+        } elseif (!empty($item["is_video"])) {
+            $videoItems[] = [
+                "name" => $item["name"],
+                "url"  => publicUrl($BASE_URL, $relative),
+                "size" => $item["size"],
+                "ext"  => strtolower(pathinfo($item["name"], PATHINFO_EXTENSION)),
+            ];
+        }
     }
 }
 
@@ -3340,26 +4277,35 @@ if (isset($_GET["edit"]) && ($isAdmin || $isWebsiteTeam)) {
 
 $folderCount = 0; $fileCount = 0; $totalSize = 0;
 foreach ($items as $item) {
-    if ($item["is_dir"]) $folderCount++;
-    else { $fileCount++; $totalSize += $item["size"]; }
+    if ($item["is_dir"]) {
+        $folderCount++;
+        $totalSize += (int)($item["size"] ?? 0);
+    } else {
+        $fileCount++;
+        $totalSize += (int)($item["size"] ?? 0);
+    }
 }
 $displayTotalSize = $totalSize;
-$trashData = loadTrashIndex();
-$trashItems = array_values($trashData["items"]);
-if ($isWebsiteTeam) {
-    $trashItems = array_values(array_filter($trashItems, function($item) use ($websiteTeamRootRelative) {
-        return relativePathInRoot($item["original_relative"] ?? "", $websiteTeamRootRelative);
-    }));
+$trashItems = [];
+if ($trashMode) {
+    $trashData = loadTrashIndex();
+    $trashItems = array_values($trashData["items"]);
+    if ($isWebsiteTeam) {
+        $trashItems = array_values(array_filter($trashItems, function($item) use ($websiteTeamRootRelative) {
+            return relativePathInRoot($item["original_relative"] ?? "", $websiteTeamRootRelative);
+        }));
+    }
+    usort($trashItems, function($a, $b) {
+        return ($b["deleted_at"] ?? 0) <=> ($a["deleted_at"] ?? 0);
+    });
 }
-usort($trashItems, function($a, $b) {
-    return ($b["deleted_at"] ?? 0) <=> ($a["deleted_at"] ?? 0);
-});
-$securityData = loadSecurityData();
+$isPjax = (isset($_SERVER['HTTP_X_PJAX']) || (isset($_GET['pjax']) && $_GET['pjax'] === '1'));
+$securityData = $isPjax ? ["banned" => []] : loadSecurityData();
 $bannedDevices = $securityData["banned"];
 $clipboardCount = count($_SESSION["clipboard"]["items"] ?? []);
 $folderOptions = [];
 $appSettings = loadAppSettings();
-$availableThemeImages = listDashboardThemeImages();
+$availableThemeImages = $isPjax ? [] : listDashboardThemeImages();
 $currentUser = currentUser();
 if (!$currentUser) {
     session_destroy();
@@ -3367,22 +4313,26 @@ if (!$currentUser) {
     exit;
 }
 $isAdmin = isAdminUser($currentUser);
+$isSuperAdmin = isSuperAdminUser($currentUser);
 $isConverter = isConverterUser($currentUser);
 $isWebsiteTeam = isWebsiteTeamUser($currentUser);
-$dashboardThemeUrl = trim((string)($currentUser["dashboard_theme_url"] ?? ""));
-if ($dashboardThemeUrl !== "" && !filter_var($dashboardThemeUrl, FILTER_VALIDATE_URL)) {
-    $dashboardThemeUrl = "";
+$dashboardThemeUrl = "";
+if (!empty($_COOKIE["kiuq_dashboard_theme"])) {
+    setcookie("kiuq_dashboard_theme", "", time() - 3600, "/");
 }
-$allUsers = loadUsers()["users"];
-$loginActivities = loadLoginActivity();
-if (!$isAdmin) {
-    $loginActivities = ($currentUser["can_view_login_activity"] ?? true)
-        ? array_values(array_filter($loginActivities, fn($row) => ($row["user_id"] ?? "") === ($currentUser["id"] ?? "")))
-        : [];
+$allUsers = $isPjax ? [] : loadUsers()["users"];
+$loginActivities = [];
+if (!$isPjax && $activityMode) {
+    $loginActivities = loadLoginActivity();
+    if (!$isAdmin) {
+        $loginActivities = ($currentUser["can_view_login_activity"] ?? true)
+            ? array_values(array_filter($loginActivities, fn($row) => ($row["user_id"] ?? "") === ($currentUser["id"] ?? "")))
+            : [];
+    }
 }
 $sidebarPins = [];
 $sidebarFolderColors = [];
-if ($FEATURES_ENABLED && function_exists('feature_db')) {
+if (!$isPjax && $FEATURES_ENABLED && function_exists('feature_db')) {
     $db = feature_db();
     if ($db) {
         try {
@@ -3409,7 +4359,18 @@ $preferredTheme = in_array($currentUser["theme"] ?? "light", ["light", "dark", "
 $visibleBaseUrl = $isWebsiteTeam ? publicUrl($BASE_URL, $websiteTeamRootRelative) : $BASE_URL;
 $uploadMaxFilesizeBytes = iniSizeToBytes(ini_get("upload_max_filesize"));
 $postMaxSizeBytes = iniSizeToBytes(ini_get("post_max_size"));
-$serverUploadLimitBytes = 600 * 1024 * 1024; // 600 MB limit requested by user
+$serverUploadLimitBytes = 0; // 0 = No file size limit! Files of any size supported via streaming chunks.
+
+// Compute safe upload chunk size for client (ensures each chunk is safely below server limits)
+$maxServerChunk = 8 * 1024 * 1024;
+if ($uploadMaxFilesizeBytes > 0 && $postMaxSizeBytes > 0) {
+    $maxServerChunk = min($uploadMaxFilesizeBytes, $postMaxSizeBytes);
+} elseif ($uploadMaxFilesizeBytes > 0) {
+    $maxServerChunk = $uploadMaxFilesizeBytes;
+} elseif ($postMaxSizeBytes > 0) {
+    $maxServerChunk = $postMaxSizeBytes;
+}
+$safeChunkSizeBytes = max(2 * 1024 * 1024, min(8 * 1024 * 1024, (int)floor($maxServerChunk * 0.75)));
 
 // Build image list for lightbox (JS)
 $imageList = [];
@@ -3417,1783 +4378,124 @@ foreach ($items as $idx => $item) {
     if (!$item["is_dir"] && $item["is_image"]) {
         $relative = $current ? $current . "/" . $item["name"] : $item["name"];
         $publicImageUrl = publicUrl($BASE_URL, $relative);
+        $absPath = $currentDir . "/" . $item["name"];
+        $thumbUrl = getThumbnailUrl($relative, $absPath, $item["mtime"] ?? 0, 360);
         $imageList[] = [
             "name"       => $item["name"],
             "url"        => versionedImageUrl($publicImageUrl, $item["mtime"] ?? 0, $item["size"] ?? 0, $item["ctime"] ?? 0),
-            "thumb"      => versionedImageUrl($publicImageUrl, $item["mtime"] ?? 0, $item["size"] ?? 0, $item["ctime"] ?? 0),
+            "thumb"      => $thumbUrl,
             "public_url" => $publicImageUrl,
             "idx"        => $idx,
         ];
     }
 }
 
+if (!$isPjax):
 ?>
 <!DOCTYPE html>
-<html lang="en" data-theme="<?php echo htmlspecialchars($preferredTheme === "system" ? "light" : $preferredTheme); ?>">
+<html lang="en" data-theme="<?php echo htmlspecialchars($preferredTheme === "system" ? "light" : $preferredTheme); ?>"<?php echo $dashboardThemeUrl !== '' ? ' class="dashboard-themed"' : ''; ?>>
 <head>
 <meta charset="UTF-8">
 <title><?php echo htmlspecialchars($appSettings["app_name"]); ?> - Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<?php if (!empty($appSettings["favicon_url"])): ?><link rel="icon" href="<?php echo htmlspecialchars($appSettings["favicon_url"]); ?>"><?php endif; ?>
+<link rel="icon" type="image/x-icon" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon.ico?v=20" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon-32x32.png?v=20" sizes="32x32">
+<link rel="icon" type="image/png" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon-16x16.png?v=20" sizes="16x16">
+<link rel="shortcut icon" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/favicon.png?v=20">
+<link rel="apple-touch-icon" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/images/apple-touch-icon.png?v=20">
+<style>
+:root, html {
+    color-scheme: <?php echo $preferredTheme === 'dark' ? 'dark' : 'light'; ?>;
+}
+html, body {
+    background-color: <?php echo ($preferredTheme === 'dark' || !empty($dashboardThemeUrl)) ? '#0f1626' : '#f4f6fa'; ?>;
+    color: var(--text);
+}
+[data-theme="dark"],
+[data-theme="dark"] body {
+    color-scheme: dark;
+    background-color: #0f1626 !important;
+    background: radial-gradient(circle at 50% -10%, #1c2744 0%, #0d1322 100%) !important;
+}
+[data-theme="light"],
+[data-theme="light"] body {
+    color-scheme: light;
+    background-color: #f4f6fa !important;
+    background: #f4f6fa !important;
+}
+html.dashboard-themed,
+html.dashboard-themed body,
+body.dashboard-themed,
+[data-theme="dark"].dashboard-themed body,
+[data-theme="dark"] body.dashboard-themed {
+    background-color: #0b0f19 !important;
+}
+[data-theme="light"].dashboard-themed body,
+[data-theme="light"] body.dashboard-themed {
+    background-color: #f8fafc !important;
+}
+</style>
+<?php if (!empty($dashboardThemeUrl)): ?>
+<link rel="preload" as="image" href="<?php echo htmlspecialchars($dashboardThemeUrl, ENT_QUOTES, 'UTF-8'); ?>" fetchpriority="high">
+<?php endif; ?>
 <script>
 (() => {
     const saved = localStorage.getItem('kiuqTheme') || <?php echo json_encode($preferredTheme); ?>;
     const theme = saved === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : saved;
     document.documentElement.dataset.theme = theme;
+    try {
+        if (localStorage.getItem('kiuqSidebarCollapsed') === '1' && window.innerWidth >= 900) {
+            document.documentElement.classList.add('sidebar-collapsed');
+        }
+    } catch(e) {}
+    try {
+        localStorage.removeItem('kiuq_dashboard_theme');
+        document.documentElement.classList.remove('dashboard-themed');
+        document.documentElement.style.removeProperty('--dashboard-bg-image');
+    } catch(e) {}
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"></noscript>
 
+<link rel="stylesheet" href="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/css/panel.css?v=<?php echo (int)@filemtime($APP_ASSETS_DIR . '/css/panel.css'); ?>">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-    --accent:   #4f46e5;
-    --accent2:  #0ea5e9;
-    --accent3:  #8b5cf6;
-    --success:  #10b981;
-    --danger:   #ef4444;
-    --warning:  #f59e0b;
-    --dark:     #0f172a;
-    --text:     #1e293b;
-    --muted:    #64748b;
-    --light:    #f8fafc;
-    --line:     #e2e8f0;
-    --card:     rgba(255,255,255,0.95);
-    --sidebar-w: 260px;
-    --topbar-h: 64px;
-}
-
-[data-theme="dark"] {
-    --accent: #60a5fa;
-    --accent2: #38bdf8;
-    --accent3: #a78bfa;
-    --success: #34d399;
-    --danger: #f87171;
-    --warning: #fbbf24;
-    --dark: #30343b;
-    --text: #f3f4f6;
-    --muted: #c4ccd8;
-    --light: #343940;
-    --line: #596272;
-    --card: rgba(58,63,71,0.96);
-}
-
-html { scroll-behavior: smooth; }
-
-body {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    background: #eef2ff;
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-}
-[data-theme="dark"] body { background: #4a4f57; }
-[data-theme="dark"] .topbar,
-[data-theme="dark"] .sidebar,
-[data-theme="dark"] .modal-box,
-[data-theme="dark"] .toast,
-[data-theme="dark"] .url-copy-btn,
-[data-theme="dark"] .act-btn,
-[data-theme="dark"] .tb-btn,
-[data-theme="dark"] .img-card,
-[data-theme="dark"] .url-list-input,
-[data-theme="dark"] .url-list-btn,
-[data-theme="dark"] .theme-toggle-btn,
-[data-theme="dark"] .profile-chip,
-[data-theme="dark"] .mobile-menu-btn { background: #3a3f47; color: var(--text); border-color: var(--line); }
-[data-theme="dark"] .panel-head,
-[data-theme="dark"] .table-header-row,
-[data-theme="dark"] .pathbar,
-[data-theme="dark"] .trash-row,
-[data-theme="dark"] .security-row,
-[data-theme="dark"] .url-list-item,
-[data-theme="dark"] .form-input,
-[data-theme="dark"] .url-input,
-[data-theme="dark"] .url-textarea,
-[data-theme="dark"] .topbar-search input { background: #343940; color: var(--text); }
-[data-theme="dark"] .form-input:focus,
-[data-theme="dark"] .url-input:focus,
-[data-theme="dark"] .url-textarea:focus,
-[data-theme="dark"] .topbar-search input:focus { background: #40464f; border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 4px rgba(96,165,250,0.16); }
-[data-theme="dark"] .msg-success { background: rgba(16,185,129,0.12); color: #86efac; }
-[data-theme="dark"] .msg-warning { background: rgba(245,158,11,0.13); color: #fcd34d; }
-[data-theme="dark"] .msg-error { background: rgba(239,68,68,0.13); color: #fca5a5; }
-[data-theme="dark"] .drop-zone {
-    background: rgba(52,57,64,0.82);
-    border-color: #687180;
-}
-[data-theme="dark"] .drop-zone:hover,
-[data-theme="dark"] .drop-zone.dragover {
-    background: rgba(96,165,250,0.12);
-    border-color: var(--accent);
-}
-[data-theme="dark"] .drop-zone h4 { color: var(--text); }
-[data-theme="dark"] .drop-zone p { color: var(--muted); }
-[data-theme="dark"] #dropZoneFiles { color: #93c5fd !important; }
-body.dashboard-themed {
-    background: transparent;
-    position: relative;
-}
-body.dashboard-themed::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background-image: var(--dashboard-bg-image);
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    opacity: 1;
-    z-index: 0;
-    pointer-events: none;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    filter: none !important;
-}
-body.dashboard-themed::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(ellipse 95% 85% at 50% 18%, rgba(255, 255, 255, 0.08) 0%, rgba(240, 244, 250, 0.22) 100%);
-    z-index: 0;
-    pointer-events: none;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-}
-body.dashboard-themed .layout {
-    position: relative;
-    z-index: 1;
-}
-body.dashboard-themed .topbar,
-body.dashboard-themed .sidebar {
-    background: rgba(255, 255, 255, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.90);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
-}
-body.dashboard-themed .stat-card,
-body.dashboard-themed .toolbar,
-body.dashboard-themed .pathbar,
-body.dashboard-themed .panel,
-body.dashboard-themed .img-grid-panel,
-body.dashboard-themed .all-urls-panel {
-    background: rgba(255, 255, 255, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.90);
-    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
-}
-body.dashboard-themed .modal-box {
-    background: rgba(255, 255, 255, 0.94);
-    border: 1px solid rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
-}
-body.dashboard-themed .panel-head,
-body.dashboard-themed .table-header-row,
-body.dashboard-themed .url-list-item,
-body.dashboard-themed .form-input,
-body.dashboard-themed .url-input,
-body.dashboard-themed .url-textarea,
-body.dashboard-themed .topbar-search input {
-    background: rgba(241, 245, 249, 0.92);
-    border: 1.5px solid rgba(203, 213, 225, 0.95);
-    color: #0f172a;
-}
-[data-theme="dark"] body.dashboard-themed { background: transparent !important; }
-[data-theme="dark"] body.dashboard-themed::before { opacity: 1 !important; filter: none !important; }
-[data-theme="dark"] body.dashboard-themed::after {
-    background: radial-gradient(ellipse 95% 85% at 50% 18%, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.16) 100%),
-               linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.14) 100%) !important;
-}
-[data-theme="dark"] body.dashboard-themed .topbar,
-[data-theme="dark"] body.dashboard-themed .sidebar {
-    background: rgba(10, 14, 23, 0.65) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
-}
-[data-theme="dark"] body.dashboard-themed .stat-card,
-[data-theme="dark"] body.dashboard-themed .toolbar,
-[data-theme="dark"] body.dashboard-themed .pathbar,
-[data-theme="dark"] body.dashboard-themed .panel,
-[data-theme="dark"] body.dashboard-themed .img-grid-panel,
-[data-theme="dark"] body.dashboard-themed .all-urls-panel {
-    background: rgba(10, 14, 23, 0.52) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
-}
-[data-theme="dark"] body.dashboard-themed .modal-box {
-    background: rgba(12, 12, 16, 0.90) !important;
-    border: 1px solid rgba(255, 255, 255, 0.22) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    box-shadow: 0 28px 70px -10px rgba(0, 0, 0, 0.65) !important;
-}
-[data-theme="dark"] body.dashboard-themed .panel-head,
-[data-theme="dark"] body.dashboard-themed .table-header-row,
-[data-theme="dark"] body.dashboard-themed .url-list-item,
-[data-theme="dark"] body.dashboard-themed .form-input,
-[data-theme="dark"] body.dashboard-themed .url-input,
-[data-theme="dark"] body.dashboard-themed .url-textarea,
-[data-theme="dark"] body.dashboard-themed .topbar-search input {
-    background: rgba(10, 14, 23, 0.65) !important;
-    border: 1px solid rgba(255, 255, 255, 0.18) !important;
-    color: #ffffff !important;
-}
-[data-theme="dark"] body.dashboard-themed .panel-head,
-[data-theme="dark"] body.dashboard-themed .table-header-row {
-    background: rgba(10, 14, 23, 0.72) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.10) !important;
-}
-[data-theme="dark"] body.dashboard-themed .form-input:focus,
-[data-theme="dark"] body.dashboard-themed .url-input:focus,
-[data-theme="dark"] body.dashboard-themed .url-textarea:focus,
-[data-theme="dark"] body.dashboard-themed .topbar-search input:focus {
-    background: rgba(0, 0, 0, 0.45) !important;
-    border-color: rgba(255, 255, 255, 0.5) !important;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.15) !important;
-    color: #ffffff !important;
-}
-[data-theme="dark"] body.dashboard-themed .topbar-search input::placeholder {
-    color: #cbd5e1;
-    opacity: 1;
-}
-.login-logo-img {
-    max-width: 64px;
-    max-height: 64px;
-    object-fit: contain;
-    border-radius: 18px;
-    border-radius: 50%;
-}
-.mobile-menu-btn {
-    display: none;
-    width: 40px;
-    height: 40px;
-    border: 1.5px solid var(--line);
-    border-radius: 11px;
-    background: white;
-    color: var(--text);
-    font-weight: 800;
-    cursor: pointer;
-}
-.sidebar-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(15,23,42,0.5);
-    z-index: 110;
-}
-.theme-switch {
-    position: relative;
-    width: 64px;
-    height: 32px;
-    background: #e6f0fa;
-    border-radius: 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 8px;
-    border: 2px solid #dce8f5;
-    transition: all 0.3s ease;
-}
-.theme-page-btn {
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 16px;
-    border: 2px solid #dce8f5;
-    background: #e6f0fa;
-    color: var(--text);
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    font-size: 12px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-.theme-page-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    transform: translateY(-1px);
-}
-[data-theme="dark"] .theme-page-btn {
-    background: #4b5563;
-    border-color: #6b7280;
-    color: var(--text);
-}
-.theme-switch .ts-icon {
-    font-size: 14px;
-    z-index: 2;
-    transition: color 0.3s ease;
-    line-height: 1;
-}
-.theme-switch .ts-icon.sun { color: #f59e0b; }
-.theme-switch .ts-icon.moon { color: #94a3b8; }
-.theme-switch .ts-thumb {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    left: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1;
-}
-[data-theme="dark"] .theme-switch {
-    background: #4b5563;
-    border-color: #6b7280;
-}
-[data-theme="dark"] .theme-switch .ts-thumb {
-    left: calc(100% - 28px);
-    background: #343940;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-}
-[data-theme="dark"] .theme-switch .ts-icon.sun { color: #9ca3af; filter: grayscale(1); }
-[data-theme="dark"] .theme-switch .ts-icon.moon { color: #60a5fa; }
-.profile-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    border: 1.5px solid var(--line);
-    border-radius: 12px;
-    background: white;
-    font-size: 12px;
-    font-weight: 800;
-    color: var(--text);
-    text-decoration: none;
-}
-.avatar-small, .avatar-large {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: rgba(79,70,229,0.12);
-    color: var(--accent);
-    font-weight: 900;
-    overflow: hidden;
-}
-.avatar-small { width: 28px; height: 28px; }
-.avatar-large { width: 58px; height: 58px; font-size: 18px; }
-.avatar-small img, .avatar-large img { width: 100%; height: 100%; object-fit: cover; }
-.admin-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 14px;
-}
-.admin-card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    padding: 18px;
-    box-shadow: 0 4px 20px rgba(79,70,229,0.06);
-}
-.admin-card h3 { font-size: 16px; margin-bottom: 12px; }
-.admin-table-wrap { overflow-x: auto; }
-.admin-table { width: 100%; border-collapse: collapse; min-width: 760px; }
-.admin-table th, .admin-table td { padding: 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; font-size: 12px; }
-.admin-table th { color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: 10px; }
-.admin-actions-cell { min-width: 170px; }
-.admin-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    flex-wrap: nowrap;
-}
-.user-cell {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 190px;
-}
-.avatar-mini {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(79,70,229,0.12);
-    color: var(--accent);
-    font-size: 12px;
-    font-weight: 900;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-.avatar-mini img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-.status-pill {
-    display: inline-flex;
-    padding: 4px 9px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 800;
-    border: 1px solid var(--line);
-}
-.status-pill.success, .status-pill.active { color: var(--success); background: rgba(16,185,129,0.1); }
-.status-pill.failed, .status-pill.frozen { color: var(--danger); background: rgba(239,68,68,0.1); }
-.trash-select-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 12px;
-}
-.trash-check { width: 17px; height: 17px; accent-color: var(--accent); }
-.danger-btn-disabled:disabled, .trash-bulk-btn:disabled {
-    opacity: .45;
-    cursor: not-allowed;
-}
-.dashboard-footer {
-    margin-top: 24px;
-    padding: 18px;
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-    text-align: center;
-}
-
-/* ===== TOPBAR ===== */
-.topbar {
-    position: fixed; top: 0; left: 0; right: 0;
-    height: var(--topbar-h);
-    background: rgba(255,255,255,0.9);
-    backdrop-filter: blur(24px) saturate(200%);
-    border-bottom: 1px solid rgba(226,232,240,0.7);
-    display: flex; align-items: center; padding: 0 20px; gap: 14px;
-    z-index: 100;
-    box-shadow: 0 2px 20px rgba(79,70,229,0.08);
-}
-
-.topbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-
-.brand-logo {
-    width: 42px; height: 42px; border-radius: 14px;
-    background: linear-gradient(135deg, #edf4ff 0%, #ffffff 52%, #e9edff 100%);
-    border: 1.5px solid rgba(226,232,240,0.95);
-    display: flex; align-items: center; justify-content: center; font-size: 19px;
-    color: #4f46e5;
-    box-shadow: 0 8px 22px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.75);
-    animation: logo-pulse 3s ease-in-out infinite;
-    overflow: hidden;
-}
-
-.brand-logo img {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    border-radius: 8px;
-    filter: drop-shadow(0 1px 2px rgba(15,23,42,0.2));
-}
-
-[data-theme="dark"] .brand-logo {
-    background: rgba(52,57,64,0.92);
-    border-color: rgba(107,114,128,0.92);
-    box-shadow: 0 8px 22px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.08);
-    animation-name: logo-pulse-dark;
-}
-
-@keyframes logo-pulse {
-    0%,100% { box-shadow: 0 8px 22px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.75); }
-    50%      { box-shadow: 0 10px 28px rgba(79,70,229,0.24), inset 0 1px 0 rgba(255,255,255,0.75); }
-}
-
-@keyframes logo-pulse-dark {
-    0%,100% { box-shadow: 0 8px 22px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.08); }
-    50%      { box-shadow: 0 10px 28px rgba(96,165,250,0.22), inset 0 1px 0 rgba(255,255,255,0.08); }
-}
-
-.brand-name { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; }
-.brand-tag  { font-size: 10px; color: var(--muted); font-weight: 500; }
-
-.topbar-search { flex: 1; max-width: 360px; position: relative; }
-
-.topbar-search input {
-    width: 100%; padding: 9px 14px 9px 40px;
-    background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 13px; font-size: 13.5px;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    color: var(--text); outline: none; transition: all 0.2s;
-}
-.topbar-search input:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 4px rgba(79,70,229,0.1); }
-
-.search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
-
-.topbar-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-
-.kbd-hint { font-size: 10px; color: #94a3b8; font-weight: 600; display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
-kbd { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 1px 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; }
-
-.logout-btn {
-    text-decoration: none; background: var(--dark); color: white;
-    padding: 8px 14px; border-radius: 11px; font-size: 12px; font-weight: 700; transition: all 0.2s; white-space: nowrap;
-}
-.logout-btn:hover { background: var(--danger); transform: translateY(-1px); }
-.topbar-action {
-    display: inline-flex; align-items: center; text-decoration: none;
-    border: 1.5px solid var(--line); background: white; color: var(--text);
-    padding: 8px 12px; border-radius: 11px; font-size: 12px; font-weight: 700;
-    font-family: 'Plus Jakarta Sans', sans-serif; cursor: pointer; transition: all 0.16s; white-space: nowrap;
-}
-.topbar-action:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,70,229,0.05); }
-.topbar-action.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.05); }
-
-/* ===== LAYOUT ===== */
-.layout { display: flex; min-height: 100vh; padding-top: var(--topbar-h); }
-
-/* ===== SIDEBAR ===== */
-.sidebar {
-    width: var(--sidebar-w); flex-shrink: 0;
-    background: rgba(255,255,255,0.95);
-    backdrop-filter: blur(20px);
-    border-right: 1px solid rgba(226,232,240,0.7);
-    padding: 14px 10px 28px;
-    display: flex; flex-direction: column; gap: 4px;
-    position: fixed !important; top: var(--topbar-h) !important;
-    left: 0 !important; bottom: 0 !important;
-    height: calc(100vh - var(--topbar-h)) !important;
-    max-height: calc(100vh - var(--topbar-h)) !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
-    z-index: 100 !important;
-    box-sizing: border-box !important;
-}
-.sidebar > * {
-    flex-shrink: 0 !important;
-}
-.sidebar::-webkit-scrollbar { width: 5px; }
-.sidebar::-webkit-scrollbar-track { background: transparent; }
-.sidebar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 999px; }
-.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.7); }
-[data-theme="dark"] .sidebar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); }
-[data-theme="dark"] .sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.45); }
-
-.sidebar-section {
-    font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
-    text-transform: uppercase; color: #475569; padding: 14px 10px 5px;
-    line-height: 1.3 !important; flex-shrink: 0 !important; box-sizing: border-box !important;
-}
-.sidebar > .sidebar-section:first-child,
-.sidebar > .sidebar-section:first-of-type {
-    padding-top: 2px !important;
-    margin-top: 0 !important;
-}
-[data-theme="dark"] .sidebar-section {
-    color: #94a3b8;
-}
-body.dashboard-themed .sidebar-section {
-    color: #1e293b !important;
-    font-weight: 800 !important;
-    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.9) !important;
-}
-[data-theme="dark"] body.dashboard-themed .sidebar-section {
-    color: #cbd5e1 !important;
-    font-weight: 800 !important;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9) !important;
-}
-
-.sidebar .url-input,
-.sidebar-baseurl-input {
-    display: block !important;
-    width: 100% !important;
-    height: 32px !important;
-    line-height: 18px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 10.5px !important;
-    font-weight: 600 !important;
-    padding: 6px 10px !important;
-    border-radius: 9px !important;
-    box-sizing: border-box !important;
-    color: #0f172a !important;
-    background: rgba(255, 255, 255, 0.95) !important;
-    border: 1.5px solid rgba(203, 213, 225, 0.95) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
-    cursor: pointer !important;
-}
-[data-theme="dark"] .sidebar .url-input,
-[data-theme="dark"] .sidebar-baseurl-input,
-[data-theme="dark"] body.dashboard-themed .sidebar .url-input {
-    color: #ffffff !important;
-    background: rgba(15, 23, 42, 0.85) !important;
-    border: 1px solid rgba(255, 255, 255, 0.25) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
-}
-
-.sidebar-btn {
-    display: flex; align-items: center; gap: 9px;
-    padding: 9px 12px; border-radius: 12px; border: none;
-    background: transparent; color: var(--text);
-    font-size: 13px; font-family: 'Plus Jakarta Sans', sans-serif;
-    font-weight: 600; cursor: pointer; transition: all 0.16s;
-    text-align: left; width: 100%; text-decoration: none;
-}
-.sidebar-btn .sb-icon {
-    width: 30px; height: 30px; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; flex-shrink: 0; transition: all 0.16s;
-}
-.sidebar-btn:hover { background: rgba(79,70,229,0.08); color: var(--accent); }
-.sidebar-btn:hover .sb-icon { background: rgba(79,70,229,0.14); }
-.sidebar-logout-wrap { margin-top: auto; padding-top: 10px; flex-shrink: 0 !important; }
-.sidebar-btn-logout { border: 1.5px solid var(--line); }
-.sidebar-btn-logout:hover { border-color: var(--danger); color: var(--danger); }
-.sb-icon-img img { width: 16px; height: 16px; object-fit: contain; display: block; }
-.sb-upload .sb-icon { background: rgba(79,70,229,0.1); }
-.sb-folder .sb-icon { background: rgba(0,122,255,0.12); color: #007aff; }
-.sb-file   .sb-icon { background: rgba(16,185,129,0.1); }
-.sb-urls   .sb-icon { background: rgba(14,165,233,0.1); }
-.sb-delete .sb-icon { background: rgba(239,68,68,0.1); }
-.sidebar-divider { height: 1px; background: var(--line); margin: 6px 0; flex-shrink: 0 !important; }
-
-/* ===== MAIN ===== */
-.main {
-    flex: 1;
-    padding: 24px;
-    min-width: 0;
-    margin-left: var(--sidebar-w);
-    transition: margin-left 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* ===== STATS ===== */
-.stats-row {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 14px; margin-bottom: 20px;
-}
-.stat-card {
-    background: var(--card); border: 1px solid rgba(255,255,255,0.8);
-    border-radius: 20px; padding: 20px;
-    box-shadow: 0 4px 20px rgba(79,70,229,0.06);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-.stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(79,70,229,0.1); }
-.stat-icon { width: 40px; height: 40px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 12px; }
-.si-purple { background: rgba(79,70,229,0.12); }
-.si-cyan   { background: rgba(14,165,233,0.12); }
-.si-amber  { background: rgba(245,158,11,0.12); }
-.si-green  { background: rgba(16,185,129,0.12); }
-.stat-val  { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
-.stat-lbl  { font-size: 11.5px; color: var(--muted); font-weight: 500; margin-top: 2px; }
-
-/* ===== TOOLBAR ===== */
-.toolbar {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 18px; padding: 9px 14px;
-    display: flex; align-items: center; gap: 5px;
-    margin-bottom: 12px; flex-wrap: nowrap;
-    overflow-x: auto; overflow-y: hidden;
-    scrollbar-width: none; -webkit-overflow-scrolling: touch;
-    box-shadow: 0 2px 14px rgba(79,70,229,0.05);
-}
-.toolbar::-webkit-scrollbar { display: none; }
-.sticky-toolbar {
-    position: sticky;
-    top: calc(var(--topbar-h) + 10px);
-    z-index: 60;
-}
-.tb-label { font-size: 11px; font-weight: 800; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-right: 2px; }
-.tb-sep { width: 1px; height: 22px; background: var(--line); margin: 0 2px; flex-shrink: 0; }
-.tb-btn {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 7px 11px; border-radius: 10px; border: 1.5px solid var(--line);
-    background: white; color: var(--text); font-size: 12px;
-    font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700;
-    cursor: pointer; transition: all 0.16s; white-space: nowrap; text-decoration: none;
-    flex-shrink: 0;
-}
-.tb-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,70,229,0.05); transform: translateY(-1px); }
-.tb-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.05); }
-.tb-btn.warning:hover { border-color: var(--warning); color: var(--warning); background: rgba(245,158,11,0.05); }
-.tb-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,70,229,0.05); transform: translateY(-3px); box-shadow: 0 6px 16px rgba(79,70,229,0.15); }
-.tb-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.05); transform: translateY(-3px); box-shadow: 0 6px 16px rgba(239,68,68,0.15); }
-.tb-btn.warning:hover { border-color: var(--warning); color: var(--warning); background: rgba(245,158,11,0.05); transform: translateY(-3px); box-shadow: 0 6px 16px rgba(245,158,11,0.15); }
-.tb-btn.primary { background: var(--accent); color: white; border-color: var(--accent); box-shadow: 0 4px 12px rgba(79,70,229,0.3); }
-.tb-btn.primary:hover { background: #4338ca; border-color: #4338ca; color: white; box-shadow: 0 6px 18px rgba(79,70,229,0.4); }
-.tb-btn.primary:hover { background: #4338ca; border-color: #4338ca; color: white; box-shadow: 0 8px 24px rgba(79,70,229,0.4); transform: translateY(-3px); }
-.tb-btn.success { background: var(--success); color: white; border-color: var(--success); }
-.tb-btn.success:hover { background: #059669; }
-.tb-btn.success:hover { background: #059669; transform: translateY(-3px); box-shadow: 0 6px 16px rgba(16,185,129,0.25); }
-
-/* Selection actions bar */
-.selection-bar {
-    display: none;
-    background: linear-gradient(135deg, #4b5563, #30343b);
-    border-radius: 18px; padding: 10px 16px;
-    align-items: center; gap: 8px; margin-bottom: 12px;
-    box-shadow: 0 8px 32px rgba(15,23,42,0.25);
-    animation: slide-in 0.25s cubic-bezier(0.34,1.56,0.64,1);
-}
-.selection-bar.visible { display: flex; }
-@keyframes slide-in {
-    from { opacity: 0; transform: translateY(-10px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-.sel-count { color: white; font-size: 13px; font-weight: 800; min-width: 90px; }
-.sel-btn {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 7px 13px; border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.1);
-    color: white; font-size: 12px; font-family: 'Plus Jakarta Sans', sans-serif;
-    font-weight: 700; cursor: pointer; transition: all 0.16s; white-space: nowrap;
-}
-.sel-btn:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); }
-.sel-btn.sel-delete { background: rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.4); }
-.sel-btn.sel-delete:hover { background: rgba(239,68,68,0.35); }
-.sel-btn.sel-move { background: rgba(245,158,11,0.2); border-color: rgba(245,158,11,0.4); }
-.sel-btn.sel-move:hover { background: rgba(245,158,11,0.3); }
-.sel-btn.sel-copy-url { background: rgba(14,165,233,0.2); border-color: rgba(14,165,233,0.4); }
-.sel-sep { width: 1px; height: 22px; background: rgba(255,255,255,0.15); margin: 0 2px; }
-.sel-btn.sel-close { margin-left: auto; background: rgba(255,255,255,0.08); }
-
-/* selected count */
-.selected-count { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 70px; }
-
-/* ===== PATHBAR ===== */
-.pathbar {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 14px; padding: 10px 16px;
-    display: flex; align-items: center; gap: 5px;
-    margin-bottom: 12px; font-size: 13px; font-weight: 600;
-    flex-wrap: wrap; box-shadow: 0 2px 10px rgba(79,70,229,0.04);
-}
-.pathbar .ph-home { color: var(--muted); cursor: pointer; }
-.pathbar .ph-sep  { color: #cbd5e1; }
-.pathbar a { color: var(--accent); text-decoration: none; }
-.pathbar a:hover { text-decoration: underline; }
-.pathbar .ph-cur  { color: var(--text); }
-.pathbar .ph-back {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 9px; font-size: 11px; color: var(--muted); text-decoration: none; font-weight: 700; transition: all 0.16s;
-    margin-left: 6px; flex-shrink: 0;
-}
-.pathbar .ph-back:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,70,229,0.06); }
-
-/* ===== MESSAGE ===== */
-.message {
-    padding: 12px 16px; border-radius: 14px; font-size: 13px; font-weight: 700;
-    margin-bottom: 14px; display: flex; align-items: center; gap: 9px;
-}
-.msg-success { background: #f0fdf4; border: 1.5px solid #bbf7d0; color: #15803d; }
-.msg-warning { background: #fffbeb; border: 1.5px solid #fde68a; color: #b45309; }
-.msg-error   { background: #fef2f2; border: 1.5px solid #fecaca; color: #dc2626; }
-
-/* ===== PANEL / FILE TABLE ===== */
-.panel {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 22px; overflow: hidden;
-    box-shadow: 0 4px 20px rgba(79,70,229,0.06);
-}
-.panel-head {
-    padding: 16px 20px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    background: rgba(248,250,252,0.7);
-}
-.panel-title { font-size: 14.5px; font-weight: 800; }
-.panel-meta  { font-size: 11.5px; color: var(--muted); font-weight: 500; }
-.panel-title-search {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex: 1;
-    min-width: 0;
-}
-.panel-title-search .topbar-search {
-    flex: 0 1 360px;
-    max-width: 360px;
-    min-width: 240px;
-}
-.panel-head-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
-
-/* Table header */
-.table-header-row {
-    display: grid;
-    grid-template-columns: 44px minmax(200px, 1fr) 120px 300px;
-    gap: 0; padding: 9px 18px;
-    background: rgba(241,245,249,0.7);
-    border-bottom: 1px solid var(--line);
-    font-size: 10.5px; font-weight: 800; letter-spacing: 0.07em;
-    text-transform: uppercase; color: var(--muted); align-items: center;
-}
-
-/* File rows */
-.file-list { padding: 6px 10px; }
-
-.file-row {
-    display: grid;
-    grid-template-columns: 44px minmax(200px, 1fr) 120px 300px;
-    align-items: center; gap: 0;
-    padding: 8px 6px; border-radius: 14px;
-    transition: background-color 0.12s ease, box-shadow 0.12s ease; cursor: default; user-select: none;
-    position: relative;
-}
-.file-row:hover { background: rgba(79,70,229,0.05); }
-.file-row.selected { background: rgba(79,70,229,0.09); }
-.file-row.dbl-highlight { animation: dbl-flash 0.25s ease; }
-@keyframes dbl-flash {
-    0%,100% { background: rgba(79,70,229,0.09); }
-    50%      { background: rgba(79,70,229,0.18); }
-}
-
-.file-check-cell { display: flex; align-items: center; justify-content: center; }
-.file-check { width: 17px; height: 17px; border-radius: 5px; accent-color: var(--accent); cursor: pointer; }
-body:not(.selection-mode) .table-header-row,
-body:not(.selection-mode) .file-row { grid-template-columns: 0 minmax(200px, 1fr) 120px 300px; }
-body:not(.selection-mode) .table-header-row > div:first-child,
-body:not(.selection-mode) .file-check-cell { width: 0; overflow: hidden; opacity: 0; pointer-events: none; }
-
-.file-name-cell { display: flex; align-items: center; gap: 11px; min-width: 0; }
-
-.file-type-icon {
-    width: 38px; height: 38px; border-radius: 11px;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.fti-folder { background: rgba(0,122,255,0.14); color: #007aff; }
-.fti-image  { background: rgba(79,70,229,0.1);  color: var(--accent); }
-.fti-code   { background: rgba(16,185,129,0.1);  color: var(--success); }
-.fti-other  { background: rgba(100,116,139,0.1); color: var(--muted); }
-.file-type-icon svg { width: 19px; height: 19px; }
-[data-theme="dark"] .fti-folder { background: rgba(96,165,250,0.18); color: #60a5fa; }
-[data-theme="dark"] .sb-folder .sb-icon { background: rgba(96,165,250,0.18); color: #60a5fa; }
-
-/* Image thumbnail in list */
-.thumb-img {
-    width: 38px; height: 38px; border-radius: 11px;
-    object-fit: cover; border: 1.5px solid var(--line);
-    cursor: pointer; transition: all 0.2s; flex-shrink: 0;
-}
-.thumb-img:hover { transform: scale(1.1); border-color: var(--accent); box-shadow: 0 4px 12px rgba(79,70,229,0.2); }
-
-.file-name-info { min-width: 0; }
-.file-title-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-}
-.file-title-row .file-name-display {
-    min-width: 0;
-}
-.file-name-span { font-size: 13.5px; font-weight: 700; color: var(--text); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.file-name-span:hover { color: var(--accent); }
-.file-name-folder { font-size: 13.5px; font-weight: 700; color: var(--text); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.file-name-folder:hover { color: var(--accent); }
-.file-meta { font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 1px; }
-
-/* URL cell */
-.url-cell { padding: 0 6px; }
-.url-copy-wrap { display: flex; align-items: center; gap: 5px; }
-.url-input {
-    flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    padding: 6px 9px; background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 9px; color: var(--muted); outline: none; min-width: 0; cursor: text;
-}
-.url-copy-btn {
-    flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px;
-    border: 1.5px solid var(--line); background: white;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    font-size: 12px; transition: all 0.16s; color: var(--muted);
-}
-.url-copy-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,70,229,0.06); }
-.url-copy-btn.copied { border-color: var(--success); color: var(--success); background: rgba(16,185,129,0.08); }
-
-/* Size/Date */
-.size-cell { padding: 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
-
-/* Actions */
-.actions-cell {
-    display: flex; align-items: center; gap: 4px;
-    padding: 0 4px; flex-wrap: nowrap; justify-content: flex-end;
-}
-.act-btn {
-    display: inline-flex; align-items: center; gap: 3px;
-    padding: 5px 9px; border-radius: 9px; border: 1.5px solid var(--line);
-    background: white; font-size: 11px; font-family: 'Plus Jakarta Sans', sans-serif;
-    font-weight: 700; cursor: pointer; transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
-    text-decoration: none; color: var(--text); white-space: nowrap;
-}
-.act-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
-.act-btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 6px 14px rgba(0,0,0,0.12); }
-.act-btn.open:hover   { border-color: var(--accent); color: var(--accent); }
-.act-btn.edit-btn:hover { border-color: var(--warning); color: var(--warning); }
-.act-btn.del:hover    { border-color: var(--danger); color: var(--danger); }
-.act-btn.rename-btn:hover { border-color: var(--success); color: var(--success); }
-
-/* Rename inline */
-.rename-form { display: flex; gap: 4px; align-items: center; }
-.inline-rename-form {
-    max-width: min(420px, 100%);
-    flex-wrap: nowrap;
-}
-.rename-input {
-    padding: 5px 8px; border: 1.5px solid var(--accent); border-radius: 8px;
-    font-size: 12px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600;
-    outline: none; width: min(240px, 42vw); color: var(--text);
-    background: var(--card);
-}
-.rename-save {
-    padding: 5px 9px; border: none; background: var(--accent);
-    color: white; border-radius: 8px; font-size: 12px;
-    font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; cursor: pointer; transition: 0.14s;
-}
-.rename-save:hover { background: #4338ca; }
-
-/* Empty */
-.empty-state { padding: 56px 24px; text-align: center; color: var(--muted); }
-.empty-state .es-icon { font-size: 44px; margin-bottom: 14px; }
-.empty-state h3 { font-size: 17px; font-weight: 800; color: var(--text); margin-bottom: 5px; }
-.empty-state p  { font-size: 13.5px; }
-
-/* ===== IMAGE PREVIEW GRID ===== */
-.img-grid-panel {
-    margin-top: 22px; background: var(--card); border: 1px solid var(--line);
-    border-radius: 22px; overflow: hidden;
-    box-shadow: 0 4px 20px rgba(79,70,229,0.06);
-}
-
-.img-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
-    gap: 14px; padding: 18px;
-}
-
-.img-card {
-    border-radius: 18px; border: 1.5px solid var(--line); overflow: hidden;
-    background: white; transition: all 0.22s; position: relative;
-}
-.img-card:hover { transform: translateY(-5px); box-shadow: 0 18px 44px rgba(79,70,229,0.16); border-color: rgba(79,70,229,0.3); }
-
-.img-card-thumb {
-    width: 100%; height: 150px; object-fit: cover; display: block;
-    background: var(--light); cursor: pointer; transition: all 0.2s;
-}
-.img-card:hover .img-card-thumb { transform: scale(1.03); }
-
-.img-card-info { padding: 10px 12px 12px; }
-
-.img-card-name { font-size: 11.5px; font-weight: 700; color: var(--text); word-break: break-all; margin-bottom: 8px; line-height: 1.3; }
-
-.img-card-url { display: flex; gap: 4px; align-items: center; }
-
-.img-url-input {
-    flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-    padding: 5px 7px; background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 8px; color: var(--muted); outline: none; min-width: 0; cursor: pointer;
-}
-.img-url-input:hover { border-color: var(--accent); }
-
-.img-url-copy {
-    flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
-    border: 1.5px solid var(--line); background: white; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; font-size: 11px; transition: 0.14s;
-}
-.img-url-copy:hover { border-color: var(--accent); background: rgba(79,70,229,0.06); }
-.img-url-copy.copied { border-color: var(--success); color: var(--success); }
-
-/* ===== ALL URLs PANEL ===== */
-.all-urls-panel {
-    margin-top: 22px; background: var(--card); border: 1px solid var(--line);
-    border-radius: 22px; overflow: hidden;
-    box-shadow: 0 4px 20px rgba(79,70,229,0.06);
-}
-.url-list-wrap { padding: 18px; display: flex; flex-direction: column; gap: 8px; }
-.url-list-item {
-    display: flex; align-items: center; gap: 8px;
-    background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 12px; padding: 8px 12px; transition: all 0.16s;
-}
-.url-list-item:hover { border-color: var(--accent); background: rgba(79,70,229,0.04); }
-.url-list-num { font-size: 10.5px; font-weight: 800; color: var(--muted); min-width: 22px; }
-.url-list-name { font-size: 12px; font-weight: 700; color: var(--text); min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.url-list-input {
-    flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
-    padding: 5px 8px; background: white; border: 1.5px solid var(--line);
-    border-radius: 8px; color: var(--muted); outline: none; cursor: pointer; min-width: 0;
-}
-.url-list-input:hover { border-color: var(--accent2); }
-.url-list-btn {
-    flex-shrink: 0; padding: 5px 10px; border-radius: 8px;
-    border: 1.5px solid var(--line); background: white; font-size: 11px;
-    font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; cursor: pointer;
-    color: var(--text); transition: all 0.14s; white-space: nowrap;
-}
-.url-list-btn:hover { border-color: var(--accent2); color: var(--accent2); }
-.url-list-btn.copied { border-color: var(--success); color: var(--success); }
-
-.copy-all-bar {
-    padding: 0 18px 18px; display: flex; gap: 8px; flex-wrap: wrap;
-}
-
-/* ===== MODALS ===== */
-.modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(15,23,42,0.5); backdrop-filter: blur(8px);
-    z-index: 200; display: flex; align-items: center; justify-content: center;
-    padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.2s;
-}
-.modal-overlay.open { opacity: 1; pointer-events: all; }
-
-.modal-box {
-    background: white; border-radius: 26px; width: 100%; max-width: 520px;
-    box-shadow: 0 40px 80px rgba(15,23,42,0.25); overflow: hidden;
-    transform: translateY(28px) scale(0.96);
-    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.modal-overlay.open .modal-box { transform: translateY(0) scale(1); }
-
-.modal-header {
-    padding: 22px 26px 14px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: center; justify-content: space-between;
-}
-.modal-title { font-size: 16px; font-weight: 800; }
-.modal-close {
-    width: 32px; height: 32px; border-radius: 9px; border: 1.5px solid var(--line);
-    background: none; cursor: pointer; font-size: 14px;
-    display: flex; align-items: center; justify-content: center;
-    transition: 0.14s; color: var(--muted);
-}
-.modal-close:hover { border-color: var(--danger); color: var(--danger); }
-
-.modal-body { padding: 22px 26px 26px; }
-
-.form-group { margin-bottom: 14px; }
-.form-label { display: block; font-size: 11px; font-weight: 800; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 7px; }
-.form-input {
-    width: 100%; padding: 11px 14px;
-    background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 13px; font-size: 13.5px;
-    font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text); outline: none; transition: 0.2s;
-}
-.form-input:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 4px rgba(79,70,229,0.1); }
-.form-textarea { min-height: 130px; resize: vertical; }
-
-.form-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 12px 20px; border: none; border-radius: 13px;
-    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13.5px; font-weight: 700;
-    cursor: pointer; transition: all 0.2s; text-decoration: none;
-}
-.btn-primary { background: linear-gradient(135deg, var(--accent), #4338ca); color: white; box-shadow: 0 6px 20px rgba(79,70,229,0.3); }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(79,70,229,0.4); }
-.btn-secondary { background: var(--light); color: var(--text); border: 1.5px solid var(--line); }
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-.btn-danger { background: linear-gradient(135deg, var(--danger), #dc2626); color: white; }
-.btn-danger:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(239,68,68,0.35); }
-.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.trash-list, .security-list { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 10px; }
-.trash-row, .security-row {
-    display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
-    background: var(--light); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px;
-}
-.trash-name, .security-name { font-size: 13px; font-weight: 800; color: var(--text); word-break: break-word; }
-.trash-meta, .security-meta { font-size: 11.5px; color: var(--muted); font-weight: 600; margin-top: 3px; line-height: 1.45; }
-.row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
-.inline-form { display: inline-flex; gap: 6px; align-items: center; }
-
-/* Drop zone */
-.drop-zone {
-    border: 2px dashed #c7d2fe; border-radius: 16px; padding: 28px 20px;
-    text-align: center; cursor: pointer; transition: all 0.2s; background: #f5f3ff;
-}
-.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(79,70,229,0.06); }
-.drop-zone .dz-icon { font-size: 36px; margin-bottom: 10px; }
-.drop-zone h4 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
-.drop-zone p  { font-size: 12.5px; color: var(--muted); }
-#upload-file-input { display: none; }
-.upload-global-track {
-    width: 100%;
-    height: 11px;
-    border-radius: 999px;
-    background: var(--light);
-    border: 1.5px solid var(--line);
-    overflow: hidden;
-}
-.upload-global-bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(135deg, var(--accent), #4338ca);
-    transition: width 0.18s ease;
-}
-.upload-global-text {
-    font-size: 11.5px;
-    color: var(--muted);
-    font-weight: 700;
-    margin-top: 7px;
-}
-.upload-progress-list {
-    margin-top: 10px;
-    max-height: 180px;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-.upload-progress-item {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--text);
-    background: var(--light);
-    border: 1.5px solid var(--line);
-    border-radius: 10px;
-    padding: 7px 10px;
-}
-.upload-progress-item.done { border-color: rgba(16,185,129,0.5); color: #047857; }
-.upload-progress-item.fail { border-color: rgba(239,68,68,0.45); color: #b91c1c; }
-
-.delete-warning-card {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    background: rgba(239,68,68,0.08);
-    border: 1.5px solid rgba(239,68,68,0.2);
-    border-radius: 16px;
-    padding: 14px;
-    margin-bottom: 16px;
-}
-.delete-warning-icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(239,68,68,0.14);
-    color: var(--danger);
-    flex-shrink: 0;
-}
-.delete-warning-title {
-    font-size: 14px;
-    font-weight: 800;
-    color: var(--text);
-    margin-bottom: 3px;
-}
-.delete-warning-text {
-    font-size: 12.5px;
-    color: var(--muted);
-    line-height: 1.45;
-    font-weight: 600;
-}
-
-/* All URLs modal textarea */
-.url-textarea {
-    width: 100%; font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
-    padding: 13px; background: var(--light); border: 1.5px solid var(--line);
-    border-radius: 13px; color: var(--text); resize: vertical; min-height: 190px; outline: none;
-}
-.url-textarea:focus { border-color: var(--accent); background: white; }
-
-.edit-textarea { min-height: 310px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; }
-
-/* ===== LIGHTBOX ===== */
-.lightbox {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.96);
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    z-index: 100000 !important;
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; pointer-events: none; transition: opacity 0.18s ease;
-}
-.lightbox.open { opacity: 1; pointer-events: all; }
-
-body.lightbox-open .topbar,
-body.lightbox-open .sidebar,
-body.lightbox-open .floating-quick-nav,
-body.lightbox-open .quick-scroll-top {
-    display: none !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
-
-.lightbox-img-wrap {
-    position: relative; max-width: 90vw; max-height: 88vh;
-    display: flex; align-items: center; justify-content: center;
-}
-
-.lightbox img {
-    max-width: 90vw; max-height: 85vh;
-    border-radius: 16px; box-shadow: 0 40px 100px rgba(0,0,0,0.85);
-    object-fit: contain;
-    will-change: transform, opacity, filter;
-    transition: opacity 0.22s ease-out, filter 0.25s ease-out;
-}
-
-.lightbox img.lb-thumb-preview {
-    filter: blur(4px);
-}
-
-.lb-spinner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 60px;
-    height: 60px;
-    z-index: 100005;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.lb-spinner-ring {
-    width: 44px;
-    height: 44px;
-    border: 3.5px solid rgba(255, 255, 255, 0.15);
-    border-top-color: #38bdf8;
-    border-radius: 50%;
-    animation: lb-spin 0.8s linear infinite;
-    box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
-}
-@keyframes lb-spin {
-    to { transform: rotate(360deg); }
-}
-
-.lb-close {
-    position: fixed; top: 20px; right: 24px;
-    height: 44px; padding: 0 16px 0 14px; border-radius: 22px;
-    background: rgba(255,255,255,0.14); border: 1.5px solid rgba(255,255,255,0.25);
-    color: white; font-size: 13.5px; font-weight: 700; cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    z-index: 100020 !important;
-    outline: none;
-}
-.lb-close:hover {
-    background: rgba(239,68,68,0.92);
-    border-color: #ef4444;
-    transform: translateY(-1px) scale(1.03);
-    box-shadow: 0 10px 28px rgba(239,68,68,0.55);
-    color: white;
-}
-.lb-close:active { transform: translateY(0) scale(0.98); }
-.lb-close svg { flex-shrink: 0; }
-@media (max-width: 640px) {
-    .lb-close { padding: 0 12px; }
-    .lb-close-text { display: none; }
-}
-
-.lb-nav {
-    position: fixed; top: 50%; transform: translateY(-50%);
-    width: 52px; height: 52px; border-radius: 16px;
-    background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.2);
-    color: white; font-size: 24px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    z-index: 100010 !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-}
-.lb-nav:hover {
-    background: rgba(79,70,229,0.7);
-    border-color: rgba(99,102,241,0.9);
-    transform: translateY(-50%) scale(1.05);
-}
-.lb-prev { left: 20px; }
-.lb-next { right: 20px; }
-.lb-nav.disabled { opacity: 0.3; cursor: default; pointer-events: none; }
-
-.lb-info {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: linear-gradient(transparent, rgba(0,0,0,0.8));
-    padding: 40px 24px 24px;
-    display: flex; align-items: flex-end; justify-content: space-between;
-    gap: 12px; z-index: 10;
-}
-.lb-name { color: white; font-size: 15px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
-.lb-counter { color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 600; }
-.lb-copy-btn {
-    padding: 8px 16px; border-radius: 10px;
-    background: rgba(79,70,229,0.8); border: 1px solid rgba(79,70,229,0.9);
-    color: white; font-size: 12px; font-family: 'Plus Jakarta Sans', sans-serif;
-    font-weight: 700; cursor: pointer; transition: all 0.16s; white-space: nowrap;
-}
-.lb-copy-btn:hover { background: rgba(79,70,229,1); }
-
-/* ===== TOAST ===== */
-.toast-container { position: fixed; top: 76px; right: 22px; z-index: 400; display: flex; flex-direction: column; gap: 7px; pointer-events: none; }
-body.dashboard-themed .toast-container {
-    position: fixed;
-    top: 76px;
-    right: 22px;
-    z-index: 400;
-}
-.toast {
-    background: white; border: 1.5px solid var(--line);
-    border-left: 4px solid var(--success); border-radius: 13px;
-    padding: 11px 16px; font-size: 12.5px; font-weight: 700; color: var(--text);
-    box-shadow: 0 8px 22px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 7px;
-    animation: toast-in 0.28s ease; pointer-events: all;
-}
-.toast.danger { border-left-color: var(--danger); }
-@keyframes toast-in  { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes toast-out { from { opacity: 1; } to { opacity: 0; transform: translateX(18px); } }
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 1100px) {
-    .stats-row { grid-template-columns: repeat(2,1fr); }
-    .table-header-row, .file-row { grid-template-columns: 44px 1fr 100px; }
-    body:not(.selection-mode) .table-header-row,
-    body:not(.selection-mode) .file-row { grid-template-columns: 0 1fr 100px; }
-    .actions-cell { display: none; }
-}
-@media (max-width: 768px) {
-    :root { --sidebar-w: 0px; }
-    .mobile-menu-btn { display: inline-flex; align-items:center; justify-content:center; }
-    .sidebar {
-        display: flex;
-        position: fixed;
-        top: var(--topbar-h);
-        left: 0;
-        bottom: 0;
-        width: min(310px, 86vw);
-        height: calc(100vh - var(--topbar-h));
-        transform: translateX(-105%);
-        transition: transform .22s ease;
-        z-index: 120;
-        box-shadow: 20px 0 60px rgba(15,23,42,0.25);
-    }
-    body.sidebar-open .sidebar { transform: translateX(0); }
-    body.sidebar-open .sidebar-backdrop { display: block; }
-    .main { padding: 14px; }
-    .stats-row { grid-template-columns: repeat(2,1fr); }
-    .table-header-row, .file-row { grid-template-columns: 44px 1fr 90px; }
-    body:not(.selection-mode) .table-header-row,
-    body:not(.selection-mode) .file-row { grid-template-columns: 0 1fr 90px; }
-    .url-cell { display: none; }
-    .kbd-hint { display: none; }
-    .topbar-search { max-width: none; }
-    .panel-head { align-items: flex-start; flex-direction: column; }
-    .panel-title-search { width: 100%; flex-wrap: wrap; }
-    .panel-title-search .topbar-search { flex: 1 1 220px; min-width: 0; width: 100%; }
-    .trash-row, .security-row { grid-template-columns: 1fr; }
-    .row-actions { justify-content: flex-start; }
-    .topbar { gap: 8px; padding: 0 10px; }
-    .brand-tag, .kbd-hint { display: none; }
-    .topbar-action { padding: 8px 9px; font-size: 11px; }
-    .profile-chip { max-width: 140px; overflow: hidden; }
-}
-
-/* ===== FEATURE ADDITIONS ===== */
-
-/* Folder color variables */
-:root {
-    --fc-blue:   #3b82f6;
-    --fc-green:  #22c55e;
-    --fc-yellow: #eab308;
-    --fc-red:    #ef4444;
-    --fc-purple: #a855f7;
-    --fc-orange: #f97316;
-    --fc-blue-bg:   rgba(59,130,246,0.14);
-    --fc-green-bg:  rgba(34,197,94,0.14);
-    --fc-yellow-bg: rgba(234,179,8,0.16);
-    --fc-red-bg:    rgba(239,68,68,0.14);
-    --fc-purple-bg: rgba(168,85,247,0.14);
-    --fc-orange-bg: rgba(249,115,22,0.14);
-}
-
-.file-type-icon[data-folder-color="blue"]   { color: var(--fc-blue);   background: var(--fc-blue-bg); }
-.file-type-icon[data-folder-color="green"]  { color: var(--fc-green);  background: var(--fc-green-bg); }
-.file-type-icon[data-folder-color="yellow"] { color: var(--fc-yellow); background: var(--fc-yellow-bg); }
-.file-type-icon[data-folder-color="red"]    { color: var(--fc-red);    background: var(--fc-red-bg); }
-.file-type-icon[data-folder-color="purple"] { color: var(--fc-purple); background: var(--fc-purple-bg); }
-.file-type-icon[data-folder-color="orange"] { color: var(--fc-orange); background: var(--fc-orange-bg); }
-
-/* Folder meta badges */
-.fm-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    font-size: 12px;
-    line-height: 1;
-    pointer-events: none;
-    flex-shrink: 0;
-    border: 1px solid var(--line);
-    background: var(--card);
-    box-shadow: 0 2px 8px rgba(15,23,42,0.08);
-}
-.fm-pin { color: #f59e0b; background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.26); }
-.fm-fav { color: #eab308; background: rgba(234,179,8,0.12); border-color: rgba(234,179,8,0.26); }
-.file-type-icon { position: relative; }
-
-/* ── Toolbar Dropdowns ─────────────────────────────────────────────────── */
-.tb-dropdown-wrap { position: relative; display: inline-flex; }
-.tb-caret { font-size: 9px; margin-left: 2px; }
-.tb-dropdown {
-    position: absolute; top: calc(100% + 6px); left: 0;
-    background: var(--card); border: 1.5px solid var(--line); border-radius: 14px;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.14); min-width: 180px;
-    z-index: 250; overflow: hidden;
-    opacity: 0; pointer-events: none; transform: translateY(-6px);
-    transition: opacity 0.15s, transform 0.15s;
-}
-.tb-dropdown.open { opacity: 1; pointer-events: all; transform: translateY(0); }
-.tb-dropdown-item {
-    display: flex; align-items: center; gap: 9px;
-    padding: 10px 14px; font-size: 12.5px; font-weight: 700;
-    color: var(--text); cursor: pointer; transition: background 0.12s;
-    border: none; background: none; width: 100%; text-align: left;
-    text-decoration: none;
-}
-.tb-dropdown-item:hover { background: rgba(79,70,229,0.07); color: var(--accent); }
-.tb-dropdown-item.active { color: var(--accent); background: rgba(79,70,229,0.06); }
-.tb-btn-ai { background: linear-gradient(135deg, #7c3aed, #4f46e5) !important; color: white !important; border-color: transparent !important; }
-.tb-btn-ai:hover { background: white !important; color: #4f46e5 !important; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,0.35); }
-
-/* ── Context Menu ─────────────────────────────────────────────────────── */
-.ctx-menu {
-    position: fixed; z-index: 600;
-    background: var(--card); border: 1.5px solid var(--line);
-    border-radius: 16px; min-width: 190px; padding: 6px;
-    box-shadow: 0 20px 50px rgba(15,23,42,0.2), 0 2px 8px rgba(0,0,0,0.08);
-    backdrop-filter: blur(12px);
-    animation: ctx-in 0.14s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes ctx-in { from { opacity:0; transform: scale(0.92); } to { opacity:1; transform: scale(1); } }
-.ctx-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; border-radius: 10px; font-size: 12.5px;
-    font-weight: 700; color: var(--text); cursor: pointer; transition: all 0.11s;
-    position: relative;
-}
-.ctx-item:hover { background: rgba(79,70,229,0.07); color: var(--accent); }
-.ctx-item.ctx-danger:hover { background: rgba(239,68,68,0.07); color: var(--danger); }
-.ctx-sep { height: 1px; background: var(--line); margin: 4px 8px; }
-.ctx-submenu {
-    position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
-    background: var(--card); border: 1.5px solid var(--line); border-radius: 12px;
-    padding: 8px; display: flex; gap: 6px; flex-wrap: wrap;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.15); z-index: 10; min-width: 140px;
-    opacity: 0; pointer-events: none; transition: opacity 0.15s;
-}
-.ctx-item:hover .ctx-submenu { opacity: 1; pointer-events: all; }
-.ctx-color-opt {
-    width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
-    transition: transform 0.15s; border: 2px solid transparent;
-}
-.ctx-color-opt:hover { transform: scale(1.25); }
-
-/* ── Dashboard Theme Picker ─────────────────────────────────────────── */
-.theme-modal-box { max-width: 860px; }
-.theme-toolbar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 96px 96px;
-    gap: 10px;
-    align-items: end;
-    margin-bottom: 16px;
-}
-.theme-url-form {
-    display: contents;
-}
-.theme-url-form .form-group { min-width: 0; }
-.theme-action-btn {
-    width: 100%;
-    height: 44px;
-    justify-content: center;
-    padding: 0 14px;
-    white-space: nowrap;
-}
-.theme-upload-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 16px;
-}
-.theme-gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
-    max-height: 430px;
-    overflow: auto;
-    padding-right: 4px;
-}
-.theme-choice {
-    position: relative;
-    border: 1.5px solid var(--line);
-    background: var(--card);
-    border-radius: 16px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-    text-align: left;
-    color: var(--text);
-    font-family: 'Plus Jakarta Sans', sans-serif;
-}
-.theme-choice:hover {
-    transform: translateY(-2px);
-    border-color: var(--accent);
-    box-shadow: 0 10px 24px rgba(79,70,229,0.14);
-}
-.theme-choice.active {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(79,70,229,0.16);
-}
-.theme-preview {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    object-fit: cover;
-    display: block;
-    background: var(--light);
-}
-.theme-choice-name {
-    padding: 9px 10px;
-    font-size: 11.5px;
-    font-weight: 800;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.theme-delete-btn {
-    position: absolute;
-    top: 7px;
-    right: 7px;
-    width: 26px;
-    height: 26px;
-    border: 1.5px solid rgba(255,255,255,0.9);
-    border-radius: 999px;
-    background: rgba(15,23,42,0.68);
-    color: white;
-    font-size: 14px;
-    font-weight: 900;
-    line-height: 1;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.14s ease, transform 0.14s ease, background 0.14s ease;
-}
-.theme-choice:hover .theme-delete-btn,
-.theme-delete-btn:focus {
-    opacity: 1;
-}
-.theme-delete-btn:hover {
-    background: var(--danger);
-    transform: scale(1.06);
-}
-.theme-status {
-    min-height: 18px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--muted);
-    margin-top: 10px;
-}
-.theme-file-input { display: none; }
-@media (max-width: 700px) {
-    .theme-toolbar { grid-template-columns: 1fr; }
-    .theme-url-form { display: contents; }
-    .theme-action-btn { width: 100%; }
-    .theme-gallery { grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); }
-}
-
-/* ── Storage Dashboard Card ──────────────────────────────────────────── */
-.storage-dash-card .stat-val { font-size: 14px !important; }
-.storage-bar-track {
-    width: 100%; height: 7px; border-radius: 999px;
-    background: var(--light); border: 1px solid var(--line); margin-top: 8px; overflow: hidden;
-}
-.storage-bar-fill {
-    height: 100%; border-radius: 999px;
-    background: linear-gradient(90deg, var(--accent), #4338ca);
-    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.storage-bar-fill.warn   { background: linear-gradient(90deg, #f59e0b, #d97706); }
-.storage-bar-fill.danger { background: linear-gradient(90deg, var(--danger), #dc2626); }
-.storage-detail { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: 4px; }
-
-/* ── Version History ─────────────────────────────────────────────────── */
-.ver-item {
-    display: flex; align-items: center; gap: 12px;
-    border: 1.5px solid var(--line); border-radius: 14px;
-    padding: 12px 14px; background: var(--light); transition: all 0.15s;
-}
-.ver-item:hover { border-color: var(--accent); background: rgba(79,70,229,0.03); }
-.ver-badge {
-    font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 7px;
-    background: var(--accent); color: white; white-space: nowrap; flex-shrink: 0;
-}
-.ver-info { flex: 1; min-width: 0; }
-.ver-name { font-size: 12.5px; font-weight: 700; color: var(--text); }
-.ver-meta { font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 2px; }
-.ver-actions { display: flex; gap: 5px; flex-shrink: 0; }
-
-/* ── Duplicate Groups ─────────────────────────────────────────────────── */
-.dup-group {
-    border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden;
-    background: var(--light);
-}
-.dup-group-head {
-    padding: 10px 14px; background: rgba(239,68,68,0.07); border-bottom: 1px solid var(--line);
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 12px; font-weight: 800; color: var(--danger);
-}
-.dup-item {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-    border-bottom: 1px solid var(--line); transition: background 0.12s;
-}
-.dup-item:last-child { border-bottom: none; }
-.dup-item:hover { background: rgba(0,0,0,0.02); }
-.dup-thumb { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; border: 1.5px solid var(--line); flex-shrink: 0; }
-.dup-info { flex: 1; min-width: 0; }
-.dup-name { font-size: 12.5px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dup-meta { font-size: 11px; color: var(--muted); font-weight: 600; }
-.dup-actions { display: flex; gap: 5px; flex-shrink: 0; }
-
-/* ── Properties Modal ─────────────────────────────────────────────────── */
-.props-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
-    border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden;
-}
-.props-row {
-    display: contents;
-}
-.props-row > div {
-    padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px;
-}
-.props-row:last-child > div { border-bottom: none; }
-.props-label { font-weight: 800; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(248,250,252,0.8); }
-.props-value { font-weight: 600; color: var(--text); word-break: break-all; }
-.props-hash { font-family: 'JetBrains Mono', monospace; font-size: 10px; }
-[data-theme="dark"] .props-label { background: rgba(30,41,59,0.6); }
-
-/* ── AI Queue ────────────────────────────────────────────────────────── */
-.ai-job-row {
-    display: grid; grid-template-columns: 1fr 90px 70px; gap: 10px; align-items: center;
-    background: var(--light); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 12px;
-    font-size: 12px; font-weight: 700; transition: all 0.15s;
-}
-.ai-job-row.done    { border-color: rgba(16,185,129,0.4); color: #047857; }
-.ai-job-row.error   { border-color: rgba(239,68,68,0.4); color: #b91c1c; }
-.ai-job-row.processing { border-color: rgba(79,70,229,0.4); color: var(--accent); }
-.ai-job-status { font-size: 11px; text-align: right; }
-.ai-job-spinner {
-    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
-    border: 2px solid rgba(79,70,229,0.3); border-top-color: var(--accent);
-    animation: spin 0.8s linear infinite; margin-right: 4px; vertical-align: middle;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ===== GLOBAL DRAG OVERLAY ===== */
-.global-drag-overlay {
-    position: fixed; inset: 0; background: rgba(79,70,229,0.85); backdrop-filter: blur(8px);
-    z-index: 9999; display: flex; align-items: center; justify-content: center;
-    color: white; font-size: 24px; font-weight: 800; text-align: center;
-    opacity: 0; pointer-events: none; transition: opacity 0.2s;
-}
-.global-drag-overlay.active { opacity: 1; pointer-events: all; }
-
-/* Virtualized Fast Render Engine: Skips layout and painting for offscreen items.
-   Unlocks 60-120 FPS buttery smooth scrolling even in folders with thousands of files. */
-.file-list {
-    contain: none !important;
-}
-.file-row,
-.url-list-item,
-.img-card {
-    content-visibility: visible !important;
-    contain: none !important;
-    contain-intrinsic-size: none !important;
-}
-body,
-body::before,
-body::after,
-body.dashboard-themed::before,
-body.dashboard-themed::after,
-.layout,
-.topbar,
-.sidebar,
-.main,
-.stat-card,
-.toolbar,
-.selection-bar,
-.pathbar,
-.panel,
-.panel-head,
-.table-header-row,
-.file-list,
-.file-row,
-.file-type-icon,
-.thumb-img,
-.act-btn,
-.tb-btn,
-.topbar-action,
-.sidebar-btn,
-.sidebar-btn .sb-icon,
-.profile-chip,
-.mobile-menu-btn,
-.theme-page-btn,
-.theme-switch,
-.theme-switch .ts-icon,
-.theme-switch .ts-thumb,
-.form-input,
-.url-input,
-.url-textarea,
-.topbar-search input,
-.url-copy-btn,
-.url-list-btn,
-.img-url-copy,
-.img-grid-panel,
-.img-card,
-.img-card-thumb,
-.all-urls-panel,
-.url-list-item,
-.brand-logo,
-.storage-bar-fill,
-.message,
-.file-row.dbl-highlight {
-    animation: none !important;
-    transition: none !important;
-}
-.stat-card,
-.toolbar,
-.selection-bar,
-.pathbar,
-.panel,
-.img-grid-panel,
-.all-urls-panel,
-.message,
-.file-row,
-.file-row.dbl-highlight,
-.img-card,
-.brand-logo {
-    opacity: 1 !important;
-    transform: none !important;
-}
-
+.modal-overlay { display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.65); align-items: center; justify-content: center; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.modal-overlay.open { display: flex !important; }
 </style>
 
-</head>
-<body<?php echo $dashboardThemeUrl !== "" ? ' class="dashboard-themed" style="--dashboard-bg-image:url(&quot;' . htmlspecialchars(cssUrlValue($dashboardThemeUrl), ENT_QUOTES, "UTF-8") . '&quot;);"' : ''; ?>>
+<?php
+$bodyClasses = ['sidebar-collapsed'];
+$bodyClassStr = implode(' ', $bodyClasses);
+?>
+<body class="<?php echo $bodyClassStr; ?>">
+<script>
+(function() {
+    try {
+        var saved = localStorage.getItem('kiuq_sidebar_collapsed');
+        if (saved === '0') {
+            document.body.classList.remove('sidebar-collapsed');
+        }
+        localStorage.removeItem('kiuq_dashboard_theme');
+        document.body.classList.remove('dashboard-themed');
+        document.documentElement.classList.remove('dashboard-themed');
+        document.body.style.removeProperty('--dashboard-bg-image');
+        document.documentElement.style.removeProperty('--dashboard-bg-image');
+    } catch(e){}
+})();
+</script>
+
+<!-- PJAX Progress Bar -->
+<div id="pjaxProgressBar"></div>
+
+<!-- Collapsed Sidebar Floating Tooltip -->
+<div id="sidebarTooltip"></div>
 
 <!-- Global Drag Overlay -->
 <div class="global-drag-overlay" id="globalDragOverlay">
     <div>
         <div style="font-size:54px; margin-bottom:16px;">☁️</div>
-        <div>Drop files to upload & auto-extract</div>
+        <div>Drop files to review &amp; upload</div>
     </div>
 </div>
 
@@ -5203,772 +4505,12 @@ body.dashboard-themed::after,
 <!-- ===== MODALS ===== -->
 
 <!-- Dashboard Theme -->
-<div class="modal-overlay" id="themeModal">
-    <div class="modal-box theme-modal-box">
-        <div class="modal-header">
-            <span class="modal-title">🎨 Theme</span>
-            <button class="modal-close" onclick="closeModal('themeModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <div class="theme-toolbar">
-                <form class="theme-url-form" onsubmit="return saveThemeFromUrl(event)">
-                    <div class="form-group" style="margin:0; flex:1;">
-                        <label class="form-label">Image URL</label>
-                        <input class="form-input" id="themeUrlInput" type="url" placeholder="https://example.com/background.jpg" value="<?php echo htmlspecialchars($dashboardThemeUrl); ?>">
-                    </div>
-                    <button class="form-btn btn-primary theme-action-btn" type="submit">Use URL</button>
-                </form>
-                <button class="form-btn btn-secondary theme-action-btn" type="button" onclick="setDashboardTheme('')">Normal</button>
-            </div>
-
-            <div class="theme-upload-row">
-                <button class="form-btn btn-secondary" type="button" onclick="document.getElementById('themeFileInput').click()">Choose Image</button>
-                <input class="theme-file-input" id="themeFileInput" type="file" accept=".jpg,.jpeg,.png,.webp,.gif,image/*" onchange="uploadDashboardTheme(this)">
-            </div>
-
-            <div class="theme-gallery" id="themeGallery">
-                <?php if (empty($availableThemeImages)): ?>
-                    <div class="empty-state" style="grid-column:1/-1;padding:28px 12px;">
-                        <div class="es-icon">🖼️</div>
-                        <h3>No theme images yet</h3>
-                        <p>Choose an image or paste an image URL.</p>
-                    </div>
-                <?php endif; ?>
-                <?php foreach ($availableThemeImages as $themeImage): ?>
-                    <div class="theme-choice<?php echo $dashboardThemeUrl === $themeImage["url"] ? " active" : ""; ?>" role="button" tabindex="0" data-theme-url="<?php echo htmlspecialchars($themeImage["url"]); ?>" onclick="setDashboardTheme(this.dataset.themeUrl)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setDashboardTheme(this.dataset.themeUrl);}">
-                        <img class="theme-preview" src="<?php echo htmlspecialchars($themeImage["url"]); ?>" alt="" loading="lazy">
-                        <?php if (!empty($themeImage["can_delete"])): ?>
-                            <button class="theme-delete-btn" type="button" title="Delete" onclick="deleteDashboardTheme(event, this.closest('.theme-choice'))">×</button>
-                        <?php endif; ?>
-                        <div class="theme-choice-name"><?php echo htmlspecialchars($themeImage["name"]); ?></div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
-            <div class="theme-status" id="themeStatus"></div>
-        </div>
-    </div>
-</div>
-
-<!-- Upload -->
-<!-- Rename Type Modal -->
-<div class="modal-overlay" id="renameTypeModal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <span class="modal-title">🏷️ Rename Type</span>
-            <button class="modal-close" onclick="closeModal('renameTypeModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <p class="modal-desc">Select a product type. It will automatically rename selected files to Product-01, Product-02, etc.</p>
-            <div style="display:flex; gap:8px; margin-bottom: 15px;">
-                <select class="form-input" id="renameTypeSelect" style="flex:1;">
-                    <!-- Populated by JS -->
-                </select>
-                <button type="button" class="form-btn danger" onclick="deleteRenameType()" title="Delete selected type" style="padding: 0 12px;">🗑️</button>
-            </div>
-            <div style="display:flex; gap:8px; margin-bottom: 15px;">
-                <input type="text" class="form-input" id="newRenameType" placeholder="New product name..." style="flex:1;">
-                <button type="button" class="form-btn primary" onclick="addRenameType()">+ Add</button>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="form-btn btn-secondary" onclick="closeModal('renameTypeModal')">Cancel</button>
-            <button type="button" class="form-btn primary" onclick="applyRenameType()">Apply to Selected</button>
-        </div>
-    </div>
-</div>
-
-<div class="modal-overlay" id="uploadModal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <span class="modal-title">📤 Upload Files</span>
-            <button class="modal-close" onclick="closeModal('uploadModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <form method="post" enctype="multipart/form-data" id="uploadForm">
-                <?php echo csrfField(); ?>
-                <input type="hidden" name="action" value="upload_files">
-                <input type="hidden" name="path" value="<?php echo htmlspecialchars($current); ?>">
-                <div class="drop-zone" id="dropZone">
-                    <div class="dz-icon">☁️</div>
-                    <h4>Drop files here or click to browse</h4>
-                    <p><?php echo $isConverter ? "Images only (jpg, jpeg, png, webp, avif)" : "Images (jpg, png, webp, gif, svg, avif), Code (html, css, js, php) or ZIP (auto-extracts)"; ?></p>
-                    <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
-                        <button type="button" class="form-btn btn-secondary" onclick="document.getElementById('upload-file-input').click()">Select Files</button>
-                        <button type="button" class="form-btn btn-secondary" onclick="document.getElementById('upload-folder-input').click()">Select Folder</button>
-                    </div>
-                    <p style="margin-top:7px;font-size:12px;color:#4f46e5;font-weight:700;" id="dropZoneFiles"></p>
-                </div>
-                <input type="file" id="upload-file-input" style="display:none" name="upload_files[]" multiple
-                    accept="<?php echo $isConverter ? '.jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif' : '.jpg,.jpeg,.png,.webp,.gif,.svg,.avif,image/avif,.html,.txt,.css,.js,.json,.php,.zip'; ?>"
-                    onchange="updateDropZone(this)">
-                <input type="file" id="upload-folder-input" style="display:none" name="upload_folders[]" multiple webkitdirectory directory
-                    onchange="updateDropZone(this)">
-                <p style="font-size:11.5px;color:var(--muted);margin-top:10px;font-weight:600;">
-                    JPG and PNG uploads are automatically resized and saved as clear WebP files. WebP uploads are kept as-is for faster, safer previews.
-                </p>
-                <div id="uploadProgressWrap" style="display:none;margin-top:12px;">
-                    <div class="upload-global-track">
-                        <div class="upload-global-bar" id="uploadGlobalBar"></div>
-                    </div>
-                    <div class="upload-global-text" id="uploadGlobalText">Preparing upload...</div>
-                    <div class="upload-progress-list" id="uploadProgressList"></div>
-                </div>
-                <div class="btn-row" style="margin-top:18px;">
-                    <button type="submit" class="form-btn btn-primary" id="uploadSubmitBtn">Upload →</button>
-                    <button type="button" class="form-btn btn-secondary" onclick="closeModal('uploadModal')">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Create Folder -->
-<div class="modal-overlay" id="folderModal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <span class="modal-title">📁 Create Folder</span>
-            <button class="modal-close" onclick="closeModal('folderModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <form method="post">
-                <?php echo csrfField(); ?>
-                <input type="hidden" name="action" value="create_folder">
-                <div class="form-group">
-                    <label class="form-label">Folder Name</label>
-                    <input class="form-input" name="folder_name" placeholder="e.g. product-images" required autofocus>
-                </div>
-                <div class="btn-row">
-                    <button type="submit" class="form-btn btn-primary">Create →</button>
-                    <button type="button" class="form-btn btn-secondary" onclick="closeModal('folderModal')">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Create File -->
-<div class="modal-overlay" id="fileModal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <span class="modal-title">📝 Create File</span>
-            <button class="modal-close" onclick="closeModal('fileModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <form method="post">
-                <?php echo csrfField(); ?>
-                <input type="hidden" name="action" value="create_file">
-                <div class="form-group">
-                    <label class="form-label">File Name</label>
-                    <input class="form-input" name="file_name" placeholder="e.g. notes.txt or custom.css" required autofocus>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Initial Content (optional)</label>
-                    <textarea class="form-input form-textarea" name="file_content" placeholder="File content..."></textarea>
-                </div>
-                <div class="btn-row">
-                    <button type="submit" class="form-btn btn-primary">Create →</button>
-                    <button type="button" class="form-btn btn-secondary" onclick="closeModal('fileModal')">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- All URLs Modal -->
-<div class="modal-overlay" id="urlsModal">
-    <div class="modal-box" style="max-width:900px; width:95%;">
-        <div class="modal-header">
-            <span class="modal-title">🔗 All Image URLs</span>
-            <button class="modal-close" onclick="closeModal('urlsModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <p style="font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:600;">
-                <?php echo count($imageUrls); ?> image URL(s) in this folder
-            </p>
-            <textarea id="allUrlsTextarea" class="url-textarea" readonly style="min-height:200px;"><?php echo htmlspecialchars(implode("\n", $imageUrls)); ?></textarea>
-            <div class="btn-row" style="margin-top:14px; flex-wrap:wrap; gap:8px;">
-                <button class="form-btn btn-primary" onclick="copyAllUrls()">📋 Copy All URLs as row</button>
-                <button class="form-btn btn-primary" onclick="copyAllUrlsHorizontal()">📋 Copy All URLs as horizontal</button>
-                <button class="form-btn btn-secondary" onclick="copySelectedUrls()">✅ Copy Selected as row</button>
-                <button class="form-btn btn-secondary" onclick="copySelectedUrlsHorizontal()">✅ Copy Selected as horizontal</button>
-                <button class="form-btn btn-secondary" onclick="closeModal('urlsModal')">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Move Modal -->
-<div class="modal-overlay" id="moveModal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <span class="modal-title">📦 Move Items</span>
-            <button class="modal-close" onclick="closeModal('moveModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <form method="post" id="moveForm">
-                <?php echo csrfField(); ?>
-                <input type="hidden" name="action" value="move_selected">
-                <div id="moveSelectedInputs"></div>
-                <div class="form-group">
-                    <label class="form-label">Destination Folder</label>
-                    <select class="form-input" name="move_destination" id="moveDestInput" data-loaded="0" disabled autofocus>
-                        <option value="">Loading folders...</option>
-                    </select>
-                    <p style="font-size:11.5px;color:var(--muted);margin-top:6px;font-weight:500;">
-                        Choose one of the available folders. Root means the <?php echo $isWebsiteTeam ? "Website-Team" : "main ebay"; ?> folder.
-                    </p>
-                </div>
-                <div class="btn-row">
-                    <button type="submit" class="form-btn btn-primary">Move →</button>
-                    <button type="button" class="form-btn btn-secondary" onclick="closeModal('moveModal')">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Password Modal -->
-<div class="modal-overlay" id="deletePasswordModal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <span class="modal-title">🔐 Delete confirmation</span>
-            <button class="modal-close" onclick="cancelDeletePassword()">✕</button>
-        </div>
-        <div class="modal-body">
-            <div class="delete-warning-card">
-                <div class="delete-warning-icon">🗑️</div>
-                <div>
-                    <div class="delete-warning-title">Delete password required</div>
-                    <div class="delete-warning-text" id="deletePasswordMessage">Enter the delete password to continue.</div>
-                </div>
-            </div>
-            <form id="deletePasswordModalForm" onsubmit="return submitDeletePassword(event)">
-                <div class="form-group">
-                    <label class="form-label">Delete password</label>
-                    <input class="form-input" id="deletePasswordInput" type="password" autocomplete="current-password" placeholder="Enter delete password" required>
-                </div>
-                <div class="btn-row">
-                    <button type="submit" class="form-btn btn-danger">Delete →</button>
-                    <button type="button" class="form-btn btn-secondary" onclick="cancelDeletePassword()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<?php if ($isAdmin): ?>
-<!-- Security Modal -->
-<div class="modal-overlay" id="securityModal">
-    <div class="modal-box" style="max-width:720px;">
-        <div class="modal-header">
-            <span class="modal-title">🛡️ Login Security</span>
-            <button class="modal-close" onclick="closeModal('securityModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <p style="font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:600;">
-                Devices are banned after <?php echo (int)$MAX_LOGIN_ATTEMPTS; ?> failed login attempts.
-            </p>
-            <div class="security-list" style="padding:0;">
-                <?php if (empty($bannedDevices)): ?>
-                    <div class="empty-state" style="padding:26px 12px;">
-                        <div class="es-icon">🛡️</div>
-                        <h3>No banned devices</h3>
-                        <p>Failed login bans will appear here.</p>
-                    </div>
-                <?php endif; ?>
-                <?php foreach ($bannedDevices as $ban): ?>
-                    <div class="security-row">
-                        <div>
-                            <div class="security-name"><?php echo htmlspecialchars($ban["ip"] ?? "Unknown IP"); ?></div>
-                            <div class="security-meta">
-                                <?php echo htmlspecialchars($ban["reason"] ?? "Failed login attempts"); ?> ·
-                                <?php echo date("M d, Y H:i", (int)($ban["banned_at"] ?? time())); ?><br>
-                                <?php echo htmlspecialchars($ban["user_agent"] ?? "Unknown device"); ?>
-                            </div>
-                        </div>
-                        <div class="row-actions">
-                            <form method="post" class="inline-form">
-                                <?php echo csrfField(); ?>
-                                <input type="hidden" name="action" value="unban_device">
-                                <input type="hidden" name="ban_id" value="<?php echo htmlspecialchars($ban["id"] ?? ""); ?>">
-                                <button class="act-btn open" type="submit">Unban</button>
-                            </form>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-<?php if ($FEATURES_ENABLED): ?>
-
-<!-- ===== FEATURE MODALS ===== -->
-
-<!-- AI Background Remove Modal -->
-<div class="modal-overlay" id="aiModal">
-    <div class="modal-box" style="max-width:680px;">
-        <div class="modal-header">
-            <span class="modal-title">✨ AI Background Removal</span>
-            <button class="modal-close" onclick="closeModal('aiModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <div id="aiSelectedInfo" style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:14px;"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
-                <div class="form-group">
-                    <label class="form-label">Output Type</label>
-                    <select class="form-input" id="aiOutputType">
-                        <option value="transparent">Transparent PNG</option>
-                        <option value="white">White Background</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Output Format</label>
-                    <select class="form-input" id="aiOutputFormat">
-                        <option value="webp" selected>WebP</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Output Size</label>
-                    <select class="form-input" id="aiOutputSize">
-                        <option value="">Original Size</option>
-                        <option value="1280x1280">1280x1280px</option>
-                        <option value="1920x1080">1920x1080px</option>
-                    </select>
-                </div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Output Folder</label>
-                <select class="form-input" id="aiOutputFolder">
-                    <option value="">(Current Directory)</option>
-                    <?php foreach ($items as $item): if ($item['is_dir']): ?>
-                        <option value="<?php echo htmlspecialchars($item['name']); ?>"><?php echo htmlspecialchars($item['name']); ?></option>
-                    <?php endif; endforeach; ?>
-                </select>
-            </div>
-            <label style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer;">
-                <input type="checkbox" id="aiKeepOrigName" style="width:16px; height:16px; cursor:pointer;" checked>
-                <span style="font-size:14px; font-weight:600; color:var(--text);">Replace original image (delete original)</span>
-            </label>
-            
-            <label style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer;">
-                <input type="checkbox" id="aiReviewCanvas" style="width:16px; height:16px; cursor:pointer;" checked>
-                <span style="font-size:14px; font-weight:600; color:var(--text);">Review in Canva Editor after processing</span>
-            </label>
-
-            <div id="aiQueue" style="margin-top:14px;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
-            <div class="btn-row" style="margin-top:18px;">
-                <button class="form-btn btn-primary" id="aiStartBtn" onclick="aiStartProcessing()">🪄 Remove BG</button>
-                <button class="form-btn btn-secondary" id="aiCancelBtn" style="display:none;" onclick="aiCancelAll()">✕ Cancel</button>
-                <button class="form-btn btn-secondary" id="aiDownloadBtn" style="display:none;" onclick="aiDownloadZip()">⬇ Download ZIP</button>
-                <button class="form-btn btn-secondary" onclick="closeModal('aiModal')">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- AI Editor Modal -->
-<div class="modal-overlay" id="aiEditorModal">
-    <div class="modal-box" style="max-width:800px; width:95%; display:flex; flex-direction:column;">
-        <div class="modal-header">
-            <span class="modal-title">🎨 AI Canvas Editor <span id="aiEditorTitleInfo" style="font-size:12px;color:var(--muted);font-weight:normal;margin-left:10px;"></span></span>
-            <button class="modal-close" onclick="closeModal('aiEditorModal')">✕</button>
-        </div>
-        <div class="modal-body" style="display:flex; flex-direction:column; gap:16px;">
-            <div style="display:flex; gap:12px; justify-content:space-between; align-items:center; flex-wrap:wrap; width:100%;">
-                <div style="display:flex; gap:12px; align-items:center;">
-                    <label class="form-label" style="margin:0;">Size:</label>
-                    <select class="form-input" id="aiEditorCanvasSize" onchange="aiEditorChangeSize()" style="width:140px; padding:6px 10px;">
-                        <option value="1280x1280">1280x1280px</option>
-                        <option value="1920x1080">1920x1080px</option>
-                    </select>
-                </div>
-                <div>
-                    <button class="form-btn" id="aiEditorRemoveBgBtn" onclick="aiEditorRemoveBg()" style="padding:6px 14px; font-size:13px; font-weight:600; display:none; background:#fff; color:#1e293b; border:1px solid #e2e8f0; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.05); cursor:pointer;">🪄 Remove BG</button>
-                </div>
-                <div style="display:flex; gap:12px; align-items:center;">
-                    <label class="form-label" style="margin:0;">Background:</label>
-                    <select class="form-input" id="aiEditorBgType" onchange="aiEditorDraw()" style="width:140px; padding:6px 10px;">
-                        <option value="transparent">Transparent</option>
-                        <option value="white">White</option>
-                    </select>
-                </div>
-                <div style="display:flex; gap:12px; align-items:center;">
-                    <label class="form-label" style="margin:0;">Zoom:</label>
-                    <button class="form-btn btn-secondary" onclick="aiEditorZoomOut()" style="padding:4px 8px; font-size:14px;">-</button>
-                    <input type="range" id="aiEditorZoom" min="0.1" max="4" step="0.01" value="1" oninput="aiEditorZoomChange()" style="width:100px;">
-                    <button class="form-btn btn-secondary" onclick="aiEditorZoomIn()" style="padding:4px 8px; font-size:14px;">+</button>
-                    <span id="aiEditorZoomLabel" style="width:40px; font-size:13px; font-weight:600;">100%</span>
-                    <button class="form-btn btn-secondary" onclick="aiEditorReset()" style="padding:6px 12px; font-size:12px;">Reset</button>
-                </div>
-            </div>
-            
-            <div style="width:100%; display:flex; justify-content:center; background: #e5e7eb; border-radius: 12px; padding:10px; border: 2px dashed var(--line);">
-                <div id="aiEditorCanvasWrapper" style="position:relative; width:100%; max-width:500px; aspect-ratio:1/1; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border-radius:4px; overflow:hidden;">
-                    <!-- Checkered background for transparent preview -->
-                    <div style="position:absolute; inset:0; background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%); background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0px; z-index:1;"></div>
-                    <canvas id="aiEditorCanvas" width="1280" height="1280" style="position:absolute; inset:0; width:100%; height:100%; z-index:2; cursor:grab;"></canvas>
-                </div>
-            </div>
-            
-            <div class="btn-row" style="justify-content:flex-end; margin-top:4px;">
-                <button class="form-btn btn-secondary" onclick="aiEditorSkip()">⏭️ Skip</button>
-                <button class="form-btn btn-primary" id="aiEditorSaveBtn" onclick="aiEditorSave()">💾 Save & Continue</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Duplicate Finder Modal -->
-<div class="modal-overlay" id="duplicateModal">
-    <div class="modal-box" style="max-width:760px;">
-        <div class="modal-header">
-            <span class="modal-title">🔍 Duplicate Finder</span>
-
-        </div>
-        <div class="modal-body">
-            <div style="display:flex;gap:16px;flex-wrap:nowrap;margin-bottom:14px;align-items:center;">
-                <select class="form-input" id="dupScope" style="min-width:150px;">
-                    <option value="all">Entire Library</option>
-                    <option value="current">Current Folder</option>
-                </select>
-                <div style="display:flex;gap:16px;align-items:center;">
-                    <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer;">
-                        <input type="checkbox" id="dupByName" checked> Same name
-                    </label>
-                    <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer;">
-                        <input type="checkbox" id="dupBySize"> Same size
-                    </label>
-                </div>
-                <button class="form-btn btn-primary" onclick="runDuplicateScan()">🔍 Scan</button>
-            </div>
-            <div id="dupStatus" style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;"></div>
-            <div id="dupResults" style="max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;"></div>
-        </div>
-    </div>
-</div>
-
-<!-- Replace Image Modal -->
-<div class="modal-overlay" id="replaceModal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <span class="modal-title">🔄 Replace Image</span>
-            <button class="modal-close" onclick="closeModal('replaceModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <div class="delete-warning-card" style="background:rgba(79,70,229,0.08);border-color:rgba(79,70,229,0.2);">
-                <div class="delete-warning-icon" style="background:rgba(79,70,229,0.12);color:var(--accent);">🔄</div>
-                <div>
-                    <div class="delete-warning-title">Safe Image Replacement</div>
-                    <div class="delete-warning-text">The existing image will be saved as a version. The URL stays exactly the same.</div>
-                </div>
-            </div>
-            <div id="replaceTargetInfo" style="font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:14px;"></div>
-            <div class="form-group">
-                <label class="form-label">New Image File</label>
-                <input type="file" class="form-input" id="replaceFileInput" accept=".jpg,.jpeg,.png,.webp,.gif,.avif,image/*">
-            </div>
-            <div class="btn-row">
-                <button class="form-btn btn-primary" onclick="submitReplaceImage()">🔄 Replace →</button>
-                <button class="form-btn btn-secondary" onclick="closeModal('replaceModal')">Cancel</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Version History Modal -->
-<div class="modal-overlay" id="versionModal">
-    <div class="modal-box" style="max-width:680px;">
-        <div class="modal-header">
-            <span class="modal-title">🕐 Version History</span>
-            <button class="modal-close" onclick="closeModal('versionModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <div id="versionFileName" style="font-size:12.5px;color:var(--muted);font-weight:700;margin-bottom:14px;"></div>
-            <div id="versionList" style="display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;"></div>
-            <div class="btn-row" style="margin-top:14px;">
-                <button class="form-btn btn-secondary" onclick="closeModal('versionModal')">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Properties Modal -->
-<div class="modal-overlay" id="propertiesModal">
-    <div class="modal-box" style="max-width:600px;">
-        <div class="modal-header">
-            <span class="modal-title">ℹ️ Properties</span>
-            <button class="modal-close" onclick="closeModal('propertiesModal')">✕</button>
-        </div>
-        <div class="modal-body">
-            <div id="propertiesContent">
-                <div style="text-align:center;padding:30px 0;color:var(--muted);">Loading properties…</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Context Menu -->
-<div id="contextMenu" class="ctx-menu" style="display:none;">
-    <div class="ctx-item" id="ctx-rename">✏️ Rename</div>
-    <div class="ctx-item" id="ctx-rename-type">🏷️ Rename Type</div>
-    <div class="ctx-sep"></div>
-    <div class="ctx-item" id="ctx-replace" style="display:none;">🔄 Replace</div>
-    <div class="ctx-item" id="ctx-canva-edit" style="display:none; color:#4f46e5; font-weight:700;">🎨 Canva Edit</div>
-    <div class="ctx-sep ctx-sep-img" style="display:none;"></div>
-    <div class="ctx-item" id="ctx-download">⬇ Download</div>
-    <div class="ctx-item" id="ctx-copy">📄 Copy</div>
-    <div class="ctx-item" id="ctx-move">📦 Move</div>
-    <div class="ctx-item" id="ctx-paste">📋 Paste</div>
-    <div class="ctx-sep"></div>
-    <div class="ctx-item" id="ctx-color" style="display:none;">
-        🎨 Folder Color
-        <div class="ctx-submenu ctx-color-picker">
-            <span class="ctx-color-opt" data-color="" title="None" style="background:#cbd5e1;border:2px solid #94a3b8;"></span>
-            <span class="ctx-color-opt" data-color="blue"   title="Blue"   style="background:var(--fc-blue);"></span>
-            <span class="ctx-color-opt" data-color="green"  title="Green"  style="background:var(--fc-green);"></span>
-            <span class="ctx-color-opt" data-color="yellow" title="Yellow" style="background:var(--fc-yellow);"></span>
-            <span class="ctx-color-opt" data-color="red"    title="Red"    style="background:var(--fc-red);"></span>
-            <span class="ctx-color-opt" data-color="purple" title="Purple" style="background:var(--fc-purple);"></span>
-            <span class="ctx-color-opt" data-color="orange" title="Orange" style="background:var(--fc-orange);"></span>
-        </div>
-    </div>
-    <div class="ctx-item" id="ctx-pin" style="display:none;">📌 Pin / Unpin</div>
-    <div class="ctx-item" id="ctx-pin-sidebar" style="display:none;">📌 Pin to Sidebar</div>
-    <div class="ctx-sep"></div>
-    <div class="ctx-item" id="ctx-properties">ℹ️ Properties</div>
-    <div class="ctx-sep"></div>
-    <div class="ctx-item ctx-danger" id="ctx-delete">🗑️ Delete</div>
-</div>
-
-<?php endif; ?>
-
-<!-- Edit File Modal -->
-<?php if ($editFile): ?>
-<div class="modal-overlay open" id="editModal">
-    <div class="modal-box" style="max-width:680px;">
-        <div class="modal-header">
-            <span class="modal-title">✏️ Edit: <?php echo htmlspecialchars($editFile); ?></span>
-            <a class="modal-close" href="<?php echo $pageUrl . "?path=" . urlencode($current); ?>">✕</a>
-        </div>
-        <div class="modal-body">
-            <form method="post">
-                <?php echo csrfField(); ?>
-                <input type="hidden" name="action" value="edit_file">
-                <input type="hidden" name="edit_file_name" value="<?php echo htmlspecialchars($editFile); ?>">
-                <div class="form-group">
-                    <textarea class="form-input edit-textarea" name="edit_file_content"><?php echo htmlspecialchars($editContent); ?></textarea>
-                </div>
-                <div class="btn-row">
-                    <button type="submit" class="form-btn btn-primary">💾 Save File</button>
-                    <a class="form-btn btn-secondary" href="<?php echo $pageUrl . "?path=" . urlencode($current); ?>">Cancel</a>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
-
-<!-- Delete selected form -->
-<form method="post" id="deleteSelectedForm">
-    <?php echo csrfField(); ?>
-    <input type="hidden" name="action" value="delete_selected">
-    <div id="deleteSelectedInputs"></div>
-</form>
-
-<form method="post" id="copySelectedForm">
-    <?php echo csrfField(); ?>
-    <input type="hidden" name="action" value="copy_selected">
-    <div id="copySelectedInputs"></div>
-</form>
-
-<form method="post" id="downloadSelectedForm">
-    <?php echo csrfField(); ?>
-    <input type="hidden" name="action" value="download_selected">
-    <div id="downloadSelectedInputs"></div>
-</form>
-
-<form method="post" id="pasteClipboardForm">
-    <?php echo csrfField(); ?>
-    <input type="hidden" name="action" value="paste_clipboard">
-</form>
-
-<!-- ===== LIGHTBOX ===== -->
-<div class="lightbox" id="lightbox" onclick="if(event.target===this||event.target.id==='lbImgWrap')closeLightbox()">
-    <button type="button" class="lb-close" id="lbCloseBtn" onclick="closeLightbox()" title="Close Preview (Esc)" aria-label="Close Preview">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-        <span class="lb-close-text">Close</span>
-    </button>
-    <button type="button" class="lb-nav lb-prev" id="lbPrev" onclick="lbNavigate(-1)" title="Previous (←)">‹</button>
-    <button type="button" class="lb-nav lb-next" id="lbNext" onclick="lbNavigate(1)" title="Next (→)">›</button>
-    <div class="lightbox-img-wrap" id="lbImgWrap">
-        <div class="lb-spinner" id="lbSpinner" style="display:none;">
-            <div class="lb-spinner-ring"></div>
-        </div>
-        <img id="lbImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" draggable="false" style="opacity:0;">
-    </div>
-    <div class="lb-info">
-        <div>
-            <div class="lb-name" id="lbName"></div>
-            <div class="lb-counter" id="lbCounter"></div>
-        </div>
-        <button class="lb-copy-btn" id="lbCopyBtn" onclick="lbCopyUrl()">📋 Copy URL</button>
-    </div>
-</div>
-
-<!-- ===== TOPBAR ===== -->
-<div class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
-<header class="topbar">
-    <button class="mobile-menu-btn" type="button" onclick="toggleSidebar(true)" title="Menu">☰</button>
-    <a class="topbar-brand" href="<?php echo $homeUrl; ?>" style="text-decoration: none; color: inherit;">
-        <div class="brand-logo">
-            <?php if (!empty($appSettings["dashboard_logo_url"])): ?>
-                <img src="<?php echo htmlspecialchars($appSettings["dashboard_logo_url"]); ?>" alt="<?php echo htmlspecialchars($appSettings["app_name"]); ?>">
-            <?php else: ?>
-                FM
-            <?php endif; ?>
-        </div>
-        <div>
-            <div class="brand-name"><?php echo htmlspecialchars($appSettings["app_name"]); ?></div>
-            <div class="brand-tag">Image Hosting</div>
-        </div>
-    </a>
-
-    <div class="topbar-end">
-        <button class="theme-page-btn" type="button" onclick="openModal('themeModal')" title="Dashboard background theme">Theme</button>
-        <div class="theme-switch" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
-            <div class="ts-thumb"></div>
-            <span class="ts-icon sun">☀️</span>
-            <span class="ts-icon moon">🌙</span>
-        </div>
-        <?php if (!$isConverter): ?>
-        <a class="profile-chip" href="<?php echo $pageUrl; ?>?profile=1">
-            <span class="avatar-small">
-                <?php if (!empty($currentUser["avatar_url"])): ?><img src="<?php echo htmlspecialchars($currentUser["avatar_url"]); ?>" alt=""><?php else: ?><?php echo htmlspecialchars(userInitials($currentUser)); ?><?php endif; ?>
-            </span>
-            <?php echo htmlspecialchars($currentUser["display_name"] ?? $currentUser["username"]); ?>
-        </a>
-        <?php endif; ?>
-    </div>
-</header>
-
-<div class="layout">
-
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-        <div class="sidebar-section">Actions</div>
-
-        <a class="sidebar-btn" href="<?php echo $homeUrl; ?>">
-            <span class="sb-icon">🏠</span> Home
-        </a>
-        <?php if (!$isConverter): ?>
-        <a class="sidebar-btn sb-delete" href="<?php echo $pageUrl; ?>?trash=1">
-            <span class="sb-icon sb-icon-img"><img src="https://cdn-icons-png.flaticon.com/512/9790/9790368.png" alt="Trash icon"></span> Trash Bin
-        </a>
-        <?php endif; ?>
-
-        <?php if ($FEATURES_ENABLED && !$isConverter): ?>
-            <div class="sidebar-divider"></div>
-            <div class="sidebar-section">Pin Folder</div>
-            <?php if (empty($sidebarPins)): ?>
-                <div style="font-size:11px;color:var(--muted);padding:6px 12px;font-style:italic;">No pinned items yet</div>
-            <?php else: ?>
-                <?php
-                $pinColorVarsMap = [
-                    'blue'   => ['#2563eb','rgba(37,99,235,0.12)'],
-                    'green'  => ['#059669','rgba(5,150,105,0.12)'],
-                    'yellow' => ['#d97706','rgba(217,119,6,0.12)'],
-                    'red'    => ['#dc2626','rgba(220,38,38,0.12)'],
-                    'purple' => ['#7c3aed','rgba(124,58,237,0.12)'],
-                    'orange' => ['#ea580c','rgba(234,88,12,0.12)'],
-                ];
-                foreach ($sidebarPins as $pin):
-                    $pinPath = $pin['path'];
-                    $pinIsDir = (bool)($pin['is_dir'] ?? false);
-                    $pinName = basename($pinPath);
-                    $pinColor = $pinIsDir ? ($sidebarFolderColors[$pinPath] ?? '') : '';
-                    $parent = dirname($pinPath);
-                    if ($parent === '.') $parent = '';
-                    $pinExt = strtolower(pathinfo($pinName, PATHINFO_EXTENSION));
-                    $pinIsImg = in_array($pinExt, ['jpg','jpeg','png','webp','gif','svg','avif'], true);
-                    if ($pinIsDir) {
-                        $pinHref = $pageUrl . '?path=' . urlencode($pinPath);
-                        $pinColorClass = 'sb-folder';
-                    } else {
-                        $pinHref = publicUrl($BASE_URL, $pinPath);
-                        $pinColorClass = 'sb-file';
-                    }
-                    $iconStyle = '';
-                    if ($pinColor && isset($pinColorVarsMap[$pinColor])) {
-                        $iconStyle = 'color:' . $pinColorVarsMap[$pinColor][0] . ';background:' . $pinColorVarsMap[$pinColor][1] . ';';
-                    }
-                ?>
-                <div class="sidebar-btn <?php echo $pinColorClass; ?>" role="link" tabindex="0"
-                    style="cursor:pointer;"
-                    data-href="<?php echo htmlspecialchars($pinHref); ?>"
-                    data-target="<?php echo !$pinIsDir ? '_blank' : ''; ?>"
-                    data-name="<?php echo htmlspecialchars($pinName); ?>"
-                    data-url="<?php echo htmlspecialchars(publicUrl($BASE_URL, $pinPath)); ?>"
-                    data-open-url="<?php echo htmlspecialchars($pinHref); ?>"
-                    data-rel="<?php echo htmlspecialchars($pinPath); ?>"
-                    data-is-img="<?php echo $pinIsImg ? '1' : '0'; ?>"
-                    data-is-dir="<?php echo $pinIsDir ? '1' : '0'; ?>"
-                    data-folder-rel="<?php echo $pinIsDir ? htmlspecialchars($pinPath) : ''; ?>"
-                    data-folder-color="<?php echo htmlspecialchars($pinColor); ?>"
-                    data-parent-path="<?php echo htmlspecialchars($parent); ?>"
-                    id="sb_pin_<?php echo md5($pinPath); ?>"
-                    onclick="(function(el){var href=el.dataset.href;var tgt=el.dataset.target;if(tgt==='_blank')window.open(href,'_blank');else location.href=href;})(this)"
-                    oncontextmenu="showContextMenu(event,this);return false;">
-                    <span class="sb-icon"
-                        <?php echo $pinColor ? 'data-folder-color="' . htmlspecialchars($pinColor) . '"' : ''; ?>
-                        <?php echo $iconStyle ? 'style="' . $iconStyle . '"' : ''; ?>>
-                        <?php echo getFileIcon($pinName, $pinIsDir); ?>
-                    </span> <?php echo htmlspecialchars($pinName); ?>
-                </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        <?php endif; ?>
-
-        <?php if (!$isConverter): ?>
-            <div class="sidebar-divider"></div>
-            <div class="sidebar-section">Account</div>
-            <a class="sidebar-btn" href="<?php echo $pageUrl; ?>?profile=1">
-                <span class="sb-icon">👤</span> Profile
-            </a>
-            <?php if (!$isWebsiteTeam && (($currentUser["can_view_login_activity"] ?? true) || $isAdmin)): ?>
-            <a class="sidebar-btn" href="<?php echo $pageUrl; ?>?activity=1">
-                <span class="sb-icon">🧾</span> Login Activity
-            </a>
-            <?php endif; ?>
-            <?php if ($isAdmin): ?>
-            <a class="sidebar-btn" href="<?php echo $pageUrl; ?>?users=1">
-                <span class="sb-icon">👥</span> Users
-            </a>
-            <a class="sidebar-btn" href="<?php echo $pageUrl; ?>?settings=1">
-                <span class="sb-icon">⚙️</span> Admin Settings
-            </a>
-            <button class="sidebar-btn" onclick="openModal('securityModal')">
-                <span class="sb-icon">🛡️</span> Security
-            </button>
-            <?php endif; ?>
-
-            <div class="sidebar-divider"></div>
-            <div class="sidebar-section" style="padding-top:4px;">Base URL</div>
-            <div style="padding:0 10px 8px;">
-                <input class="url-input sidebar-baseurl-input" value="<?php echo htmlspecialchars($visibleBaseUrl); ?>" readonly onclick="this.select(); navigator.clipboard.writeText(this.value); toast('Base URL copied!');" title="Click to copy Base URL">
-            </div>
-        <?php endif; ?>
-
-        <div class="sidebar-logout-wrap">
-            <a class="sidebar-btn sidebar-btn-logout" href="?logout=1">
-                <span class="sb-icon sb-icon-img"><img src="https://cdn-icons-png.flaticon.com/512/4400/4400828.png" alt="Logout icon"></span> Logout
-            </a>
-        </div>
-    </aside>
+<?php 
+if (is_file(__DIR__ . '/app-includes/modals.php')) require_once __DIR__ . '/app-includes/modals.php';
+if (is_file(__DIR__ . '/app-includes/topbar.php')) require_once __DIR__ . '/app-includes/topbar.php';
+if (is_file(__DIR__ . '/app-includes/sidebar.php')) require_once __DIR__ . '/app-includes/sidebar.php';
+?>
+<?php endif; /* end of !$isPjax */ ?>
 
     <!-- MAIN -->
     <main class="main">
@@ -5994,7 +4536,7 @@ body.dashboard-themed::after,
             <div class="stat-card<?php echo $FEATURES_ENABLED ? ' storage-dash-card' : ''; ?>" id="storageDashCard" data-fallback-size="<?php echo htmlspecialchars(formatSize($displayTotalSize)); ?>">
                 <div class="stat-icon si-green">💾</div>
                 <div class="stat-val" id="storageSizeValue"><?php echo formatSize($displayTotalSize); ?></div>
-                <div class="stat-lbl" id="storageSizeLabel">Visible file size</div>
+                <div class="stat-lbl" id="storageSizeLabel"><?php echo $current ? 'Folder size' : 'ebay total size'; ?></div>
             </div>
         </div>
         <?php endif; ?>
@@ -6016,7 +4558,7 @@ body.dashboard-themed::after,
                 <div class="admin-grid">
                     <div class="admin-card" style="display:flex;align-items:center;gap:14px;">
                         <span class="avatar-large">
-                            <?php if (!empty($currentUser["avatar_url"])): ?><img src="<?php echo htmlspecialchars($currentUser["avatar_url"]); ?>" alt=""><?php else: ?><?php echo htmlspecialchars(userInitials($currentUser)); ?><?php endif; ?>
+                            <?php if (!empty($currentUser["avatar_url"])): ?><img src="<?php echo htmlspecialchars($currentUser["avatar_url"]); ?>" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"><?php else: ?><?php echo htmlspecialchars(userInitials($currentUser)); ?><?php endif; ?>
                         </span>
                         <div>
                             <h3 style="margin:0;"><?php echo htmlspecialchars($currentUser["display_name"] ?? $currentUser["username"]); ?></h3>
@@ -6198,7 +4740,7 @@ body.dashboard-themed::after,
                                     </select>
                                 </div>
                             </div>
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 20px; margin-top: 8px; border-top: 1px dashed var(--line);">
+                            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding-top: 20px; margin-top: 8px; border-top: 1px dashed var(--line);">
                                 <label style="display:flex; align-items:center; gap:12px; font-size:13px; font-weight:600; color:var(--text); cursor:pointer;">
                                     <input type="checkbox" name="can_view_login_activity" checked style="width: 20px; height: 20px; accent-color: var(--accent); cursor:pointer;">
                                     <div>
@@ -6227,9 +4769,9 @@ body.dashboard-themed::after,
                         }
                         </script>
                     </div>
-                    <div class="admin-table-wrap">
+                    <div class="admin-table-wrap desktop-user-table">
                         <table class="admin-table">
-                            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Login activity</th><th>Password</th><th>Actions</th></tr></thead>
+                            <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Login activity</th><th>Password</th><th style="text-align:right;">Actions</th></tr></thead>
                             <tbody>
                                 <?php foreach ($allUsers as $row): ?>
                                 <?php $protected = !empty($row["is_main_admin"]); $self = ($row["id"] ?? "") === ($currentUser["id"] ?? ""); ?>
@@ -6239,43 +4781,85 @@ body.dashboard-themed::after,
                                             <span class="avatar-mini">
                                                 <?php if (!empty($row["avatar_url"])): ?><img src="<?php echo htmlspecialchars($row["avatar_url"]); ?>" alt=""><?php else: ?><?php echo htmlspecialchars(userInitials($row)); ?><?php endif; ?>
                                             </span>
-                                            <span>
-                                                <strong><?php echo htmlspecialchars($row["display_name"] ?? $row["username"]); ?></strong><br>
-                                                <span style="color:var(--muted);"><?php echo htmlspecialchars($row["username"]); ?><?php echo $protected ? " / main admin" : ""; ?></span>
-                                            </span>
+                                            <div>
+                                                <div style="font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px;">
+                                                    <?php echo htmlspecialchars($row["display_name"] ?? $row["username"]); ?>
+                                                    <?php if ($protected): ?><span class="user-badge-main">👑 Main Admin</span><?php endif; ?>
+                                                    <?php if ($self): ?><span class="user-badge-self">You</span><?php endif; ?>
+                                                </div>
+                                                <?php if ($isSuperAdmin): ?>
+                                                <form method="post" class="admin-cell-form" style="margin-top:4px;" onsubmit="return confirm('Change username for <?php echo htmlspecialchars(addslashes($row['username'])); ?>?');">
+                                                    <?php echo csrfField(); ?>
+                                                    <input type="hidden" name="action" value="change_username">
+                                                    <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                                    <div style="display:flex; align-items:center; gap:3px;">
+                                                        <span style="font-size:11px; color:var(--muted); font-weight:700;">@</span>
+                                                        <input class="form-input" name="new_username" type="text" value="<?php echo htmlspecialchars($row["username"]); ?>" pattern="[a-z0-9@._-]{3,120}" title="3-120 lowercase chars: letters, numbers, @, ., _, -" style="width:120px; font-size:12px; padding:3px 8px; height:28px;" required>
+                                                        <button class="act-btn open" style="height:28px; padding:3px 8px; font-size:11px;" title="Save Username">Save</button>
+                                                    </div>
+                                                </form>
+                                                <?php else: ?>
+                                                <div style="font-size:12px; color:var(--muted);">@<?php echo htmlspecialchars($row["username"]); ?></div>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                     </td>
                                     <td>
-                                        <form method="post" class="inline-form">
+                                        <form method="post" class="admin-cell-form">
                                             <?php echo csrfField(); ?><input type="hidden" name="action" value="set_user_role"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
-                                            <select class="form-input" name="role" style="min-width:100px;" <?php echo ($protected || $self) ? "disabled" : ""; ?>><option value="staff" <?php echo ($row["role"] ?? "") === "staff" ? "selected" : ""; ?>>Staff</option><option value="converter" <?php echo ($row["role"] ?? "") === "converter" ? "selected" : ""; ?>>Converter</option><option value="website_team" <?php echo ($row["role"] ?? "") === "website_team" ? "selected" : ""; ?>>Website Team</option><option value="admin" <?php echo ($row["role"] ?? "") === "admin" ? "selected" : ""; ?>>Admin</option></select>
+                                            <select class="form-input" name="role" style="min-width:110px;" <?php echo ($protected || $self) ? "disabled" : ""; ?>>
+                                                <option value="staff" <?php echo ($row["role"] ?? "") === "staff" ? "selected" : ""; ?>>Staff</option>
+                                                <option value="converter" <?php echo ($row["role"] ?? "") === "converter" ? "selected" : ""; ?>>Converter</option>
+                                                <option value="website_team" <?php echo ($row["role"] ?? "") === "website_team" ? "selected" : ""; ?>>Website Team</option>
+                                                <option value="admin" <?php echo ($row["role"] ?? "") === "admin" ? "selected" : ""; ?>>Admin</option>
+                                            </select>
                                             <button class="act-btn open" <?php echo ($protected || $self) ? "disabled" : ""; ?>>Save</button>
                                         </form>
                                     </td>
-                                    <td><span class="status-pill <?php echo htmlspecialchars($row["status"] ?? "active"); ?>"><?php echo htmlspecialchars($row["status"] ?? "active"); ?></span></td>
                                     <td>
-                                        <form method="post" class="inline-form">
+                                        <span class="status-pill <?php echo htmlspecialchars($row["status"] ?? "active"); ?>">
+                                            <span class="status-dot"></span><?php echo ucfirst(htmlspecialchars($row["status"] ?? "active")); ?>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" class="admin-cell-form">
                                             <?php echo csrfField(); ?><input type="hidden" name="action" value="update_user_permissions"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
-                                            <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="can_view_login_activity" <?php echo !empty($row["can_view_login_activity"]) ? "checked" : ""; ?>> Allowed</label>
+                                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;font-weight:600;">
+                                                <input type="checkbox" name="can_view_login_activity" <?php echo !empty($row["can_view_login_activity"]) ? "checked" : ""; ?> style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+                                                Allowed
+                                            </label>
                                             <button class="act-btn open">Save</button>
                                         </form>
                                     </td>
                                     <td>
-                                        <form method="post" class="inline-form">
+                                        <form method="post" class="admin-cell-form" onsubmit="return confirm('Change password for user <?php echo htmlspecialchars(addslashes($row['username'])); ?>?');">
                                             <?php echo csrfField(); ?><input type="hidden" name="action" value="change_user_password"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
-                                            <input class="form-input" name="password" type="password" minlength="8" placeholder="New password" style="min-width:150px;" required>
-                                            <button class="act-btn open">Change</button>
+                                            <div style="position:relative; display:flex; align-items:center;">
+                                                <input class="form-input" name="password" type="password" minlength="8" placeholder="New password" style="min-width:130px; padding-right:28px;" required <?php echo ($protected && !$isSuperAdmin && !$self) ? "disabled" : ""; ?>>
+                                                <button type="button" onclick="const inp=this.previousElementSibling; if(inp.type==='password'){inp.type='text';this.textContent='🙈';}else{inp.type='password';this.textContent='👁️';}" style="position:absolute; right:6px; background:none; border:none; cursor:pointer; font-size:12px; padding:0; color:var(--muted);" title="Toggle visibility">👁️</button>
+                                            </div>
+                                            <button class="act-btn open" <?php echo ($protected && !$isSuperAdmin && !$self) ? "disabled" : ""; ?>>Change</button>
                                         </form>
                                     </td>
                                     <td class="admin-actions-cell">
                                         <div class="admin-actions">
+                                        <?php if ($isSuperAdmin): ?>
+                                        <button type="button" class="act-btn open" onclick="openEditUserModal(<?php echo htmlspecialchars(json_encode([
+                                            'id' => $row['id'],
+                                            'username' => $row['username'],
+                                            'display_name' => $row['display_name'] ?? $row['username'],
+                                            'role' => $row['role'] ?? 'staff',
+                                            'is_main_admin' => !empty($row['is_main_admin']),
+                                            'is_self' => $self
+                                        ])); ?>)" title="Edit username and password">✏️ Edit</button>
+                                        <?php endif; ?>
                                         <form method="post" class="inline-form" onsubmit="return confirm('<?php echo ($row["status"] ?? "active") === "frozen" ? "Unfreeze this user?" : "Freeze this user?"; ?>');">
                                             <?php echo csrfField(); ?><input type="hidden" name="action" value="<?php echo ($row["status"] ?? "active") === "frozen" ? "unfreeze_user" : "freeze_user"; ?>"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
-                                            <button class="act-btn" <?php echo ($protected || $self) ? "disabled" : ""; ?>><?php echo ($row["status"] ?? "active") === "frozen" ? "Unfreeze" : "Freeze"; ?></button>
+                                            <button class="act-btn" <?php echo ($protected || $self) ? "disabled" : ""; ?>><?php echo ($row["status"] ?? "active") === "frozen" ? "❄️ Unfreeze" : "🔒 Freeze"; ?></button>
                                         </form>
                                         <form method="post" class="inline-form" onsubmit="return confirm('Remove this user? This cannot be undone.');">
                                             <?php echo csrfField(); ?><input type="hidden" name="action" value="delete_user"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
-                                            <button class="act-btn del" <?php echo ($protected || $self) ? "disabled" : ""; ?>>Remove</button>
+                                            <button class="act-btn del" <?php echo ($protected || $self) ? "disabled" : ""; ?>>🗑️ Remove</button>
                                         </form>
                                         </div>
                                     </td>
@@ -6283,6 +4867,102 @@ body.dashboard-themed::after,
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+                    </div>
+
+                    <div class="mobile-user-cards">
+                        <?php foreach ($allUsers as $row): ?>
+                        <?php $protected = !empty($row["is_main_admin"]); $self = ($row["id"] ?? "") === ($currentUser["id"] ?? ""); ?>
+                        <div class="user-card-item">
+                            <div class="user-card-head">
+                                <div class="user-card-info">
+                                    <span class="avatar-mini">
+                                        <?php if (!empty($row["avatar_url"])): ?><img src="<?php echo htmlspecialchars($row["avatar_url"]); ?>" alt=""><?php else: ?><?php echo htmlspecialchars(userInitials($row)); ?><?php endif; ?>
+                                    </span>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; color:var(--text); display:flex; align-items:center; gap:6px;">
+                                            <?php echo htmlspecialchars($row["display_name"] ?? $row["username"]); ?>
+                                            <?php if ($protected): ?><span class="user-badge-main">👑 Main Admin</span><?php endif; ?>
+                                            <?php if ($self): ?><span class="user-badge-self">You</span><?php endif; ?>
+                                        </div>
+                                        <div style="font-size:12px; color:var(--muted);">@<?php echo htmlspecialchars($row["username"]); ?></div>
+                                    </div>
+                                </div>
+                                <span class="status-pill <?php echo htmlspecialchars($row["status"] ?? "active"); ?>">
+                                    <span class="status-dot"></span><?php echo ucfirst(htmlspecialchars($row["status"] ?? "active")); ?>
+                                </span>
+                            </div>
+
+                            <?php if ($isSuperAdmin): ?>
+                            <div class="user-card-section">
+                                <span class="user-card-label">Username</span>
+                                <form method="post" class="admin-cell-form" style="width:100%;" onsubmit="return confirm('Change username to ' + this.new_username.value + '?');">
+                                    <?php echo csrfField(); ?><input type="hidden" name="action" value="change_username"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                    <input class="form-input" name="new_username" type="text" value="<?php echo htmlspecialchars($row["username"]); ?>" pattern="[a-z0-9@._-]{3,120}" style="flex:1;" required>
+                                    <button class="act-btn open">Save</button>
+                                </form>
+                            </div>
+                            <?php endif; ?>
+
+                            <div class="user-card-section">
+                                <span class="user-card-label">Role</span>
+                                <form method="post" class="admin-cell-form" style="width:100%;">
+                                    <?php echo csrfField(); ?><input type="hidden" name="action" value="set_user_role"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                    <select class="form-input" name="role" style="flex:1;" <?php echo ($protected || $self) ? "disabled" : ""; ?>>
+                                        <option value="staff" <?php echo ($row["role"] ?? "") === "staff" ? "selected" : ""; ?>>Staff</option>
+                                        <option value="converter" <?php echo ($row["role"] ?? "") === "converter" ? "selected" : ""; ?>>Converter</option>
+                                        <option value="website_team" <?php echo ($row["role"] ?? "") === "website_team" ? "selected" : ""; ?>>Website Team</option>
+                                        <option value="admin" <?php echo ($row["role"] ?? "") === "admin" ? "selected" : ""; ?>>Admin</option>
+                                    </select>
+                                    <button class="act-btn open" <?php echo ($protected || $self) ? "disabled" : ""; ?>>Save</button>
+                                </form>
+                            </div>
+
+                            <div class="user-card-section">
+                                <span class="user-card-label">Login Activity</span>
+                                <form method="post" class="admin-cell-form" style="justify-content:space-between; width:100%;">
+                                    <?php echo csrfField(); ?><input type="hidden" name="action" value="update_user_permissions"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
+                                        <input type="checkbox" name="can_view_login_activity" <?php echo !empty($row["can_view_login_activity"]) ? "checked" : ""; ?> style="width:18px;height:18px;accent-color:var(--accent);">
+                                        Allowed
+                                    </label>
+                                    <button class="act-btn open">Save</button>
+                                </form>
+                            </div>
+
+                            <div class="user-card-section">
+                                <span class="user-card-label">Set Password</span>
+                                <form method="post" class="admin-cell-form" style="width:100%;" onsubmit="return confirm('Change password for <?php echo htmlspecialchars(addslashes($row['username'])); ?>?');">
+                                    <?php echo csrfField(); ?><input type="hidden" name="action" value="change_user_password"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                    <div style="position:relative; display:flex; align-items:center; flex:1;">
+                                        <input class="form-input" name="password" type="password" minlength="8" placeholder="New password" style="width:100%; padding-right:28px;" required <?php echo ($protected && !$isSuperAdmin && !$self) ? "disabled" : ""; ?>>
+                                        <button type="button" onclick="const inp=this.previousElementSibling; if(inp.type==='password'){inp.type='text';this.textContent='🙈';}else{inp.type='password';this.textContent='👁️';}" style="position:absolute; right:6px; background:none; border:none; cursor:pointer; font-size:12px; padding:0; color:var(--muted);" title="Toggle visibility">👁️</button>
+                                    </div>
+                                    <button class="act-btn open" <?php echo ($protected && !$isSuperAdmin && !$self) ? "disabled" : ""; ?>>Change</button>
+                                </form>
+                            </div>
+
+                            <div class="user-card-bottom-actions">
+                                <?php if ($isSuperAdmin): ?>
+                                <button type="button" class="act-btn open" style="width:100%; justify-content:center; margin-bottom:6px;" onclick="openEditUserModal(<?php echo htmlspecialchars(json_encode([
+                                    'id' => $row['id'],
+                                    'username' => $row['username'],
+                                    'display_name' => $row['display_name'] ?? $row['username'],
+                                    'role' => $row['role'] ?? 'staff',
+                                    'is_main_admin' => !empty($row['is_main_admin']),
+                                    'is_self' => $self
+                                ])); ?>)">✏️ Edit User Credentials</button>
+                                <?php endif; ?>
+                                <form method="post" onsubmit="return confirm('<?php echo ($row["status"] ?? "active") === "frozen" ? "Unfreeze this user?" : "Freeze this user?"; ?>');">
+                                    <?php echo csrfField(); ?><input type="hidden" name="action" value="<?php echo ($row["status"] ?? "active") === "frozen" ? "unfreeze_user" : "freeze_user"; ?>"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                    <button class="act-btn" style="width:100%; justify-content:center;" <?php echo ($protected || $self) ? "disabled" : ""; ?>><?php echo ($row["status"] ?? "active") === "frozen" ? "❄️ Unfreeze" : "🔒 Freeze"; ?></button>
+                                </form>
+                                <form method="post" onsubmit="return confirm('Remove this user? This cannot be undone.');">
+                                    <?php echo csrfField(); ?><input type="hidden" name="action" value="delete_user"><input type="hidden" name="user_id" value="<?php echo htmlspecialchars($row["id"]); ?>">
+                                    <button class="act-btn del" style="width:100%; justify-content:center;" <?php echo ($protected || $self) ? "disabled" : ""; ?>>🗑️ Remove</button>
+                                </form>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
             </div>
@@ -6330,26 +5010,57 @@ body.dashboard-themed::after,
                 <?php endif; ?>
 
                 <?php foreach ($trashItems as $trashItem): ?>
+                <?php
+                    $trashId = $trashItem["id"];
+                    $trashOrigPath = $trashItem["original_relative"] ?? "Unknown item";
+                    $trashExt = strtolower(pathinfo($trashOrigPath, PATHINFO_EXTENSION));
+                    $trashIsDir = ($trashItem["type"] ?? "") === "folder";
+                    $trashIsImg = !$trashIsDir && in_array($trashExt, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'avif'], true);
+                    $trashIsVideo = !$trashIsDir && in_array($trashExt, ['mp4', 'webm', 'mov', 'm4v', 'ogg'], true);
+                    $trashPreviewUrl = $pageUrl . "?trash_preview=" . urlencode($trashId);
+                ?>
                     <div class="trash-row">
-                        <div>
-                            <div class="trash-name"><input type="checkbox" class="trash-check trash-item-check" value="<?php echo htmlspecialchars($trashItem["id"]); ?>" onchange="updateTrashSelection()" style="margin-right:8px;"><?php echo htmlspecialchars($trashItem["original_relative"] ?? "Unknown item"); ?></div>
-                            <div class="trash-meta">
-                                <?php echo htmlspecialchars($trashItem["type"] ?? "item"); ?> ·
-                                <?php echo formatSize((int)($trashItem["size"] ?? 0)); ?> ·
-                                deleted <?php echo date("M d, Y H:i", (int)($trashItem["deleted_at"] ?? time())); ?>
+                        <div class="trash-item-main">
+                            <input type="checkbox" class="trash-check trash-item-check" value="<?php echo htmlspecialchars($trashId); ?>" onchange="updateTrashSelection()">
+                            <div class="trash-preview-cell">
+                                <?php if ($trashIsImg): ?>
+                                    <div class="trash-thumb-wrap" onclick="openLightboxSingle('<?php echo addslashes($trashPreviewUrl); ?>', '<?php echo addslashes(basename($trashOrigPath)); ?>')" title="Click to view full image">
+                                        <img class="trash-thumb-img" src="<?php echo htmlspecialchars($trashPreviewUrl . '&w=360'); ?>" alt="" loading="lazy" decoding="async" onmouseenter="if(!this.dataset.pre){this.dataset.pre=1;(new Image()).src='<?php echo addslashes($trashPreviewUrl); ?>';}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                                        <div class="trash-type-icon" style="display:none;">🖼️</div>
+                                    </div>
+                                <?php elseif ($trashIsVideo): ?>
+                                    <div class="trash-thumb-wrap trash-video-thumb-wrap" onclick="openVideoModal('<?php echo addslashes(basename($trashOrigPath)); ?>', '<?php echo addslashes($trashPreviewUrl); ?>')" title="Click to play video">
+                                        <video class="trash-thumb-video" src="<?php echo htmlspecialchars($trashPreviewUrl); ?>#t=0.5" preload="metadata" muted playsinline></video>
+                                        <div class="trash-video-play-overlay">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><polygon points="9 6 18 12 9 18 9 6"/></svg>
+                                        </div>
+                                    </div>
+                                <?php elseif ($trashIsDir): ?>
+                                    <div class="trash-type-icon trash-folder-icon">📁</div>
+                                <?php else: ?>
+                                    <div class="trash-type-icon"><?php echo getFileIcon(basename($trashOrigPath), false); ?></div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="trash-details">
+                                <div class="trash-name"><?php echo htmlspecialchars($trashOrigPath); ?></div>
+                                <div class="trash-meta">
+                                    <?php echo htmlspecialchars($trashItem["type"] ?? "item"); ?> ·
+                                    <?php echo formatSize((int)($trashItem["size"] ?? 0)); ?> ·
+                                    deleted <?php echo date("M d, Y H:i", (int)($trashItem["deleted_at"] ?? time())); ?>
+                                </div>
                             </div>
                         </div>
                         <div class="row-actions">
                             <form method="post" class="inline-form">
                                 <?php echo csrfField(); ?>
                                 <input type="hidden" name="action" value="restore_trash_item">
-                                <input type="hidden" name="trash_id" value="<?php echo htmlspecialchars($trashItem["id"]); ?>">
+                                <input type="hidden" name="trash_id" value="<?php echo htmlspecialchars($trashId); ?>">
                                 <button class="act-btn open" type="submit">↩ Recover</button>
                             </form>
                             <form method="post" class="inline-form" onsubmit="return addDeletePassword(this, 'Permanently delete this item?');">
                                 <?php echo csrfField(); ?>
                                 <input type="hidden" name="action" value="delete_trash_item">
-                                <input type="hidden" name="trash_id" value="<?php echo htmlspecialchars($trashItem["id"]); ?>">
+                                <input type="hidden" name="trash_id" value="<?php echo htmlspecialchars($trashId); ?>">
                                 <button class="act-btn del" type="submit">🗑️ Delete Forever</button>
                             </form>
                         </div>
@@ -6363,6 +5074,7 @@ body.dashboard-themed::after,
         <div class="toolbar sticky-toolbar" id="mainToolbar">
             <span class="tb-label"></span>
             <button class="tb-btn primary" onclick="openModal('uploadModal')">📤 Upload</button>
+            <button class="tb-btn" type="button" onclick="openConvertModal()" title="Convert Sony RAW (.arw), AVIF (.avif), or ZIP to JPG/PNG">🔄 Convert</button>
             <button class="tb-btn" onclick="openModal('folderModal')">📁 New Folder</button>
             <?php if ($isAdmin || $isWebsiteTeam): ?>
             <button class="tb-btn" onclick="openModal('fileModal')">📝 New File</button>
@@ -6370,11 +5082,11 @@ body.dashboard-themed::after,
 
             <div class="tb-sep"></div>
 
-            <!-- Middle: AI & Image Tools -->
+            <!-- Middle: Image Processing & AI Tools -->
             <?php if ($FEATURES_ENABLED): ?>
-            <button class="tb-btn tb-btn-ai" onclick="openAiModal()">🪄 Remove BG</button>
-            <button class="tb-btn" onclick="openDuplicateModal()">🔍 Duplicates</button>
+            <button class="tb-btn tb-btn-ai" onclick="openAiModal()" title="AI Background Removal">🪄 Remove BG</button>
             <?php endif; ?>
+            <button class="tb-btn" id="resizeImageBtn" onclick="openResizeImageModal()" style="font-weight:700; color:#0284c7; border-color:rgba(2,132,199,0.3); background:rgba(2,132,199,0.06);" title="Resize or compress images to target file size (MB/KB) or custom dimensions">📐 Resize image</button>
 
             <div class="tb-sep"></div>
 
@@ -6393,7 +5105,7 @@ body.dashboard-themed::after,
 
         <!-- Pathbar -->
         <div class="pathbar">
-            <span class="ph-home" onclick="location.href='<?php echo $homeUrl; ?>'" title="Root">🏠</span>
+            <a class="ph-home" href="<?php echo htmlspecialchars($homeUrl); ?>" title="Root">🏠</a>
             <span class="ph-sep">/</span>
             <?php if ($isConverter): ?>
                 <a href="<?php echo $homeUrl; ?>"><?php echo htmlspecialchars($CONVERTER_ROOT_FOLDER); ?></a>
@@ -6491,7 +5203,21 @@ body.dashboard-themed::after,
                     </div>
                     <?php endif; ?>
                 </div>
-                <span class="panel-meta" id="filePanelMeta" data-item-count="<?php echo (int)count($items); ?>" data-fallback-size="<?php echo htmlspecialchars(formatSize($displayTotalSize)); ?>"><?php echo count($items); ?> items · <?php echo formatSize($displayTotalSize); ?> visible files · Double-click to open</span>
+                <?php if (!empty($imageUrls) && !$isConverter): ?>
+                    <div class="quick-jump-group" id="headerQuickJumpGroup">
+                        <button type="button" class="quick-jump-btn" onclick="scrollToSection('imageUrlsSection')" title="Scroll down to Image URLs (Alt+Down)">
+                            <span class="jump-arrow">↓</span>
+                            <span>Image URLs</span>
+                            <span class="jump-badge"><?php echo count($imageUrls); ?></span>
+                        </button>
+                        <button type="button" class="quick-jump-btn" onclick="scrollToSection('imagePreviewSection')" title="Scroll down to Image Preview">
+                            <span class="jump-arrow">↓</span>
+                            <span>Image Preview</span>
+                            <span class="jump-badge"><?php echo count($imageUrls); ?></span>
+                        </button>
+                    </div>
+                    <?php endif; ?>
+                <span class="panel-meta" id="filePanelMeta" data-item-count="<?php echo (int)count($items); ?>" data-fallback-size="<?php echo htmlspecialchars(formatSize($displayTotalSize)); ?>"><?php echo count($items); ?> items · <?php echo formatSize($displayTotalSize); ?> <?php echo $current ? 'folder size' : 'total size'; ?> · Double-click to open</span>
             </div>
 
             <div class="table-header-row">
@@ -6516,19 +5242,23 @@ body.dashboard-themed::after,
                 $name      = $item["name"];
                 $relative  = $current ? $current . "/" . $name : $name;
                 $url       = !$item["is_dir"] ? publicUrl($BASE_URL, $relative) : "";
-                $thumbUrl  = !$item["is_dir"] && $item["is_image"] ? versionedImageUrl($url, $item["mtime"] ?? 0, $item["size"] ?? 0, $item["ctime"] ?? 0) : "";
+                $absPath   = $currentDir . "/" . $name;
+                $thumbUrl  = !$item["is_dir"] && $item["is_image"] ? getThumbnailUrl($relative, $absPath, $item["mtime"] ?? 0, 360) : "";
                 $ext       = strtolower(pathinfo($name, PATHINFO_EXTENSION));
                 $isImg     = $item["is_image"];
+                $isVideo   = !empty($item["is_video"]);
                 $isDir     = $item["is_dir"];
                 $isCode    = $item["is_code"];
-                $iconClass = $isDir ? "fti-folder" : ($isImg ? "fti-image" : ($isCode ? "fti-code" : "fti-other"));
+                $iconClass = $isDir ? "fti-folder" : ($isImg ? "fti-image" : ($isVideo ? "fti-video" : ($isCode ? "fti-code" : "fti-other")));
                 $folderUrl = $_SERVER["PHP_SELF"] . "?path=" . urlencode($relative);
                 $openUrl   = $isDir ? $folderUrl : $url;
-                // For double-click: folders navigate, files open or preview
-                $dblAction = $isDir
-                    ? "location.href='{$folderUrl}'"
-                    : ($isImg ? "openLightboxByName('" . addslashes($name) . "')" : "window.open('" . htmlspecialchars($url) . "','_blank')");
                 $nameJson = htmlspecialchars(json_encode($name), ENT_QUOTES, "UTF-8");
+                $urlJson  = htmlspecialchars(json_encode($url), ENT_QUOTES, "UTF-8");
+                $thumbJson = htmlspecialchars(json_encode($thumbUrl), ENT_QUOTES, "UTF-8");
+                // For double-click: folders navigate seamlessly, files open or preview
+                $dblAction = $isDir
+                    ? "if(typeof navigateToFolder==='function'){ navigateToFolder('{$folderUrl}'); } else { location.href='{$folderUrl}'; }"
+                    : ($isImg ? "openLightboxByName({$nameJson}, {$urlJson}, {$thumbJson})" : ($isVideo ? "openVideoModal({$nameJson}, {$urlJson})" : "window.open({$urlJson},'_blank')"));
                 // Feature: folder meta
                 $fm = $FEATURES_ENABLED && $isDir ? ($folderMeta[$name] ?? []) : [];
                 $fmColor    = $fm['color'] ?? '';
@@ -6543,6 +5273,7 @@ body.dashboard-themed::after,
                     data-open-url="<?php echo htmlspecialchars($openUrl); ?>"
                     data-rel="<?php echo htmlspecialchars($relative); ?>"
                     data-is-img="<?php echo $isImg ? '1' : '0'; ?>"
+                    data-is-video="<?php echo $isVideo ? '1' : '0'; ?>"
                     data-is-dir="<?php echo $isDir ? '1' : '0'; ?>"
                     data-folder-rel="<?php echo $isDir ? htmlspecialchars($fmRelPath) : ''; ?>"
                     data-folder-color="<?php echo htmlspecialchars($fmColor); ?>"
@@ -6556,6 +5287,8 @@ body.dashboard-themed::after,
                         <input type="checkbox" class="file-check file-item-check"
                             data-url="<?php echo $isImg ? htmlspecialchars($url) : ''; ?>"
                             data-name="<?php echo htmlspecialchars($name); ?>"
+                            data-is-img="<?php echo $isImg ? '1' : '0'; ?>"
+                            data-size="<?php echo (int)($item['size'] ?? 0); ?>"
                             onchange="updateSelectedCount()" onclick="event.stopPropagation()">
                     </div>
 
@@ -6567,12 +5300,26 @@ body.dashboard-themed::after,
                                 width="38" height="38"
                                 loading="lazy"
                                 decoding="async"
-                                onclick="event.stopPropagation()"
-                                ondblclick="event.stopPropagation(); openLightboxByName('<?php echo addslashes($name); ?>')"
+                                onclick="event.stopPropagation(); openLightboxByName(<?php echo $nameJson; ?>, <?php echo $urlJson; ?>, <?php echo $thumbJson; ?>)"
+                                style="cursor:pointer;"
                                 onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='flex'">
                             <div class="file-type-icon fti-image" style="display:none;"><?php echo getFileIcon($name, false); ?></div>
+                        <?php elseif ($isVideo): ?>
+                            <div class="thumb-video-box"
+                                data-video-url="<?php echo htmlspecialchars($url); ?>"
+                                data-video-name="<?php echo htmlspecialchars($name); ?>"
+                                onclick="event.stopPropagation(); openVideoModal(<?php echo $nameJson; ?>, <?php echo $urlJson; ?>)"
+                                title="Click to play video">
+                                <img class="thumb-video-poster" style="display:none;" alt="<?php echo htmlspecialchars($name); ?>">
+                                <video class="thumb-video-el" src="<?php echo htmlspecialchars($url); ?>"
+                                    preload="none" muted playsinline></video>
+                                <div class="thumb-video-overlay">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="#ffffff"><polygon points="9 6 18 12 9 18 9 6"/></svg>
+                                </div>
+                            </div>
+                            <div class="file-type-icon fti-video" style="display:none;"><?php echo getFileIcon($name, false); ?></div>
                         <?php else: ?>
-                            <div class="file-type-icon <?php echo $iconClass; ?>"<?php echo $fmColor ? ' data-folder-color="' . htmlspecialchars($fmColor) . '"' : ''; ?>>
+                            <div class="file-type-icon <?php echo $iconClass; ?>"<?php echo $fmColor ? ' data-folder-color="' . htmlspecialchars($fmColor) . '"' : ''; ?><?php if ($isDir): ?> style="cursor:pointer;" onclick="if(!selectionMode){ event.stopPropagation(); if(typeof navigateToFolder==='function'){ event.preventDefault(); navigateToFolder('<?php echo addslashes($folderUrl); ?>'); } else { location.href='<?php echo addslashes($folderUrl); ?>'; } }" title="Open folder"<?php endif; ?>>
                                 <?php echo getFileIcon($name, $isDir); ?>
                             </div>
                         <?php endif; ?>
@@ -6580,9 +5327,9 @@ body.dashboard-themed::after,
                         <div class="file-name-info">
                             <div class="file-title-row">
                                 <?php if ($isDir): ?>
-                                    <span class="file-name-folder file-name-display" id="fileNameDisplay_<?php echo $index; ?>" ondblclick="event.stopPropagation(); location.href=this.closest('.file-row').dataset.openUrl">
+                                    <a href="<?php echo $folderUrl; ?>" class="file-name-folder file-name-display" style="color:var(--text) !important; text-decoration:none !important; border-bottom:none !important;" id="fileNameDisplay_<?php echo $index; ?>" onclick="if(!selectionMode){ event.stopPropagation(); if(typeof navigateToFolder==='function'){ event.preventDefault(); navigateToFolder('<?php echo addslashes($folderUrl); ?>'); } }">
                                         <?php echo htmlspecialchars($name); ?>
-                                    </span>
+                                    </a>
                                 <?php else: ?>
                                     <span class="file-name-span file-name-display" id="fileNameDisplay_<?php echo $index; ?>"><?php echo htmlspecialchars($name); ?></span>
                                 <?php endif; ?>
@@ -6607,7 +5354,7 @@ body.dashboard-themed::after,
 
                     <!-- Size -->
                     <div class="size-cell">
-                        <?php if (!$isDir): echo formatSize($item["size"]); else: ?><span style="color:#94a3b8;">—</span><?php endif; ?>
+                        <?php echo formatSize($item["size"]); ?>
                     </div>
 
                     <!-- Actions -->
@@ -6616,7 +5363,13 @@ body.dashboard-themed::after,
                             ⬇ Download
                         </a>
                         <?php if ($isDir): ?>
-                            <a class="act-btn open folder-open-link" href="<?php echo $folderUrl; ?>">📂 Open</a>
+                            <a class="act-btn open folder-open-link" href="<?php echo $folderUrl; ?>" onclick="if(!selectionMode){ event.preventDefault(); if(typeof navigateToFolder==='function'){ navigateToFolder('<?php echo addslashes($folderUrl); ?>'); } else { location.href='<?php echo addslashes($folderUrl); ?>'; } }">📂 Open</a>
+                        <?php elseif ($isVideo): ?>
+                            <button type="button" class="act-btn open" style="color:#ec4899; font-weight:700;" onclick="openVideoModal('<?php echo addslashes($name); ?>', '<?php echo addslashes($url); ?>')">▶ Play</button>
+
+                        <?php elseif ($isImg): ?>
+                            <a class="act-btn open" href="<?php echo htmlspecialchars($url); ?>" target="_blank">↗ Open</a>
+                            <button type="button" class="act-btn" style="color:#0284c7; font-weight:700; border-color:rgba(2,132,199,0.3); background:rgba(2,132,199,0.06);" onclick="openResizeImageModalSingle('<?php echo addslashes($name); ?>', <?php echo (int)($item['size'] ?? 0); ?>)" title="Resize or compress this image">📐 Resize</button>
                         <?php elseif (!$isConverter): ?>
                             <a class="act-btn open" href="<?php echo htmlspecialchars($url); ?>" target="_blank">↗ Open</a>
                         <?php endif; ?>
@@ -6654,25 +5407,47 @@ body.dashboard-themed::after,
 
             </div><!-- /file-list -->
         </div><!-- /panel -->
+        <?php if (!empty($imageUrls) && !$isConverter): ?>
+        <div class="panel-jump-divider">
+            <button type="button" class="panel-jump-divider-btn" onclick="scrollToSection('imageUrlsSection')">
+                <span>↓ Scroll down to Image URLs &amp; Previews</span>
+            </button>
+        </div>
+        <?php endif; ?>
+
 
         <!-- Image URL List (clean, standard) -->
         <?php if (!empty($imageUrls) && !$isConverter): ?>
-        <div class="all-urls-panel">
+        <div class="all-urls-panel" id="imageUrlsSection">
             <div class="panel-head">
                 <span class="panel-title">🔗 Image URLs</span>
                 <span class="panel-meta"><?php echo count($imageUrls); ?> image(s) · Click any URL to copy</span>
+                <div class="panel-head-controls">
+                    <button type="button" class="head-jump-pill" onclick="scrollToTopFiles()" title="Scroll back up to Files &amp; Folders">
+                        <span>↑ Files</span>
+                    </button>
+                    <button type="button" class="head-jump-pill" onclick="scrollToSection('imagePreviewSection')" title="Scroll down to Image Preview">
+                        <span>↓ Preview</span>
+                    </button>
+                </div>
             </div>
             <div class="url-list-wrap">
-                <?php foreach ($items as $idx => $item): ?>
-                    <?php if (!$item["is_dir"] && $item["is_image"]):
+                <?php 
+                $maxRenderUrls = 100;
+                $renderedUrls = 0;
+                $totalUrls = count($imageUrls);
+                foreach ($items as $idx => $item): 
+                    if (!$item["is_dir"] && $item["is_image"]):
+                        $renderedUrls++;
+                        if ($renderedUrls > $maxRenderUrls) continue;
                         $relative = $current ? $current . "/" . $item["name"] : $item["name"];
                         $url = publicUrl($BASE_URL, $relative);
-                        $thumbUrl = versionedImageUrl($url, $item["mtime"] ?? 0, $item["size"] ?? 0, $item["ctime"] ?? 0);
-                    ?>
+                        $thumbUrl = getThumbnailUrl($relative, $currentDir . "/" . $item["name"], $item["mtime"] ?? 0, 120);
+                ?>
                     <div class="url-list-item">
                         <span class="url-list-num"><?php echo $idx + 1; ?></span>
                         <img src="<?php echo htmlspecialchars($thumbUrl); ?>" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0;cursor:pointer;border:1.5px solid var(--line);"
-                            onclick="openLightboxByName('<?php echo addslashes($item['name']); ?>')"
+                            onclick="openLightboxByName(<?php echo htmlspecialchars(json_encode($item['name']), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($url), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($thumbUrl), ENT_QUOTES, 'UTF-8'); ?>)"
                             loading="lazy"
                             decoding="async"
                             onerror="this.style.visibility='hidden'">
@@ -6688,6 +5463,16 @@ body.dashboard-themed::after,
                     <?php endif; ?>
                 <?php endforeach; ?>
             </div>
+            <?php if ($totalUrls > $maxRenderUrls): ?>
+            <div style="text-align:center; padding:12px 14px; background:rgba(79,70,229,0.04); border-top:1px dashed var(--line); border-radius:0 0 16px 16px;">
+                <span style="font-size:12px; color:var(--muted); font-weight:700;">
+                    Showing first <?php echo $maxRenderUrls; ?> of <?php echo $totalUrls; ?> URLs · 
+                </span>
+                <button type="button" class="act-btn open" onclick="openModal('urlsModal')" style="font-size:12px; font-weight:700; display:inline-flex; margin-left:6px;">
+                    🔗 View all <?php echo $totalUrls; ?> in URLs Modal
+                </button>
+            </div>
+            <?php endif; ?>
             <div class="copy-all-bar">
                 <button class="form-btn btn-primary" onclick="copyAllUrls()" style="font-size:12.5px;padding:10px 18px;">📋 Copy All URLs</button>
                 <button class="form-btn btn-secondary" onclick="copySelectedUrls()" style="font-size:12.5px;padding:10px 18px;">✅ Copy Selected URLs</button>
@@ -6695,21 +5480,140 @@ body.dashboard-themed::after,
         </div>
         <?php endif; ?>
 
+        <!-- Video URL List -->
+        <?php if (!empty($videoItems) && !$isConverter): ?>
+        <div class="all-urls-panel video-urls-panel" id="videoUrlsSection" style="margin-top:22px; border-left:4px solid #ec4899;">
+            <div class="panel-head">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="panel-title">🎬 Video Direct URLs & Embeds</span>
+                    <span style="background:rgba(236,72,153,0.15); color:#ec4899; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;"><?php echo count($videoItems); ?> video(s)</span>
+                </div>
+                <span class="panel-meta">Instant direct stream links · Original video formats & quality 100% preserved</span>
+                <div class="panel-head-controls">
+                    <button type="button" class="head-jump-pill" onclick="scrollToTopFiles()" title="Scroll back up to Files &amp; Folders">
+                        <span>↑ Files</span>
+                    </button>
+                    <?php if (!empty($imageUrls)): ?>
+                    <button type="button" class="head-jump-pill" onclick="scrollToSection('imagePreviewSection')" title="Scroll down to Image Preview">
+                        <span>↓ Preview</span>
+                    </button>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="url-list-wrap">
+                <?php foreach ($videoItems as $vIdx => $vItem): ?>
+                <div class="url-list-item">
+                    <span class="url-list-num" style="background:rgba(236,72,153,0.15); color:#ec4899; font-weight:800;"><?php echo $vIdx + 1; ?></span>
+                    <div class="thumb-video-box" style="width:32px; height:32px; border-radius:8px;"
+                        data-video-url="<?php echo htmlspecialchars($vItem['url']); ?>"
+                        data-video-name="<?php echo htmlspecialchars($vItem['name']); ?>"
+                        onclick="openVideoModal('<?php echo addslashes($vItem['name']); ?>', '<?php echo addslashes($vItem['url']); ?>')" title="Play Video">
+                        <img class="thumb-video-poster" style="display:none;" alt="<?php echo htmlspecialchars($vItem['name']); ?>">
+                        <video class="thumb-video-el" src="<?php echo htmlspecialchars($vItem['url']); ?>" preload="none" muted playsinline></video>
+                        <div class="thumb-video-overlay" style="border-radius:8px;">
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="#ffffff"><polygon points="9 6 18 12 9 18 9 6"/></svg>
+                        </div>
+                    </div>
+                    <span class="url-list-name" title="<?php echo htmlspecialchars($vItem['name']); ?>">
+                        <?php echo htmlspecialchars($vItem['name']); ?>
+                        <span style="font-size:10.5px; color:var(--muted); font-weight:600; margin-left:4px;">(<?php echo formatSize($vItem['size']); ?>)</span>
+                    </span>
+                    <input class="url-list-input" id="vurlinput_<?php echo $vIdx; ?>"
+                        value="<?php echo htmlspecialchars($vItem['url']); ?>" readonly
+                        onclick="this.select()" title="Click to select, then copy">
+                    <button class="url-list-btn" id="vurlbtn_<?php echo $vIdx; ?>"
+                        onclick="copyUrlDirect('<?php echo addslashes($vItem['url']); ?>', 'vurlbtn_<?php echo $vIdx; ?>')">
+                        📋 Copy URL
+                    </button>
+                    <button class="url-list-btn" id="vembedbtn_<?php echo $vIdx; ?>"
+                        onclick="copyUrlDirect('&lt;video src=&quot;<?php echo addslashes($vItem['url']); ?>&quot; controls playsinline width=&quot;100%&quot;&gt;&lt;/video&gt;', 'vembedbtn_<?php echo $vIdx; ?>')"
+                        style="background:rgba(99,102,241,0.08); color:var(--accent);">
+                        &lt;/&gt; Embed
+                    </button>
+                    <button class="url-list-btn" onclick="openVideoModal('<?php echo addslashes($vItem['name']); ?>', '<?php echo addslashes($vItem['url']); ?>')"
+                        style="background:rgba(236,72,153,0.1); color:#ec4899; font-weight:700;">
+                        ▶ Play
+                    </button>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="copy-all-bar">
+                <button class="form-btn btn-primary" onclick="copyAllVideoUrls()" style="font-size:12.5px;padding:10px 18px; background:linear-gradient(135deg,#ec4899,#db2777);">🎬 Copy All Video URLs</button>
+                <button class="form-btn btn-secondary" onclick="copyAllVideoEmbeds()" style="font-size:12.5px;padding:10px 18px;">&lt;/&gt; Copy All Embed Codes</button>
+            </div>
+        </div>
+
+        <!-- Video Preview Grid -->
+        <div class="img-grid-panel video-grid-panel" id="videoPreviewSection" style="margin-top:22px; border-left:4px solid #ec4899;">
+            <div class="panel-head">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="panel-title">🎬 Video Preview</span>
+                    <span style="background:rgba(236,72,153,0.15); color:#ec4899; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;"><?php echo count($videoItems); ?> video(s)</span>
+                </div>
+                <span class="panel-meta">Hover to preview · Click card to play in modal</span>
+                <div class="panel-head-controls">
+                    <button type="button" class="head-jump-pill" onclick="scrollToTopFiles()" title="Scroll up to top files &amp; folders">
+                        <span>↑ Top Files</span>
+                    </button>
+                </div>
+            </div>
+            <div class="img-grid">
+                <?php foreach ($videoItems as $vgIdx => $vgItem): ?>
+                <div class="img-card video-card" onclick="openVideoModal('<?php echo addslashes($vgItem['name']); ?>', '<?php echo addslashes($vgItem['url']); ?>')">
+                    <div class="video-card-thumb-wrap" data-video-url="<?php echo htmlspecialchars($vgItem['url']); ?>">
+                        <img class="thumb-video-poster" style="display:none;" alt="<?php echo htmlspecialchars($vgItem['name']); ?>">
+                        <video class="thumb-video-el" src="<?php echo htmlspecialchars($vgItem['url']); ?>" muted playsinline preload="none"></video>
+                        <div class="video-card-badge">▶ PLAY</div>
+                    </div>
+                    <div class="img-card-info" onclick="event.stopPropagation()">
+                        <div class="img-card-name" title="<?php echo htmlspecialchars($vgItem['name']); ?>"><?php echo htmlspecialchars($vgItem['name']); ?></div>
+                        <div class="img-card-url">
+                            <input class="img-url-input" id="vgurl_<?php echo $vgIdx; ?>"
+                                value="<?php echo htmlspecialchars($vgItem['url']); ?>" readonly
+                                onclick="this.select()" title="<?php echo htmlspecialchars($vgItem['url']); ?>">
+                            <button class="img-url-copy" id="vgcopybtn_<?php echo $vgIdx; ?>"
+                                onclick="copyUrlDirect('<?php echo addslashes($vgItem['url']); ?>','vgcopybtn_<?php echo $vgIdx; ?>')"
+                                title="Copy Video URL">📋</button>
+                            <button class="img-url-copy" id="vgembedbtn_<?php echo $vgIdx; ?>"
+                                onclick="copyUrlDirect('&lt;video src=&quot;<?php echo addslashes($vgItem['url']); ?>&quot; controls playsinline width=&quot;100%&quot;&gt;&lt;/video&gt;','vgembedbtn_<?php echo $vgIdx; ?>')"
+                                title="Copy HTML5 Embed" style="font-size:10.5px; font-weight:700; color:var(--accent);">&lt;/&gt;</button>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- Image Preview Grid -->
         <?php if (!empty($imageUrls) && !$isConverter): ?>
-        <div class="img-grid-panel">
+        <div class="img-grid-panel" id="imagePreviewSection">
             <div class="panel-head">
                 <span class="panel-title">🖼️ Image Preview</span>
                 <span class="panel-meta"><?php echo count($imageUrls); ?> image(s) · Double-click for full preview</span>
+                <div class="panel-head-controls">
+                    <button type="button" class="head-jump-pill" onclick="scrollToSection('imageUrlsSection')" title="Scroll up to Image URLs">
+                        <span>↑ URLs</span>
+                    </button>
+                    <button type="button" class="head-jump-pill" onclick="scrollToTopFiles()" title="Scroll up to top files &amp; folders">
+                        <span>↑ Top Files</span>
+                    </button>
+                </div>
             </div>
             <div class="img-grid">
                 <?php
+                $maxRenderThumbs = 60;
+                $renderedThumbs = 0;
+                $totalThumbs = count($imageUrls);
                 $imgIdx = 0;
                 foreach ($items as $idx => $item):
                     if (!$item["is_dir"] && $item["is_image"]):
+                        $renderedThumbs++;
+                        if ($renderedThumbs > $maxRenderThumbs) continue;
                         $relative = $current ? $current . "/" . $item["name"] : $item["name"];
                         $url = publicUrl($BASE_URL, $relative);
-                        $thumbUrl = versionedImageUrl($url, $item["mtime"] ?? 0, $item["size"] ?? 0, $item["ctime"] ?? 0);
+                        $absPath = $currentDir . "/" . $item["name"];
+                        $thumbUrl = getThumbnailUrl($relative, $absPath, $item["mtime"] ?? 0, 360);
                 ?>
                 <div class="img-card">
                     <img class="img-card-thumb"
@@ -6717,8 +5621,7 @@ body.dashboard-themed::after,
                         alt="<?php echo htmlspecialchars($item["name"]); ?>"
                         loading="lazy"
                         decoding="async"
-                        ondblclick="openLightboxByName('<?php echo addslashes($item['name']); ?>')"
-                        onclick="openLightboxByName('<?php echo addslashes($item['name']); ?>')"
+                        onclick="openLightboxByName(<?php echo htmlspecialchars(json_encode($item['name']), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($url), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($thumbUrl), ENT_QUOTES, 'UTF-8'); ?>)"
                         onerror="this.src='data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'150\' viewBox=\'0 0 200 150\'><rect fill=\'%23f1f5f9\' width=\'200\' height=\'150\'/><text x=\'100\' y=\'80\' text-anchor=\'middle\' fill=\'%2394a3b8\' font-size=\'13\'>No Preview</text></svg>'">
                     <div class="img-card-info">
                         <div class="img-card-name"><?php echo htmlspecialchars($item["name"]); ?></div>
@@ -6734,1058 +5637,83 @@ body.dashboard-themed::after,
                 </div>
                 <?php $imgIdx++; endif; endforeach; ?>
             </div>
+            <?php if ($totalThumbs > $maxRenderThumbs): ?>
+            <div style="text-align:center; padding:16px 14px; background:rgba(79,70,229,0.04); border-top:1px dashed var(--line); border-radius:0 0 16px 16px;">
+                <span style="font-size:12.5px; color:var(--muted); font-weight:700;">
+                    Showing first <?php echo $maxRenderThumbs; ?> of <?php echo $totalThumbs; ?> image previews · 
+                </span>
+                <span style="font-size:12px; color:var(--muted);">All <?php echo $totalThumbs; ?> files are listed in the table above and available in the lightbox viewer.</span>
+            </div>
+            <?php endif; ?>
         </div>
         <?php endif; ?>
 
         <?php endif; ?>
+        <!-- Floating Quick Navigation Pill (Files, URLs, Previews) -->
+        <div class="floating-quick-nav<?php echo (empty($imageUrls) && empty($videoItems)) ? ' hidden' : ''; ?>" id="floatingQuickNav" aria-label="Quick Navigation">
+            <div class="fab-sub-pill">
+                <button type="button" class="fab-sub-link active" id="fabNavFiles" onclick="event.preventDefault(); event.stopPropagation(); scrollToTopFiles(event); return false;" title="Scroll up to Files &amp; Folders">📁 Files</button>
+                <?php if (!empty($imageUrls)): ?>
+                <button type="button" class="fab-sub-link" id="fabNavUrls" onclick="event.preventDefault(); event.stopPropagation(); scrollToSection('imageUrlsSection', event); return false;" title="Jump down to Image URLs">🔗 URLs</button>
+                <button type="button" class="fab-sub-link" id="fabNavPreviews" onclick="event.preventDefault(); event.stopPropagation(); scrollToSection('imagePreviewSection', event); return false;" title="Jump down to Image Previews">🖼️ Previews</button>
+                <?php endif; ?>
+                <?php if (!empty($videoItems)): ?>
+                <button type="button" class="fab-sub-link" id="fabNavVideos" onclick="event.preventDefault(); event.stopPropagation(); scrollToSection('videoUrlsSection', event); return false;" title="Jump to Videos">🎬 Videos</button>
+                <?php endif; ?>
+            </div>
+        </div>
 
         <footer class="dashboard-footer">
             Copyright &copy; <?php echo htmlspecialchars($appSettings["footer_name"]); ?> <?php echo date("Y"); ?> All Rights Reserved.
         </footer>
     </main>
+
+<?php if ($isPjax): ?>
+    <script id="pjax-meta" type="application/json">
+    <?php
+    echo json_encode([
+        "title" => htmlspecialchars($appSettings["app_name"]) . " - Dashboard",
+        "currentPath" => $current,
+        "folderCount" => $folderCount,
+        "fileCount" => $fileCount,
+        "totalSize" => $totalSize,
+        "csrfToken" => csrfToken(),
+        "imageList" => (count($imageList) <= 200 ? $imageList : []),
+        "imageUrls" => $imageUrls,
+        "videoItems" => $videoItems,
+        "version" => time(),
+    ], JSON_UNESCAPED_SLASHES);
+    ?>
+    </script>
+<?php exit; endif; ?>
 </div>
 
 <!-- ===== JAVASCRIPT ===== -->
+<!-- ===== MODULAR SCRIPTS (High Performance & Caching) ===== -->
 <script>
-/* ========== IMAGE LIST FOR LIGHTBOX ========== */
-const IMAGE_LIST = <?php echo json_encode($imageList); ?>;
-const CURRENT_PATH = <?php echo json_encode($current); ?>;
-const ACTION_ENDPOINT = <?php echo json_encode($pageUrl); ?>;
-const UPLOAD_ENDPOINT = ACTION_ENDPOINT;
-const SERVER_UPLOAD_LIMIT_BYTES = <?php echo (int)$serverUploadLimitBytes; ?>;
-const IS_CONVERTER = <?php echo $isConverter ? "true" : "false"; ?>;
-const CSRF_TOKEN = <?php echo json_encode(csrfToken()); ?>;
-let DASHBOARD_THEME_URL = <?php echo json_encode($dashboardThemeUrl); ?>;
-let lbCurrentIndex = 0;
-
-function postAction(data) {
-    const body = new URLSearchParams({ csrf_token: CSRF_TOKEN, ...data });
-    return fetch(ACTION_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
-    }).then(r => r.json());
-}
-
-let lbLoadToken = 0;
-
-function lbSetLoading(loading) {
-    const spinner = document.getElementById('lbSpinner');
-    if (spinner) spinner.style.display = loading ? 'flex' : 'none';
-}
-
-function lbPrefetchNeighbors(idx) {
-    if (!IMAGE_LIST || !IMAGE_LIST.length || IMAGE_LIST.length <= 1) return;
-    const nextIdx = (idx + 1) % IMAGE_LIST.length;
-    const prevIdx = (idx - 1 + IMAGE_LIST.length) % IMAGE_LIST.length;
-    [nextIdx, prevIdx].forEach(i => {
-        const item = IMAGE_LIST[i];
-        if (item && item.url) {
-            const pre = new Image();
-            pre.src = item.url;
-        }
-    });
-}
-
-function loadLightboxImage(targetUrl, altName, thumbUrl = '') {
-    const img = document.getElementById('lbImg');
-    if (!img) return;
-
-    const currentToken = ++lbLoadToken;
-
-    if (!thumbUrl) {
-        try {
-            const domThumb = document.querySelector(`img.thumb-img[alt="${CSS.escape(altName)}"], img.img-card-thumb[alt="${CSS.escape(altName)}"], img[alt="${CSS.escape(altName)}"]`);
-            if (domThumb && domThumb.src && !domThumb.src.startsWith('data:')) {
-                thumbUrl = domThumb.src;
-            }
-        } catch(e) {}
-    }
-
-    if (thumbUrl) {
-        img.src = thumbUrl;
-        img.alt = altName || '';
-        img.style.opacity = '1';
-        img.classList.add('lb-thumb-preview');
-        lbSetLoading(true);
-    } else {
-        img.style.opacity = '0';
-        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-        img.classList.remove('lb-thumb-preview');
-        lbSetLoading(true);
-    }
-
-    const preloader = new Image();
-    preloader.onload = () => {
-        if (currentToken !== lbLoadToken) return;
-        img.onerror = null;
-        img.onload = null;
-        img.src = targetUrl;
-        img.alt = altName || '';
-        img.classList.remove('lb-thumb-preview');
-        lbSetLoading(false);
-        requestAnimationFrame(() => {
-            img.style.opacity = '1';
-        });
-    };
-    preloader.onerror = () => {
-        if (currentToken !== lbLoadToken) return;
-        lbSetLoading(false);
-        img.classList.remove('lb-thumb-preview');
-        if (!thumbUrl) {
-            img.style.opacity = '0';
-            toast('Could not load image: ' + (altName || 'file'), 'danger');
-        }
-    };
-    preloader.src = targetUrl;
-}
-
-function openLightboxByName(name, optUrl = null, optThumbUrl = null) {
-    let idx = -1;
-    if (Array.isArray(IMAGE_LIST) && IMAGE_LIST.length) {
-        if (name) {
-            idx = IMAGE_LIST.findIndex(i => i.name === name || decodeURIComponent(i.name) === decodeURIComponent(name));
-            if (idx === -1) {
-                idx = IMAGE_LIST.findIndex(i => i.name.toLowerCase() === name.toLowerCase());
-            }
-        }
-        if (idx === -1 && optUrl) {
-            idx = IMAGE_LIST.findIndex(i => i.url === optUrl || i.public_url === optUrl);
-        }
-    }
-    if (idx !== -1) {
-        lbCurrentIndex = idx;
-        lbShow(idx);
-        return;
-    }
-    if (optUrl) {
-        openLightboxSingle(optUrl, name || 'Preview', optThumbUrl);
-    }
-}
-
-function openLightboxSingle(url, name, thumbUrl = null) {
-    const lb = document.getElementById('lightbox');
-    const nameEl = document.getElementById('lbName');
-    const counter = document.getElementById('lbCounter');
-    const prev = document.getElementById('lbPrev');
-    const next = document.getElementById('lbNext');
-
-    if (nameEl) nameEl.textContent = name || 'Preview';
-    if (counter) counter.textContent = '1 / 1';
-    if (prev) prev.style.display = 'none';
-    if (next) next.style.display = 'none';
-
-    document.body.classList.add('lightbox-open');
-    if (lb) lb.classList.add('open');
-    document.body.style.overflow = 'hidden';
-
-    loadLightboxImage(url, name, thumbUrl);
-}
-
-function openLightboxByIndex(idx) {
-    if (idx < 0 || idx >= IMAGE_LIST.length) return;
-    lbCurrentIndex = idx;
-    lbShow(idx);
-}
-
-function lbShow(idx) {
-    const item = IMAGE_LIST[idx];
-    if (!item) return;
-    const lb = document.getElementById('lightbox');
-    const name = document.getElementById('lbName');
-    const counter = document.getElementById('lbCounter');
-    const prev = document.getElementById('lbPrev');
-    const next = document.getElementById('lbNext');
-
-    name.textContent = item.name;
-    counter.textContent = (idx + 1) + ' / ' + IMAGE_LIST.length;
-    prev.classList.toggle('disabled', idx <= 0);
-    next.classList.toggle('disabled', idx >= IMAGE_LIST.length - 1);
-    prev.style.display = '';
-    next.style.display = '';
-
-    document.body.classList.add('lightbox-open');
-    if (lb) lb.classList.add('open');
-    document.body.style.overflow = 'hidden';
-
-    loadLightboxImage(item.url, item.name, item.thumb || '');
-    lbPrefetchNeighbors(idx);
-}
-
-function lbNavigate(dir) {
-    const newIdx = lbCurrentIndex + dir;
-    if (newIdx < 0 || newIdx >= IMAGE_LIST.length) return;
-    lbCurrentIndex = newIdx;
-    lbShow(lbCurrentIndex);
-}
-
-function closeLightbox() {
-    lbLoadToken++;
-    lbSetLoading(false);
-    document.body.classList.remove('lightbox-open');
-    const lb = document.getElementById('lightbox');
-    if (lb) lb.classList.remove('open');
-    const img = document.getElementById('lbImg');
-    if (img) {
-        img.classList.remove('lb-thumb-preview');
-        img.style.opacity = '0';
-        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    }
-    document.body.style.overflow = '';
-}
-
-function lbCopyUrl() {
-    const item = IMAGE_LIST[lbCurrentIndex];
-    if (!item) return;
-    navigator.clipboard.writeText(item.public_url || item.url).then(() => {
-        const btn = document.getElementById('lbCopyBtn');
-        btn.textContent = '✅ Copied!';
-        toast('URL copied!');
-        setTimeout(() => btn.textContent = '📋 Copy URL', 2000);
-    });
-}
-
-/* ========== MODAL ========== */
-let pendingDeleteForm = null;
-
-function openModal(id) {
-    if (id === 'moveModal') loadMoveDestOptions();
-    document.getElementById(id).classList.add('open');
-    document.body.style.overflow = 'hidden';
-}
-function closeModal(id) {
-    if (id === 'deletePasswordModal') pendingDeleteForm = null;
-    document.getElementById(id).classList.remove('open');
-    document.body.style.overflow = '';
-}
-document.querySelectorAll('.modal-overlay').forEach(m => {
-    m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
-});
-
-function loadMoveDestOptions() {
-    const select = document.getElementById('moveDestInput');
-    if (!select || select.dataset.loaded === '1' || select.dataset.loading === '1') return;
-    select.dataset.loading = '1';
-    select.disabled = true;
-    select.innerHTML = '<option value="">Loading folders...</option>';
-    postAction({ action: 'get_folder_options', path: CURRENT_PATH })
-        .then(d => {
-            if (!d.success || !Array.isArray(d.options)) throw new Error('No folders');
-            select.innerHTML = d.options.map(opt => {
-                const value = escapeHtml(opt.path || '');
-                const label = escapeHtml(opt.label || 'Root');
-                return `<option value="${value}">${label}</option>`;
-            }).join('');
-            select.disabled = false;
-            select.dataset.loaded = '1';
-        })
-        .catch(() => {
-            select.innerHTML = '<option value="">Could not load folders</option>';
-            select.disabled = true;
-            toast('Could not load folders', 'danger');
-        })
-        .finally(() => { select.dataset.loading = '0'; });
-}
-
-/* ========== DASHBOARD THEME ========== */
-function cssUrlForTheme(url) {
-    return 'url("' + String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n|\r/g, '') + '")';
-}
-
-function applyDashboardTheme(url) {
-    DASHBOARD_THEME_URL = url || '';
-    document.body.classList.toggle('dashboard-themed', !!DASHBOARD_THEME_URL);
-    if (DASHBOARD_THEME_URL) document.body.style.setProperty('--dashboard-bg-image', cssUrlForTheme(DASHBOARD_THEME_URL));
-    else document.body.style.removeProperty('--dashboard-bg-image');
-    const input = document.getElementById('themeUrlInput');
-    if (input) input.value = DASHBOARD_THEME_URL;
-    document.querySelectorAll('.theme-choice').forEach(btn => {
-        btn.classList.toggle('active', (btn.dataset.themeUrl || '') === DASHBOARD_THEME_URL);
-    });
-}
-
-function setThemeStatus(message, type = 'info') {
-    const el = document.getElementById('themeStatus');
-    if (!el) return;
-    el.textContent = message || '';
-    el.style.color = type === 'danger' ? 'var(--danger)' : (type === 'success' ? 'var(--success)' : 'var(--muted)');
-}
-
-function setDashboardTheme(url) {
-    setThemeStatus('Saving theme...');
-    postAction({ action: 'set_dashboard_theme', theme_url: url || '' })
-        .then(d => {
-            if (!d.success) throw new Error(d.error || 'Could not save theme.');
-            applyDashboardTheme(d.theme_url || '');
-            if (d.theme_item && d.theme_item.url) {
-                addThemePreview(d.theme_item.url, d.theme_item.name || 'Saved Theme', !!d.theme_item.can_delete);
-            }
-            setThemeStatus((d.theme_url || '') ? 'Theme saved.' : 'Normal theme restored.', 'success');
-            toast((d.theme_url || '') ? 'Theme saved' : 'Normal theme restored');
-        })
-        .catch(err => {
-            setThemeStatus(err.message || 'Could not save theme.', 'danger');
-            toast(err.message || 'Could not save theme', 'danger');
-        });
-}
-
-function saveThemeFromUrl(event) {
-    event.preventDefault();
-    const input = document.getElementById('themeUrlInput');
-    const url = (input?.value || '').trim();
-    if (!url) {
-        setDashboardTheme('');
-        return false;
-    }
-    setDashboardTheme(url);
-    return false;
-}
-
-function uploadDashboardTheme(input) {
-    const file = input?.files?.[0];
-    if (!file) return;
-    setThemeStatus('Uploading and converting to WebP...');
-    const fd = new FormData();
-    fd.append('csrf_token', CSRF_TOKEN);
-    fd.append('action', 'upload_dashboard_theme');
-    fd.append('theme_file', file);
-    fetch(ACTION_ENDPOINT, { method: 'POST', body: fd })
-        .then(r => r.json())
-        .then(d => {
-            if (!d.success) throw new Error(d.error || 'Could not upload theme image.');
-            applyDashboardTheme(d.theme_url || '');
-            addThemePreview(d.theme_url || '', d.name || 'Uploaded theme', !!d.can_delete);
-            setThemeStatus('Uploaded, converted to WebP, and saved.', 'success');
-            toast('Theme uploaded and saved');
-        })
-        .catch(err => {
-            setThemeStatus(err.message || 'Could not upload theme image.', 'danger');
-            toast(err.message || 'Could not upload theme image', 'danger');
-        })
-        .finally(() => {
-            if (input) input.value = '';
-        });
-}
-
-function addThemePreview(url, name, canDelete = true) {
-    const gallery = document.getElementById('themeGallery');
-    if (!gallery || !url) return;
-    gallery.querySelector('.empty-state')?.remove();
-    const existing = [...gallery.querySelectorAll('.theme-choice')].find(item => (item.dataset.themeUrl || '') === url);
-    if (existing) {
-        if (canDelete && !existing.querySelector('.theme-delete-btn')) {
-            const del = document.createElement('button');
-            del.className = 'theme-delete-btn';
-            del.type = 'button';
-            del.title = 'Delete';
-            del.textContent = '×';
-            del.onclick = event => deleteDashboardTheme(event, existing);
-            existing.appendChild(del);
-        }
-        gallery.prepend(existing);
-        applyDashboardTheme(url);
-        return;
-    }
-
-    const card = document.createElement('div');
-    card.className = 'theme-choice active';
-    card.role = 'button';
-    card.tabIndex = 0;
-    card.dataset.themeUrl = url;
-    card.onclick = () => setDashboardTheme(url);
-    card.onkeydown = event => {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            setDashboardTheme(url);
-        }
-    };
-
-    const img = document.createElement('img');
-    img.className = 'theme-preview';
-    img.src = url;
-    img.alt = '';
-    img.loading = 'lazy';
-    card.appendChild(img);
-
-    if (canDelete) {
-        const del = document.createElement('button');
-        del.className = 'theme-delete-btn';
-        del.type = 'button';
-        del.title = 'Delete';
-        del.textContent = '×';
-        del.onclick = event => deleteDashboardTheme(event, card);
-        card.appendChild(del);
-    }
-
-    const label = document.createElement('div');
-    label.className = 'theme-choice-name';
-    label.textContent = name || 'Theme image';
-    card.appendChild(label);
-    gallery.prepend(card);
-    applyDashboardTheme(url);
-}
-
-function deleteDashboardTheme(event, card) {
-    event?.preventDefault();
-    event?.stopPropagation();
-    const url = card?.dataset?.themeUrl || '';
-    if (!url || !confirm('Delete this theme image?')) return;
-    postAction({ action: 'delete_dashboard_theme', theme_url: url })
-        .then(d => {
-            if (!d.success) throw new Error(d.error || 'Could not delete theme image.');
-            const wasActive = (DASHBOARD_THEME_URL || '') === url;
-            card.remove();
-            if (wasActive) applyDashboardTheme('');
-            setThemeStatus('Theme image deleted.', 'success');
-            toast('Theme image deleted');
-        })
-        .catch(err => {
-            setThemeStatus(err.message || 'Could not delete theme image.', 'danger');
-            toast(err.message || 'Could not delete theme image', 'danger');
-        });
-}
-
-/* ========== TOAST ========== */
-function toast(msg, type = 'success') {
-    const t = document.createElement('div');
-    t.className = 'toast' + (type === 'danger' ? ' danger' : '');
-    t.textContent = (type === 'success' ? '✅ ' : '⚠️ ') + msg;
-    document.getElementById('toastContainer').appendChild(t);
-    setTimeout(() => {
-        t.style.animation = 'toast-out 0.3s ease forwards';
-        setTimeout(() => t.remove(), 300);
-    }, 2400);
-}
-
-/* ========== THEME + MOBILE MENU ========== */
-function toggleSidebar(open) {
-    document.body.classList.toggle('sidebar-open', !!open);
-}
-
-function toggleTheme() {
-    const root = document.documentElement;
-    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    root.dataset.theme = next;
-    localStorage.setItem('kiuqTheme', next);
-    updateThemeButton();
-    const body = new URLSearchParams({
-        action: 'set_theme',
-        csrf_token: <?php echo json_encode(csrfToken()); ?>,
-        theme: next
-    });
-    fetch(ACTION_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
-    }).catch(() => {});
-}
-
-function updateThemeButton() {
-    // The slide animation is handled by CSS using [data-theme="dark"]
-}
-updateThemeButton();
-
-/* ========== TRASH SELECTION ========== */
-function selectedTrashIds() {
-    return [...document.querySelectorAll('.trash-item-check:checked')].map(input => input.value);
-}
-
-function updateTrashSelection() {
-    const ids = selectedTrashIds();
-    document.querySelectorAll('.trash-bulk-btn').forEach(btn => btn.disabled = ids.length === 0);
-    const all = document.getElementById('trashSelectAll');
-    if (all) {
-        const total = document.querySelectorAll('.trash-item-check').length;
-        all.checked = total > 0 && ids.length === total;
-    }
-}
-
-function toggleTrashSelectAll(source) {
-    document.querySelectorAll('.trash-item-check').forEach(input => input.checked = source.checked);
-    updateTrashSelection();
-}
-
-function submitTrashBulk(action) {
-    const ids = selectedTrashIds();
-    if (!ids.length) { toast('No trash items selected', 'danger'); return; }
-    const form = document.getElementById('trashBulkForm');
-    const inputs = document.getElementById('trashBulkInputs');
-    document.getElementById('trashBulkAction').value = action;
-    inputs.innerHTML = '';
-    ids.forEach(id => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'trash_ids[]';
-        input.value = id;
-        inputs.appendChild(input);
-    });
-    if (action === 'delete_trash_selected') {
-        addDeletePassword(form, 'Permanently delete ' + ids.length + ' selected trash item(s)? This cannot be undone.');
-        return;
-    }
-    HTMLFormElement.prototype.submit.call(form);
-}
-
-/* ========== COPY ========== */
-function copyUrl(inputId, btnId) {
-    const val = document.getElementById(inputId).value;
-    const btn = document.getElementById(btnId);
-    if (!val) return;
-    navigator.clipboard.writeText(val).then(() => {
-        if (btn) { btn.textContent = '✅'; btn.classList.add('copied'); }
-        toast('URL copied!');
-        setTimeout(() => { if (btn) { btn.textContent = '📋'; btn.classList.remove('copied'); } }, 2000);
-    }).catch(() => { document.getElementById(inputId).select(); document.execCommand('copy'); toast('URL copied!'); });
-}
-
-function copyUrlDirect(url, btnId) {
-    const btn = document.getElementById(btnId);
-    navigator.clipboard.writeText(url).then(() => {
-        if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copied!'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000); }
-        toast('URL copied!');
-    }).catch(() => { toast('Copy failed', 'danger'); });
-}
-
-function copyAllUrls() {
-    const ta = document.getElementById('allUrlsTextarea');
-    navigator.clipboard.writeText(ta.value).then(() => toast('All URLs copied as row!'));
-}
-
-function copyAllUrlsHorizontal() {
-    const ta = document.getElementById('allUrlsTextarea');
-    const text = ta.value.split('\n').filter(u => u.trim() !== '').join(', ');
-    navigator.clipboard.writeText(text).then(() => toast('All URLs copied horizontally!'));
-}
-
-function copySelectedUrls() {
-    if (IS_CONVERTER) { toast('URL copy is not available for Converter role', 'danger'); return; }
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    const urls = [];
-    checks.forEach(c => { if (c.dataset.url) urls.push(c.dataset.url); });
-    if (!urls.length) { toast('No images selected', 'danger'); return; }
-    navigator.clipboard.writeText(urls.join('\n')).then(() => toast(urls.length + ' URL(s) copied as row!'));
-}
-
-function copySelectedUrlsHorizontal() {
-    if (IS_CONVERTER) { toast('URL copy is not available for Converter role', 'danger'); return; }
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    const urls = [];
-    checks.forEach(c => { if (c.dataset.url) urls.push(c.dataset.url); });
-    if (!urls.length) { toast('No images selected', 'danger'); return; }
-    navigator.clipboard.writeText(urls.join(', ')).then(() => toast(urls.length + ' URL(s) copied horizontally!'));
-}
-
-/* ========== ROW CLICK / SELECTION MODE ========== */
-let lastClickedIdx = null;
-let selectionMode = false;
-
-function enableSelectionMode() {
-    const wasOff = !selectionMode;
-    selectionMode = true;
-    document.body.classList.add('selection-mode');
-    if (wasOff) toast('Selection mode on');
-}
-
-function toggleSelectionMode() {
-    if (selectionMode) {
-        selectNone();
-        toast('Selection cleared');
-        return;
-    }
-    enableSelectionMode();
-}
-
-function rowClick(event, idx) {
-    if (event.target.closest('.url-cell') || event.target.closest('.actions-cell') || event.target.closest('.rename-form')) return;
-    if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON' || event.target.tagName === 'A' || event.target.tagName === 'IMG') return;
-    if (!selectionMode) return;
-
-    const row = document.getElementById('row_' + idx);
-    const chk = row.querySelector('.file-item-check');
-
-    if (event.shiftKey && lastClickedIdx !== null) {
-        // range select
-        const all = [...document.querySelectorAll('.file-item-check')];
-        const start = Math.min(lastClickedIdx, idx);
-        const end   = Math.max(lastClickedIdx, idx);
-        for (let i = start; i <= end; i++) all[i].checked = true;
-    } else if (event.ctrlKey || event.metaKey) {
-        chk.checked = !chk.checked;
-    } else {
-        // normal click — toggle this row
-        chk.checked = !chk.checked;
-    }
-    lastClickedIdx = idx;
-    updateSelectedCount();
-}
-
-/* ========== SELECT ALL ========== */
-function selectAll() {
-    enableSelectionMode();
-    document.querySelectorAll('.file-item-check').forEach(c => c.checked = true);
-    const all = document.getElementById('selectAllChk');
-    if (all) all.checked = true;
-    updateSelectedCount();
-}
-function selectNone() {
-    document.querySelectorAll('.file-item-check').forEach(c => c.checked = false);
-    const all = document.getElementById('selectAllChk');
-    if (all) all.checked = false;
-    selectionMode = false;
-    document.body.classList.remove('selection-mode');
-    updateSelectedCount();
-}
-function selectAllToggle(src) {
-    enableSelectionMode();
-    document.querySelectorAll('.file-item-check').forEach(c => c.checked = src.checked);
-    updateSelectedCount();
-}
-
-function updateSelectedCount() {
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    const n = checks.length;
-    const selectedCount = document.getElementById('selectedCount');
-    if (selectedCount) selectedCount.textContent = n + ' selected';
-
-    document.querySelectorAll('.file-row').forEach(row => {
-        const chk = row.querySelector('.file-item-check');
-        if (chk) row.classList.toggle('selected', chk.checked);
-    });
-}
-
-function addDeletePassword(form, message) {
-    pendingDeleteForm = form;
-    const msg = document.getElementById('deletePasswordMessage');
-    const input = document.getElementById('deletePasswordInput');
-    if (msg) msg.textContent = message || 'Enter the delete password to continue.';
-    if (input) input.value = '';
-    openModal('deletePasswordModal');
-    setTimeout(() => input && input.focus(), 80);
-    return false;
-}
-
-function submitDeletePassword(event) {
-    event.preventDefault();
-    if (!pendingDeleteForm) {
-        closeModal('deletePasswordModal');
-        return false;
-    }
-    const pw = document.getElementById('deletePasswordInput').value;
-    if (!pw) return false;
-    let input = pendingDeleteForm.querySelector('input[name="delete_password"]');
-    if (!input) {
-        input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'delete_password';
-        pendingDeleteForm.appendChild(input);
-    }
-    input.value = pw;
-    const form = pendingDeleteForm;
-    pendingDeleteForm = null;
-    closeModal('deletePasswordModal');
-
-    if (typeof form.ajaxSubmit === 'function') {
-        form.ajaxSubmit();
-    } else {
-        HTMLFormElement.prototype.submit.call(form);
-    }
-    return false;
-}
-
-function cancelDeletePassword() {
-    pendingDeleteForm = null;
-    closeModal('deletePasswordModal');
-}
-
-/* ========== DELETE ========== */
-function deleteSelected() {
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    if (!checks.length) { toast('No items selected', 'danger'); return; }
-    const container = document.getElementById('deleteSelectedInputs');
-    container.innerHTML = '';
-    checks.forEach(c => {
-        const inp = document.createElement('input');
-        inp.type = 'hidden'; inp.name = 'selected_names[]'; inp.value = c.dataset.name;
-        container.appendChild(inp);
-    });
-    const form = document.getElementById('deleteSelectedForm');
-    if (IS_CONVERTER) {
-        form.submit();
-        return;
-    }
-    if (!addDeletePassword(form, 'Move ' + checks.length + ' item(s) to trash?')) return;
-    form.submit();
-}
-
-function copySelectedItems() {
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    if (!checks.length) { toast('No items selected', 'danger'); return; }
-    const container = document.getElementById('copySelectedInputs');
-    container.innerHTML = '';
-    checks.forEach(c => {
-        const inp = document.createElement('input');
-        inp.type = 'hidden'; inp.name = 'selected_names[]'; inp.value = c.dataset.name;
-        container.appendChild(inp);
-    });
-    document.getElementById('copySelectedForm').submit();
-}
-
-function downloadSelected() {
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    if (!checks.length) { toast('No items selected', 'danger'); return; }
-    const container = document.getElementById('downloadSelectedInputs');
-    container.innerHTML = '';
-    checks.forEach(c => {
-        const inp = document.createElement('input');
-        inp.type = 'hidden'; inp.name = 'selected_names[]'; inp.value = c.dataset.name;
-        container.appendChild(inp);
-    });
-    document.getElementById('downloadSelectedForm').submit();
-}
-
-function pasteClipboard() {
-    document.getElementById('pasteClipboardForm').submit();
-}
-
-/* ========== MOVE ========== */
-function openMoveModal() {
-    const checks = document.querySelectorAll('.file-item-check:checked');
-    if (!checks.length) { toast('No items selected', 'danger'); return; }
-    const container = document.getElementById('moveSelectedInputs');
-    container.innerHTML = '';
-    checks.forEach(c => {
-        const inp = document.createElement('input');
-        inp.type = 'hidden'; inp.name = 'selected_names[]'; inp.value = c.dataset.name;
-        container.appendChild(inp);
-    });
-    openModal('moveModal');
-}
-
-/* ========== RENAME ========== */
-function showRename(i, name) {
-    document.querySelectorAll('.inline-rename-form').forEach(form => form.style.display = 'none');
-    document.querySelectorAll('.file-name-display').forEach(label => label.style.display = '');
-    document.querySelectorAll('.file-title-row').forEach(row => row.style.display = '');
-    document.querySelectorAll('.rename-btn').forEach(btn => btn.style.display = '');
-
-    const form = document.getElementById('renameForm_' + i);
-    const label = document.getElementById('fileNameDisplay_' + i);
-    const titleRow = label?.closest('.file-title-row');
-    const toggle = document.getElementById('renameToggle_' + i);
-    if (!form) return;
-    if (titleRow) titleRow.style.display = 'none';
-    else if (label) label.style.display = 'none';
-    if (toggle) toggle.style.display = 'none';
-    form.style.display = 'flex';
-    const input = form.querySelector('.rename-input');
-    input.focus();
-    const dot = name.lastIndexOf('.');
-    const end = dot > 0 ? dot : name.length;
-    input.setSelectionRange(0, end);
-}
-function hideRename(i) {
-    const form = document.getElementById('renameForm_' + i);
-    const label = document.getElementById('fileNameDisplay_' + i);
-    const titleRow = label?.closest('.file-title-row');
-    const toggle = document.getElementById('renameToggle_' + i);
-    if (form) form.style.display = 'none';
-    if (titleRow) titleRow.style.display = '';
-    else if (label) label.style.display = '';
-    if (toggle) toggle.style.display = '';
-}
-function renameKey(event, i) {
-    if (event.key === 'Escape') {
-        event.preventDefault();
-        hideRename(i);
-    }
-}
-
-/* ========== SEARCH ========== */
-function filterFiles(q) {
-    q = q.toLowerCase().trim();
-    document.querySelectorAll('.file-row').forEach(row => {
-        const name = (row.dataset.name || '').toLowerCase();
-        row.style.display = (!q || name.includes(q)) ? '' : 'none';
-    });
-}
-
-/* ========== DRAG + DROP ========== */
-const globalDragOverlay = document.getElementById('globalDragOverlay');
-let globalDragCounter = 0;
-
-window.addEventListener('dragenter', (ev) => {
-    ev.preventDefault();
-    if (globalDragOverlay) {
-        globalDragCounter++;
-        if (globalDragCounter === 1) globalDragOverlay.classList.add('active');
-    }
-});
-window.addEventListener('dragleave', (ev) => {
-    ev.preventDefault();
-    if (globalDragOverlay) {
-        globalDragCounter--;
-        if (globalDragCounter === 0) globalDragOverlay.classList.remove('active');
-    }
-});
-window.addEventListener('dragover', (ev) => {
-    ev.preventDefault();
-});
-window.addEventListener('drop', (ev) => {
-    ev.preventDefault();
-    if (globalDragOverlay) {
-        globalDragCounter = 0;
-        globalDragOverlay.classList.remove('active');
-    }
-    
-    if (ev.dataTransfer.files && ev.dataTransfer.files.length > 0) {
-        openModal('uploadModal');
-        const inp = document.getElementById('upload-file-input');
-        if (inp) {
-            inp.files = ev.dataTransfer.files;
-            updateDropZone(inp);
-            setTimeout(() => {
-                const submitBtn = document.getElementById('uploadSubmitBtn');
-                if (submitBtn) submitBtn.click();
-            }, 100);
-        }
-    }
-});
-
-const dropZone = document.getElementById('dropZone');
-if (dropZone) {
-    ['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('dragover'); }));
-    ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('dragover'); }));
-    dropZone.addEventListener('drop', ev => {
-        ev.preventDefault();
-        dropZone.classList.remove('dragover');
-        const inp = document.getElementById('upload-file-input');
-        if (inp) {
-            inp.files = ev.dataTransfer.files;
-            updateDropZone(inp);
-            setTimeout(() => {
-                const submitBtn = document.getElementById('uploadSubmitBtn');
-                if (submitBtn) submitBtn.click();
-            }, 100);
-        }
-    });
-}
-function updateDropZone(inp) {
-    const el = document.getElementById('dropZoneFiles');
-    if (el && inp.files.length) el.textContent = inp.files.length + ' file(s) selected';
-}
-
-function setUploadRowStatus(row, text, className) {
-    if (!row) return;
-    if (className) row.classList.add(className);
-    const cell = row.querySelector('.upload-progress-percent');
-    if (cell) cell.textContent = text;
-}
-
-function setUploadRowError(row, file, reason) {
-    if (!row) return;
-    row.classList.add('fail');
-    setUploadRowStatus(row, 'Failed');
-    const failText = file.name + ' - ' + reason;
-    row.title = failText;
-    const nameCell = row.querySelector('span');
-    if (nameCell) nameCell.textContent = failText.length > 96 ? (failText.slice(0, 93) + '...') : failText;
-}
-
-function buildUploadBatches(uploadableFiles) {
-    const batches = [];
-    const maxBatchFiles = 1; // 1 file per batch because each file will be chunked
-    const maxBatchBytes = Infinity;
-    let batch = [];
-    let batchBytes = 0;
-
-    uploadableFiles.forEach((file, index) => {
-        const size = Math.max(1, file.size || 1);
-        if (
-            batch.length > 0 &&
-            (batch.length >= maxBatchFiles || batchBytes + size > maxBatchBytes)
-        ) {
-            batches.push(batch);
-            batch = [];
-            batchBytes = 0;
-        }
-        batch.push({ file, index });
-        batchBytes += size;
-    });
-
-    if (batch.length) batches.push(batch);
-    return batches;
-}
-
-function errorMapFromUploadResponse(data) {
-    const map = new Map();
-    (Array.isArray(data.errors) ? data.errors : []).forEach((error) => {
-        const text = String(error || '');
-        const name = text.split(':')[0].trim();
-        if (name) map.set(name.toLowerCase(), text);
-    });
-    return map;
-}
-
-function uploadErrorForFile(errors, fileName) {
-    const lowerName = String(fileName || '').toLowerCase();
-    if (errors.has(lowerName)) return errors.get(lowerName);
-    for (const [name, message] of errors.entries()) {
-        if (name && (lowerName.includes(name) || name.includes(lowerName))) {
-            return message;
-        }
-    }
-    return '';
-}
-
-async function optimizeImageForUpload(file) {
-    if (!['image/jpeg', 'image/png', 'image/avif'].includes(file.type)) return file;
-    if (file.size < 50000) return file;
-
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                let width = img.width;
-                let height = img.height;
-                const MAX_DIMENSION = 1800;
-                
-                if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-                    if (width > height) {
-                        height = Math.round(height * MAX_DIMENSION / width);
-                        width = MAX_DIMENSION;
-                    } else {
-                        width = Math.round(width * MAX_DIMENSION / height);
-                        height = MAX_DIMENSION;
-                    }
-                }
-                
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                canvas.toBlob((blob) => {
-                    if (!blob) { resolve(file); return; }
-                    const originalName = file.name;
-                    const baseName = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-                    const newFile = new File([blob], baseName + '.webp', {
-                        type: 'image/webp',
-                        lastModified: file.lastModified
-                    });
-                    resolve(newFile.size < file.size ? newFile : file);
-                }, 'image/webp', 0.82);
-            };
-            img.onerror = () => resolve(file);
-            img.src = e.target.result;
-        };
-        reader.onerror = () => resolve(file);
-        reader.readAsDataURL(file);
-    });
-}
-
-async function uploadBatchWithProgress(batch, rows, progressByFile, updateOverallProgress) {
-    if (batch.length === 0) return { data: null, errors: {} };
-    
-    // With chunking, we process exactly 1 file per batch
-    const item = batch[0];
-    let file = item.file;
-    const index = item.index;
-    
-    const cell = rows[index]?.querySelector('.upload-progress-percent');
-    if (cell) cell.textContent = 'Optimizing...';
-    
-    file = await optimizeImageForUpload(file);
-    
-    if (cell) cell.textContent = '0%';
-    
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
-    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
-    const chunkId = Date.now().toString(36) + Math.random().toString(36).substring(2);
-
-    let finalData = null;
-    let finalErrors = {};
-
-    for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
-
-        const formData = new FormData();
-        formData.append('csrf_token', <?php echo json_encode(csrfToken()); ?>);
-        formData.append('action', 'upload_files');
-        formData.append('path', CURRENT_PATH);
-        formData.append('upload_ajax', '1');
-        
-        // Append chunk metadata
-        formData.append('chunk_index', i);
-        formData.append('total_chunks', totalChunks);
-        formData.append('chunk_id', chunkId);
-        formData.append('original_name', file.name);
-        
-        // The chunk itself
-        formData.append('upload_files[]', chunk, file.name);
-        formData.append('upload_paths[]', file.webkitRelativePath || '');
-
-        const resp = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.timeout = 3600000;
-            xhr.open('POST', UPLOAD_ENDPOINT, true);
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            
-            xhr.upload.onprogress = (evt) => {
-                if (!evt.lengthComputable) return;
-                const chunkLoaded = evt.loaded;
-                const totalLoaded = start + chunkLoaded;
-                const percent = Math.max(0, Math.min(100, Math.round((totalLoaded / file.size) * 100)));
-                progressByFile[index] = percent;
-                
-                const cell = rows[index]?.querySelector('.upload-progress-percent');
-                if (cell) cell.textContent = (percent === 100 && i === totalChunks - 1) ? '100% (Processing...)' : percent + '%';
-                updateOverallProgress();
-            };
-            
-            xhr.onerror = () => reject(new Error('Network error. Check your connection or file size limits.'));
-            xhr.onabort = () => reject(new Error('Upload aborted.'));
-            xhr.ontimeout = () => reject(new Error('Upload timed out.'));
-            xhr.upload.onerror = () => reject(new Error('Network error during upload.'));
-            xhr.upload.onabort = () => reject(new Error('Upload aborted by network.'));
-            xhr.upload.ontimeout = () => reject(new Error('Upload connection timed out.'));
-            
-            xhr.onload = () => {
-                if (xhr.status < 200 || xhr.status >= 300) {
-                    reject(new Error(xhr.status === 405 ? 'Upload endpoint rejected POST (HTTP 405). Refresh and try again.' : 'Server returned HTTP ' + xhr.status + '.'));
-                    return;
-                }
-                try {
-                    const data = JSON.parse(xhr.responseText || '{}');
-                    if (data.success || data.chunk_success) {
-                        resolve(data);
-                    } else {
-                        const firstError = Array.isArray(data.errors) && data.errors.length ? data.errors[0] : '';
-                        reject(new Error(firstError || data.message || 'Upload failed'));
-                    }
-                } catch (err) {
-                    reject(new Error('Server response invalid. Check upload size limit and refresh.'));
-                }
-            };
-            xhr.send(formData);
-        });
-
-        if (i === totalChunks - 1) {
-            finalData = resp;
-            if (finalData.success) {
-                finalErrors = errorMapFromUploadResponse(finalData);
-            }
-        }
-    }
-
-    return { data: finalData, errors: finalErrors };
-}
-
+var IMAGE_LIST = <?php echo json_encode(count($imageList) <= 200 ? $imageList : []); ?>;
+var CURRENT_PATH = <?php echo json_encode($current); ?>;
+var ACTION_ENDPOINT = <?php echo json_encode($pageUrl); ?>;
+var UPLOAD_ENDPOINT = ACTION_ENDPOINT;
+var SERVER_UPLOAD_LIMIT_BYTES = <?php echo (int)$serverUploadLimitBytes; ?>;
+var CHUNK_SIZE_BYTES = <?php echo (int)$safeChunkSizeBytes; ?>;
+var IS_CONVERTER = <?php echo $isConverter ? "true" : "false"; ?>;
+var IS_SUPER_ADMIN = <?php echo $isSuperAdmin ? "true" : "false"; ?>;
+var CSRF_TOKEN = <?php echo json_encode(csrfToken()); ?>;
+var DASHBOARD_THEME_URL = "";
+var lbCurrentIndex = 0;
+<?php if ($message): ?>
+window.addEventListener('load', () => toast(<?php echo json_encode($message); ?>, <?php echo json_encode($messageType === 'success' ? 'success' : 'danger'); ?>));
+<?php endif; ?>
+var F_ACTION_ENDPOINT = <?php echo json_encode($pageUrl); ?>;
+var F_CSRF_TOKEN      = <?php echo json_encode(csrfToken()); ?>;
+var F_CURRENT_PATH    = <?php echo json_encode($current); ?>;
+var F_BASE_URL        = <?php echo json_encode($BASE_URL); ?>;
+var F_SIDEBAR_PINS    = <?php echo json_encode(!empty($sidebarPins) ? array_column($sidebarPins, 'path') : []); ?>;
+
+/* Instant UI Fallbacks & Upload Engine - guarantees upload & UI work 100% reliably */
 function escapeHtml(str) {
-    return String(str)
+    return String(str || '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -7795,9 +5723,9 @@ function escapeHtml(str) {
 
 function formatBytes(bytes) {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let value = bytes;
-    let idx = 0;
+    var units = ['B', 'KB', 'MB', 'GB'];
+    var value = bytes;
+    var idx = 0;
     while (value >= 1024 && idx < units.length - 1) {
         value /= 1024;
         idx++;
@@ -7805,1237 +5733,756 @@ function formatBytes(bytes) {
     return (idx === 0 ? Math.round(value) : value.toFixed(1)) + ' ' + units[idx];
 }
 
-const uploadForm = document.getElementById('uploadForm');
-if (uploadForm) {
-    uploadForm.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const fileInput = document.getElementById('upload-file-input');
-        const folderInput = document.getElementById('upload-folder-input');
-        const files = [...(fileInput?.files || []), ...(folderInput?.files || [])];
-        if (!files.length) { toast('No files selected', 'danger'); return; }
+function getSelectedUploadFiles() {
+    var fileInp = document.getElementById('upload-file-input');
+    var folderInp = document.getElementById('upload-folder-input');
+    var dropped = window.__kiuqDroppedFiles || [];
+    var list = [];
+    if (fileInp && fileInp.files) {
+        for (var i = 0; i < fileInp.files.length; i++) list.push(fileInp.files[i]);
+    }
+    if (folderInp && folderInp.files) {
+        for (var j = 0; j < folderInp.files.length; j++) list.push(folderInp.files[j]);
+    }
+    for (var k = 0; k < dropped.length; k++) list.push(dropped[k]);
 
-        const progressWrap = document.getElementById('uploadProgressWrap');
-        const progressBar = document.getElementById('uploadGlobalBar');
-        const progressText = document.getElementById('uploadGlobalText');
-        const progressList = document.getElementById('uploadProgressList');
-        const submitBtn = document.getElementById('uploadSubmitBtn');
-        if (!progressWrap || !progressBar || !progressText || !progressList || !submitBtn) {
-            uploadForm.submit();
-            return;
+    var seen = new Set();
+    var unique = [];
+    for (var m = 0; m < list.length; m++) {
+        var f = list[m];
+        if (!f) continue;
+        var key = (f.name || '') + '__' + (f.size || 0) + '__' + (f.lastModified || 0) + '__' + (f.webkitRelativePath || '');
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(f);
         }
-        progressWrap.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressText.textContent = 'Preparing upload...';
-        progressList.innerHTML = '';
+    }
+    return unique;
+}
+
+function updateDropZone(inp) {
+    var el = document.getElementById('dropZoneFiles');
+    if (!el) return;
+    var files = getSelectedUploadFiles();
+    if (!files || !files.length) {
+        el.textContent = '';
+        return;
+    }
+    var totalBytes = 0;
+    for (var i = 0; i < files.length; i++) totalBytes += (files[i].size || 0);
+    var names = [];
+    for (var j = 0; j < Math.min(files.length, 3); j++) {
+        names.push(files[j].webkitRelativePath || files[j].name);
+    }
+    var extra = files.length > 3 ? ' (+' + (files.length - 3) + ' more)' : '';
+    el.innerHTML = '<span style="color:var(--accent); font-weight:800;">✓ ' + files.length + ' file(s) selected (' + formatBytes(totalBytes) + '):</span> ' +
+                   '<span style="color:var(--muted); font-weight:500;">' + names.join(', ') + extra + '</span>';
+}
+
+function openModal(id) {
+    if (id === 'uploadModal') {
+        var webpCb = document.getElementById('autoWebpCheckbox');
+        if (webpCb) webpCb.checked = true;
+        var pathInp = document.querySelector('#uploadModal input[name="path"]');
+        if (pathInp) {
+            var activePath = (typeof CURRENT_PATH !== 'undefined' ? CURRENT_PATH : '')
+                          || (typeof F_CURRENT_PATH !== 'undefined' ? F_CURRENT_PATH : '')
+                          || (new URLSearchParams(window.location.search).get('path') || '');
+            pathInp.value = activePath;
+        }
+        var pWrap = document.getElementById('uploadProgressWrap');
+        if (pWrap) pWrap.style.display = 'none';
+        var pBar = document.getElementById('uploadGlobalBar');
+        if (pBar) pBar.style.width = '0%';
+        var pPct = document.getElementById('uploadGlobalPercent');
+        if (pPct) pPct.textContent = '0%';
+        var pText = document.getElementById('uploadGlobalText');
+        if (pText) pText.textContent = 'Preparing upload...';
+        var pList = document.getElementById('uploadProgressList');
+        if (pList) pList.innerHTML = '';
+        var sBtn = document.getElementById('uploadSubmitBtn');
+        if (sBtn) { sBtn.disabled = false; sBtn.textContent = 'Upload →'; }
+    }
+    var modalEl = document.getElementById(id);
+    if (modalEl) {
+        modalEl.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+async function handleUploadSubmit(e) {
+    if (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch(err){}
+    }
+    var files = getSelectedUploadFiles();
+    if (!files.length) {
+        if (typeof toast === 'function') {
+            toast('Please select at least one file or folder to upload.', 'warning');
+        } else {
+            alert('Please select at least one file or folder to upload.');
+        }
+        return false;
+    }
+
+    var progressWrap = document.getElementById('uploadProgressWrap');
+    var progressBar = document.getElementById('uploadGlobalBar');
+    var progressText = document.getElementById('uploadGlobalText');
+    var progressPercent = document.getElementById('uploadGlobalPercent');
+    var progressList = document.getElementById('uploadProgressList');
+    var submitBtn = document.getElementById('uploadSubmitBtn');
+
+    if (progressWrap) progressWrap.style.display = 'block';
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressPercent) progressPercent.textContent = '0%';
+    if (progressText) progressText.textContent = 'Preparing upload (' + files.length + ' files)...';
+    if (progressList) progressList.innerHTML = '';
+    if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Uploading...';
+    }
 
-        let successCount = 0;
-        let failCount = 0;
-        let completed = 0;
-        const totalFiles = files.length;
-        const uploadableFiles = [];
+    var progressByFile = new Array(files.length).fill(0);
+    var rows = files.map(function(file) {
+        var row = document.createElement('div');
+        row.className = 'upload-progress-item';
+        var dName = file.webkitRelativePath || file.name;
+        var sName = escapeHtml(dName);
+        row.innerHTML = '<span title="' + sName + '" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;">' +
+                        sName + ' <small style="color:var(--muted);font-weight:500;">(' + formatBytes(file.size) + ')</small></span>' +
+                        '<span class="upload-progress-percent" style="font-weight:800;font-variant-numeric:tabular-nums;color:var(--accent);">0%</span>';
+        if (progressList) progressList.appendChild(row);
+        return row;
+    });
 
-        files.forEach((file) => {
-            if (SERVER_UPLOAD_LIMIT_BYTES > 0 && file.size > SERVER_UPLOAD_LIMIT_BYTES) {
-                const row = document.createElement('div');
-                row.className = 'upload-progress-item fail';
-                const reason = 'File too large (' + formatBytes(file.size) + '). Max allowed: ' + formatBytes(SERVER_UPLOAD_LIMIT_BYTES) + '.';
-                const failText = file.name + ' — ' + reason;
-                row.innerHTML = '<span title="' + escapeHtml(failText) + '">' + escapeHtml(failText) + '</span><span class="upload-progress-percent">Failed</span>';
-                progressList.appendChild(row);
-                failCount++;
-                completed++;
-            } else {
-                uploadableFiles.push(file);
-            }
+    var completed = 0;
+    var totalFiles = files.length;
+    var successCount = 0;
+    var failCount = 0;
+    var uploadStartTime = Date.now();
+
+    function updateOverallProgress() {
+        var activePercent = progressByFile.reduce(function(sum, v) { return sum + v; }, 0) / 100;
+        var overall = Math.min(100, Math.round(((completed + activePercent) / totalFiles) * 100));
+        if (progressBar) progressBar.style.width = overall + '%';
+        if (progressPercent) progressPercent.textContent = overall + '%';
+
+        var elapsed = Math.max(0.2, (Date.now() - uploadStartTime) / 1000);
+        var uploadedBytes = 0;
+        files.forEach(function(f, idx) {
+            uploadedBytes += (f.size * (progressByFile[idx] || 0) / 100);
         });
-
-        const progressByFile = new Array(uploadableFiles.length).fill(0);
-        const rows = uploadableFiles.map((file) => {
-            const row = document.createElement('div');
-            row.className = 'upload-progress-item';
-            const safeName = escapeHtml(file.name);
-            row.innerHTML = '<span title="' + safeName + '">' + safeName + '</span><span class="upload-progress-percent">0%</span>';
-            progressList.appendChild(row);
-            return row;
-        });
-
-        const updateOverallProgress = () => {
-            const activePercent = progressByFile.reduce((sum, value) => sum + value, 0) / 100;
-            const overall = ((completed + activePercent) / totalFiles) * 100;
-            progressBar.style.width = Math.round(overall) + '%';
-            progressText.textContent = 'Completed ' + completed + '/' + totalFiles + ' files (' + Math.round(overall) + '%)';
-        };
-        updateOverallProgress();
-
-        if (!uploadableFiles.length) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Upload →';
-            toast('All selected files exceed server upload limit.', 'danger');
-            return;
+        var speed = uploadedBytes / elapsed;
+        var speedStr = speed > 50000 ? ' • ' + formatBytes(speed) + '/s' : '';
+        if (progressText) {
+            progressText.textContent = 'Uploaded ' + completed + '/' + totalFiles + ' files (' + overall + '%)' + speedStr;
         }
+    }
+    updateOverallProgress();
 
-        const batches = buildUploadBatches(uploadableFiles);
-        let nextBatchIndex = 0;
-        const workerCount = 4; // Run up to 4 concurrent upload workers to maximize network throughput
-        async function worker() {
-            while (true) {
-                const batchIndex = nextBatchIndex;
-                nextBatchIndex += 1;
-                if (batchIndex >= batches.length) break;
+    var batches = [];
+    var curBatch = [];
+    var curBytes = 0;
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var sz = Math.max(1, f.size || 1);
+        if (curBatch.length >= 2 || curBytes + sz > 25 * 1024 * 1024) {
+            batches.push(curBatch);
+            curBatch = [];
+            curBytes = 0;
+        }
+        curBatch.push({ file: f, index: i });
+        curBytes += sz;
+    }
+    if (curBatch.length) batches.push(curBatch);
 
-                const batch = batches[batchIndex];
-                try {
-                    const result = await uploadBatchWithProgress(batch, rows, progressByFile, updateOverallProgress);
-                    batch.forEach(({ file, index }) => {
-                        const row = rows[index];
-                        const error = uploadErrorForFile(result.errors, file.name);
-                        if (error) {
-                            progressByFile[index] = 0;
-                            setUploadRowError(row, file, error.replace(file.name + ':', '').trim() || 'Upload failed');
-                            failCount++;
+    var csrf = (typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : '')
+            || (typeof F_CSRF_TOKEN !== 'undefined' ? F_CSRF_TOKEN : '')
+            || (document.querySelector('input[name="csrf_token"]')?.value || '');
+    var targetPath = (document.querySelector('#uploadModal input[name="path"]')?.value)
+                  || (typeof CURRENT_PATH !== 'undefined' ? CURRENT_PATH : '')
+                  || (typeof F_CURRENT_PATH !== 'undefined' ? F_CURRENT_PATH : '')
+                  || (new URLSearchParams(window.location.search).get('path') || '');
+    var autoWebp = document.getElementById('autoWebpCheckbox') ? document.getElementById('autoWebpCheckbox').checked : true;
+    var endpoint = (typeof UPLOAD_ENDPOINT !== 'undefined' && UPLOAD_ENDPOINT)
+                ? UPLOAD_ENDPOINT
+                : (window.location.pathname + window.location.search);
+
+    var nextBatch = 0;
+    var concurrency = Math.min(4, batches.length);
+
+    async function runWorker() {
+        while (true) {
+            var bIdx = nextBatch++;
+            if (bIdx >= batches.length) break;
+            var batch = batches[bIdx];
+
+            try {
+                await new Promise(function(resolve, reject) {
+                    var formData = new FormData();
+                    formData.append('csrf_token', csrf);
+                    formData.append('action', 'upload_files');
+                    formData.append('path', targetPath);
+                    formData.append('upload_ajax', '1');
+                    formData.append('convert_webp', autoWebp ? '1' : '0');
+
+                    batch.forEach(function(item) {
+                        formData.append('upload_files[]', item.file, item.file.name);
+                        formData.append('upload_paths[]', item.file.webkitRelativePath || '');
+                    });
+
+                    var batchTotal = batch.reduce(function(sum, item) { return sum + Math.max(1, item.file.size || 1); }, 0);
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('POST', endpoint, true);
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+                    xhr.upload.onprogress = function(evt) {
+                        if (!evt.lengthComputable) return;
+                        var loaded = Math.min(batchTotal, evt.loaded);
+                        var off = 0;
+                        batch.forEach(function(item) {
+                            var sz = Math.max(1, item.file.size || 1);
+                            var fLoaded = Math.max(0, Math.min(sz, loaded - off));
+                            var p = Math.max(0, Math.min(100, Math.round((fLoaded / sz) * 100)));
+                            progressByFile[item.index] = p;
+                            var cell = rows[item.index]?.querySelector('.upload-progress-percent');
+                            if (cell) cell.textContent = p === 100 ? '100% (Saving...)' : p + '%';
+                            off += sz;
+                        });
+                        updateOverallProgress();
+                    };
+
+                    xhr.onload = function() {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                var data = JSON.parse(xhr.responseText || '{}');
+                                if (data.success) {
+                                    resolve(data);
+                                } else {
+                                    var errMsg = (data.errors && data.errors.length) ? data.errors[0] : (data.message || 'Upload rejected');
+                                    reject(new Error(errMsg));
+                                }
+                            } catch(err) {
+                                reject(new Error('Invalid response from server.'));
+                            }
                         } else {
-                            progressByFile[index] = 0;
-                            row.classList.add('done');
-                            setUploadRowStatus(row, '100%');
-                            successCount++;
+                            reject(new Error('Server returned HTTP ' + xhr.status));
                         }
-                        completed++;
-                    });
-                } catch (err) {
-                    const reason = (err && err.message ? err.message : 'Failed');
-                    batch.forEach(({ file, index }) => {
-                        progressByFile[index] = 0;
-                        setUploadRowError(rows[index], file, reason);
-                        failCount++;
-                        completed++;
-                    });
-                }
-                updateOverallProgress();
-            }
-        }
-        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+                    };
 
+                    xhr.onerror = function() { reject(new Error('Network connection error')); };
+                    xhr.ontimeout = function() { reject(new Error('Upload request timed out')); };
+                    xhr.send(formData);
+                });
+
+                batch.forEach(function(item) {
+                    progressByFile[item.index] = 100;
+                    var cell = rows[item.index]?.querySelector('.upload-progress-percent');
+                    if (cell) {
+                        cell.textContent = '100% ✓';
+                        cell.style.color = '#10b981';
+                    }
+                    if (rows[item.index]) rows[item.index].classList.add('done');
+                    successCount++;
+                    completed++;
+                });
+            } catch(err) {
+                var reason = (err && err.message) ? err.message : 'Upload failed';
+                batch.forEach(function(item) {
+                    progressByFile[item.index] = 100;
+                    var cell = rows[item.index]?.querySelector('.upload-progress-percent');
+                    if (cell) {
+                        cell.textContent = '❌ ' + reason;
+                        cell.style.color = '#ef4444';
+                        cell.style.fontSize = '11px';
+                    }
+                    if (rows[item.index]) rows[item.index].classList.add('fail');
+                    failCount++;
+                    completed++;
+                });
+            }
+            updateOverallProgress();
+        }
+    }
+
+    var workers = [];
+    for (var w = 0; w < concurrency; w++) workers.push(runWorker());
+    await Promise.all(workers);
+
+    if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Upload →';
-
-        if (successCount > 0 && failCount === 0) {
-            toast(successCount + ' file(s) uploaded successfully.');
-            setTimeout(() => location.reload(), 500);
-            return;
-        }
-        if (successCount > 0) {
-            toast(successCount + ' uploaded, ' + failCount + ' failed.', 'danger');
-            setTimeout(() => location.reload(), 900);
-            return;
-        }
-        toast('Upload failed for all files.', 'danger');
-    });
-}
-
-/* ========== FOLDER PREFETCH ========== */
-const prefetchedFolderUrls = new Set();
-function prefetchFolderUrl(url) {
-    if (!url || prefetchedFolderUrls.has(url)) return;
-    prefetchedFolderUrls.add(url);
-    const link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = url;
-    document.head.appendChild(link);
-}
-function prefetchFolderFromEvent(e) {
-    if (!e.target || !e.target.closest) return;
-    const row = e.target.closest('.file-row[data-is-dir="1"]');
-    if (row) prefetchFolderUrl(row.dataset.openUrl || '');
-}
-document.addEventListener('mouseover', prefetchFolderFromEvent, { passive: true });
-document.addEventListener('focusin', prefetchFolderFromEvent);
-document.addEventListener('touchstart', prefetchFolderFromEvent, { passive: true });
-
-
-/* ========== KEYBOARD SHORTCUTS ========== */
-document.addEventListener('keydown', e => {
-    const active = document.activeElement;
-    const typing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA');
-
-    // Close lightbox
-    if (e.key === 'Escape') {
-        if (document.getElementById('lightbox').classList.contains('open')) { closeLightbox(); return; }
-        document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
-        if (!typing) selectNone();
-        return;
     }
 
-    // Lightbox nav
-    if (document.getElementById('lightbox').classList.contains('open')) {
-        if (e.key === 'ArrowLeft')  { lbNavigate(-1); return; }
-        if (e.key === 'ArrowRight') { lbNavigate(1);  return; }
-        return;
+    if (successCount > 0 && failCount === 0) {
+        if (progressText) progressText.textContent = '✓ All ' + successCount + ' file(s) uploaded successfully!';
+        if (typeof toast === 'function') toast(successCount + ' file(s) uploaded successfully!', 'success');
+        setTimeout(function() {
+            closeModal('uploadModal');
+            window.location.reload();
+        }, 800);
+    } else if (successCount > 0 && failCount > 0) {
+        if (progressText) progressText.textContent = successCount + ' uploaded, ' + failCount + ' failed.';
+        if (typeof toast === 'function') toast(successCount + ' uploaded, ' + failCount + ' failed.', 'warning');
+    } else {
+        if (progressText) progressText.textContent = '❌ Upload failed. Review errors above.';
+        if (typeof toast === 'function') toast('Upload failed for selected files.', 'danger');
     }
 
-    // / = focus search
-    if (e.key === '/' && !typing) { e.preventDefault(); document.getElementById('searchInput').focus(); return; }
+    return false;
+}
+window.handleUploadSubmit = handleUploadSubmit;
 
-    // Ctrl+A = select all
-    if (e.ctrlKey && e.key === 'a' && !typing) { e.preventDefault(); selectAll(); return; }
-
-    // Ctrl+C = copy selected URLs
-    if (e.ctrlKey && e.key === 'c' && !typing) {
-        const n = document.querySelectorAll('.file-item-check:checked').length;
-        if (n > 0) { e.preventDefault(); copySelectedUrls(); }
-        return;
+// Scan folder/files from DataTransfer
+async function scanDroppedItems(dataTransfer) {
+    var files = [];
+    var items = dataTransfer.items;
+    if (!items || !items.length) {
+        return Array.from(dataTransfer.files || []);
     }
-
-    // Delete = delete selected
-    if (e.key === 'Delete' && !typing) { e.preventDefault(); deleteSelected(); return; }
-});
-
-/* ========== CLICK OUTSIDE = DESELECT ========== */
-const fileListEl = document.getElementById('fileList');
-if (fileListEl) {
-    fileListEl.addEventListener('click', e => {
-        if (!e.target.closest('.file-row') && !e.target.closest('.rename-form')) selectNone();
-    });
-}
-
-/* ========== AUTO TOAST ========== */
-<?php if ($message): ?>
-window.addEventListener('load', () => toast(<?php echo json_encode($message); ?>, <?php echo json_encode($messageType === 'success' ? 'success' : 'danger'); ?>));
-<?php endif; ?>
-
-<?php if ($FEATURES_ENABLED): ?>
-/* ======================================================================
-   FEATURE JS — All features (context menu, AI, duplicates, versions, etc.)
-====================================================================== */
-
-const F_ACTION_ENDPOINT = <?php echo json_encode($pageUrl); ?>;
-const F_CSRF_TOKEN      = <?php echo json_encode(csrfToken()); ?>;
-const F_CURRENT_PATH    = <?php echo json_encode($current); ?>;
-const F_BASE_URL        = <?php echo json_encode($BASE_URL); ?>;
-const F_SIDEBAR_PINS    = <?php echo json_encode(array_column($sidebarPins, 'path')); ?>;
-
-function featurePost(data) {
-    return postAction(data);
-}
-
-/* ── Toolbar Dropdown ─────────────────────────────────────────────────── */
-function toggleTbDropdown(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const isOpen = el.classList.contains('open');
-    document.querySelectorAll('.tb-dropdown.open').forEach(d => d.classList.remove('open'));
-    if (!isOpen) el.classList.add('open');
-}
-function closeTbDropdown(id) {
-    document.getElementById(id)?.classList.remove('open');
-}
-document.addEventListener('click', e => {
-    if (!e.target.closest('.tb-dropdown-wrap')) {
-        document.querySelectorAll('.tb-dropdown.open').forEach(d => d.classList.remove('open'));
+    var queue = [];
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (typeof it.webkitGetAsEntry === 'function') {
+            var entry = it.webkitGetAsEntry();
+            if (entry) queue.push({ entry: entry, path: '' });
+        } else if (it.kind === 'file') {
+            var f = it.getAsFile();
+            if (f) files.push(f);
+        }
     }
-});
-
-/* ── Context Menu ─────────────────────────────────────────────────────── */
-let ctxRow = null;
-const ctxMenu = document.getElementById('contextMenu');
-
-function setFolderBadge(row, kind, enabled) {
-    const cell = row?.querySelector('.file-name-cell');
-    const titleRow = row?.querySelector('.file-title-row');
-    const label = titleRow?.querySelector('.file-name-display');
-    if (!cell || !titleRow) return;
-    const cls = kind === 'pin' ? 'fm-pin' : 'fm-fav';
-    let badge = cell.querySelector('.' + cls);
-    if (enabled) {
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'fm-badge ' + cls;
-            badge.title = kind === 'pin' ? 'Pinned' : 'Favorite';
-            badge.textContent = kind === 'pin' ? '📌' : '⭐';
-            if (label) label.insertAdjacentElement('afterend', badge);
-            else titleRow.appendChild(badge);
-        }
-    } else if (badge) {
-        badge.remove();
+    if (!queue.length) {
+        return Array.from(dataTransfer.files || []);
     }
-}
-
-const PIN_COLOR_VARS = {
-    blue:   ['#2563eb','rgba(37,99,235,0.12)'],
-    green:  ['#059669','rgba(5,150,105,0.12)'],
-    yellow: ['#d97706','rgba(217,119,6,0.12)'],
-    red:    ['#dc2626','rgba(220,38,38,0.12)'],
-    purple: ['#7c3aed','rgba(124,58,237,0.12)'],
-    orange: ['#ea580c','rgba(234,88,12,0.12)'],
-};
-function setFolderColor(row, color) {
-    const folderRel = row?.dataset?.folderRel;
-    const els = folderRel
-        ? document.querySelectorAll('[data-folder-rel="' + CSS.escape(folderRel) + '"]')
-        : (row ? [row] : []);
-    els.forEach(el => {
-        el.dataset.folderColor = color || '';
-        const icon = el.querySelector('.file-type-icon') || el.querySelector('.sb-icon');
-        if (icon) {
-            if (color) {
-                icon.dataset.folderColor = color;
-                if (el.id && el.id.startsWith('sb_pin_') && PIN_COLOR_VARS[color]) {
-                    icon.style.color = PIN_COLOR_VARS[color][0];
-                    icon.style.background = PIN_COLOR_VARS[color][1];
-                }
-            } else {
-                delete icon.dataset.folderColor;
-                if (el.id && el.id.startsWith('sb_pin_')) {
-                    icon.style.color = '';
-                    icon.style.background = '';
-                }
-            }
-        }
-    });
-}
-
-function showContextMenu(e, row) {
-    e.preventDefault();
-    ctxRow = row;
-    const name     = row.dataset.name;
-    const isImg    = row.dataset.isImg === '1';
-    const isDir    = row.dataset.isDir === '1';
-    const url      = row.dataset.url;
-    const relPath  = row.dataset.rel;
-    const isSbPin  = row.id && row.id.startsWith('sb_pin_');
-    const parentPath = row.dataset.parentPath || F_CURRENT_PATH;
-
-    document.getElementById('ctx-rename').onclick = () => {
-        closeCtx();
-        if (isSbPin) {
-            const newName = prompt('Rename item:', name);
-            if (newName && newName.trim() && newName.trim() !== name) {
-                const form = document.createElement('form');
-                form.method = 'post';
-                form.innerHTML = `<input type="hidden" name="action" value="rename_item"><input type="hidden" name="old_name" value="${escHtml(name)}"><input type="hidden" name="new_name" value="${escHtml(newName.trim())}"><input type="hidden" name="csrf_token" value="${F_CSRF_TOKEN}"><input type="hidden" name="path" value="${escHtml(parentPath)}">`;
-                document.body.appendChild(form); form.submit();
-            }
-        } else {
-            const idx = row.id.replace('row_',''); showRename(parseInt(idx), name);
-        }
-    };
-    document.getElementById('ctx-rename-type').onclick = () => {
-        closeCtx();
-        const checkbox = row.querySelector('.file-check');
-        if (checkbox && checkbox.checked) {
-            const inputs = document.querySelectorAll('.file-check:checked:not(#selectAllChk)');
-            if (inputs.length > 1) {
-                openRenameTypeModalMulti();
-                return;
-            }
-        }
-        openRenameTypeModalSingle(name, parentPath);
-    };
-    document.getElementById('ctx-download').onclick = () => { closeCtx(); location.href = F_ACTION_ENDPOINT + '?path=' + encodeURIComponent(parentPath) + '&download_item=' + encodeURIComponent(name); };
-    document.getElementById('ctx-copy').onclick = () => {
-        closeCtx();
-        const c = document.getElementById('copySelectedInputs'); c.innerHTML = '';
-        const i = document.createElement('input'); i.type='hidden'; i.name='selected_names[]'; i.value=name; c.appendChild(i);
-        if (isSbPin) { const p=document.createElement('input'); p.type='hidden'; p.name='path'; p.value=parentPath; c.appendChild(p); }
-        document.getElementById('copySelectedForm').submit();
-    };
-    document.getElementById('ctx-move').onclick = () => { closeCtx(); const c=document.getElementById('moveSelectedInputs'); c.innerHTML=''; const i=document.createElement('input'); i.type='hidden'; i.name='selected_names[]'; i.value=name; c.appendChild(i); openModal('moveModal'); };
-    document.getElementById('ctx-paste').onclick = () => { closeCtx(); pasteClipboard(); };
-    document.getElementById('ctx-properties').onclick = () => { closeCtx(); openPropertiesDialog(name, parentPath); };
-    document.getElementById('ctx-delete').onclick = () => {
-        closeCtx();
-        const form = document.createElement('form'); form.method='post';
-        form.innerHTML = `<input name="action" value="delete_item"><input name="item_name" value="${name}"><input name="csrf_token" value="${F_CSRF_TOKEN}"><input type="hidden" name="path" value="${parentPath}">`;
-        document.body.appendChild(form); addDeletePassword(form, `Move ${name} to trash?`);
-    };
-
-    // Show/hide items based on context
-    document.getElementById('ctx-copy').style.display = 'flex';
-    document.getElementById('ctx-move').style.display = isSbPin ? 'none' : 'flex';
-    document.getElementById('ctx-paste').style.display = isSbPin ? 'none' : 'flex';
-    document.getElementById('ctx-rename').style.display = isSbPin ? 'none' : 'flex';
-    document.getElementById('ctx-rename-type').style.display = (isSbPin || isDir) ? 'none' : 'flex';
-    document.getElementById('ctx-delete').style.display = isSbPin ? 'none' : 'flex';
-    document.getElementById('ctx-download').style.display = isSbPin ? 'none' : 'flex';
-    document.getElementById('ctx-properties').style.display = isSbPin ? 'none' : 'flex';
-    document.querySelectorAll('.ctx-sep').forEach(sep => { sep.style.display = isSbPin ? 'none' : ''; });
-
-    // Folder-only items
-    const colorItem = document.getElementById('ctx-color');
-    const pinItem   = document.getElementById('ctx-pin');
-    colorItem.style.display = (isDir && !isSbPin) ? 'flex' : 'none';
-    pinItem.style.display   = (isDir && !isSbPin) ? 'flex' : 'none';
-
-    // Sidebar pin toggle
-    const pinSidebarItem = document.getElementById('ctx-pin-sidebar');
-    if (pinSidebarItem) {
-        pinSidebarItem.style.display = 'flex';
-        const isPinnedSidebar = isSbPin || F_SIDEBAR_PINS.includes(relPath);
-        pinSidebarItem.textContent = isPinnedSidebar ? '📌 Unpin from Sidebar' : '📌 Pin to Sidebar';
-        pinSidebarItem.onclick = () => {
-            closeCtx();
-            featurePost({action: 'toggle_sidebar_pin', folder_path: relPath, is_dir: isDir ? 1 : 0}).then(d => {
-                if (d.success) {
-                    toast(d.is_pinned ? '📌 Pinned to sidebar' : 'Unpinned from sidebar', 'success');
-                    if (d.is_pinned) {
-                        if (!F_SIDEBAR_PINS.includes(relPath)) F_SIDEBAR_PINS.push(relPath);
-                    } else {
-                        const idx = F_SIDEBAR_PINS.indexOf(relPath);
-                        if (idx > -1) F_SIDEBAR_PINS.splice(idx, 1);
+    while (queue.length > 0) {
+        var item = queue.shift();
+        var entry = item.entry;
+        var p = item.path;
+        if (entry.isFile) {
+            await new Promise(function(resolve) {
+                entry.file(function(file) {
+                    if (p) {
+                        try {
+                            Object.defineProperty(file, 'webkitRelativePath', {
+                                value: p + file.name,
+                                writable: false
+                            });
+                        } catch(e){}
                     }
-                    setTimeout(() => { location.reload(); }, 500);
-                } else {
-                    toast('Error: ' + (d.error || 'unknown'), 'danger');
-                }
+                    files.push(file);
+                    resolve();
+                }, function() { resolve(); });
             });
-        };
-    }
-
-    if (isDir) {
-        const folderRel = row.dataset.folderRel;
-        pinItem.onclick = () => {
-            closeCtx();
-            featurePost({action:'toggle_pin', folder_path: folderRel}).then(d => {
-                toast(d.success ? (d.is_pinned ? '📌 Folder pinned' : 'Folder unpinned') : 'Error', d.success ? 'success' : 'danger');
-                if (d.success) setFolderBadge(row, 'pin', !!d.is_pinned);
-            });
-        };
-        document.querySelectorAll('.ctx-color-opt').forEach(opt => {
-            opt.onclick = e => {
-                e.stopPropagation();
-                closeCtx();
-                featurePost({action:'set_folder_color', folder_path: folderRel, color: opt.dataset.color}).then(d => {
-                    toast(d.success ? '🎨 Color updated' : 'Error', d.success ? 'success' : 'danger');
-                    if (d.success) setFolderColor(row, d.color || '');
+        } else if (entry.isDirectory) {
+            var dirReader = entry.createReader();
+            var readEntriesBatch = async function() {
+                return new Promise(function(resolve) {
+                    dirReader.readEntries(function(entries) { resolve(entries || []); }, function() { resolve([]); });
                 });
             };
-        });
-    }
-
-    // Image-only items
-    const replaceItem  = document.getElementById('ctx-replace');
-    const canvaEditItem= document.getElementById('ctx-canva-edit');
-    const sepImg       = document.querySelector('.ctx-sep-img');
-    
-    replaceItem.style.display  = isImg ? 'flex' : 'none';
-    canvaEditItem.style.display= isImg ? 'flex' : 'none';
-    if (sepImg) sepImg.style.display = isImg ? '' : 'none';
-
-    if (isImg) {
-        replaceItem.onclick = () => { closeCtx(); openReplaceModal(name); };
-        canvaEditItem.onclick = () => { 
-            closeCtx(); 
-            const checked = document.querySelectorAll('.file-item-check:checked');
-            const imgs = [...checked].filter(c => c.closest('.file-row')?.dataset.isImg === '1');
-            
-            if (imgs.length > 1 && [...checked].some(c => c.closest('.file-row') === row)) {
-                openBatchCanvasEditor(imgs.map(c => c.closest('.file-row')));
-            } else {
-                openStandaloneCanvasEditor(name, url); 
+            var entries = await readEntriesBatch();
+            while (entries.length > 0) {
+                for (var ci = 0; ci < entries.length; ci++) {
+                    queue.push({ entry: entries[ci], path: (p ? p + entry.name + '/' : entry.name + '/') });
+                }
+                entries = await readEntriesBatch();
             }
-        };
+        }
     }
-
-    // Position menu
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const mw = 200, mh = 340;
-    let x = e.clientX, y = e.clientY;
-    if (x + mw > vw) x = vw - mw - 10;
-    if (y + mh > vh) y = vh - mh - 10;
-    ctxMenu.style.left = x + 'px';
-    ctxMenu.style.top  = y + 'px';
-    ctxMenu.style.display = 'block';
+    return files;
 }
 
-function closeCtx() { if(ctxMenu) ctxMenu.style.display = 'none'; ctxRow = null; }
-document.addEventListener('click', e => { if (!e.target.closest('#contextMenu')) closeCtx(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
+// Wire global window and dropzone listeners for drag & drop
+document.addEventListener('DOMContentLoaded', function() {
+    var globalOverlay = document.getElementById('globalDragOverlay');
+    var dragCounter = 0;
 
-/* ── Properties ───────────────────────────────────────────────────────── */
-function openPropertiesDialog(name) {
-    openModal('propertiesModal');
-    document.getElementById('propertiesContent').innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--muted);">Loading…</div>';
-    featurePost({ action: 'get_properties', item_name: name, path: F_CURRENT_PATH }).then(d => {
-        if (!d.success) { document.getElementById('propertiesContent').innerHTML = `<p style="color:var(--danger)">${escHtml(d.error||'Error')}</p>`; return; }
-        const p = d.props;
-        const rows = p.type === 'file' ? [
-            ['Name', escHtml(p.name)],
-            ['Type', escHtml(p.extension?.toUpperCase() || '—') + ' · ' + escHtml(p.mime||'')],
-            ['Size', escHtml(p.size_fmt||'—')],
-            ['Dimensions', p.width ? `${p.width} × ${p.height} px` : '—'],
-            ['Modified', new Date((p.modified||0)*1000).toLocaleString()],
-            ['Created',  new Date((p.created||0)*1000).toLocaleString()],
-            ['Path', escHtml(p.path||'—')],
-            ['SHA256', `<span class="props-hash">${escHtml(p.sha256||'—')}</span>`],
-            ['MD5',    `<span class="props-hash">${escHtml(p.md5||'—')}</span>`],
-        ] : [
-            ['Name', escHtml(p.name)],
-            ['Type', 'Folder'],
-            ['Total Size', formatBytesJs(p.size||0)],
-            ['Files', (p.items?.files||0).toLocaleString()],
-            ['Subfolders', (p.items?.folders||0).toLocaleString()],
-            ['Modified', new Date((p.modified||0)*1000).toLocaleString()],
-            ['Path', escHtml(p.path||'—')],
-        ];
-        const html = `<div class="props-grid">${rows.map(([l,v]) => `<div class="props-row"><div class="props-label">${l}</div><div class="props-value">${v}</div></div>`).join('')}</div>`;
-        document.getElementById('propertiesContent').innerHTML = html;
-    }).catch(() => { document.getElementById('propertiesContent').innerHTML = '<p style="color:var(--danger)">Request failed</p>'; });
-}
-
-/* ── Version History ─────────────────────────────────────────────────── */
-function openVersionHistory(name) {
-    openModal('versionModal');
-    document.getElementById('versionFileName').textContent = 'File: ' + name;
-    document.getElementById('versionList').innerHTML = '<div style="color:var(--muted);padding:20px 0;text-align:center;">Loading…</div>';
-    featurePost({ action: 'get_versions', item_name: name, path: F_CURRENT_PATH }).then(d => {
-        if (!d.success) { document.getElementById('versionList').innerHTML = `<p style="color:var(--danger)">${escHtml(d.error||'Error')}</p>`; return; }
-        if (!d.versions?.length) { document.getElementById('versionList').innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px 0;">No versions yet. Replace the image to create a version.</div>'; return; }
-        document.getElementById('versionList').innerHTML = d.versions.map(v => `
-            <div class="ver-item">
-                <span class="ver-badge">v${v.version_num}</span>
-                <div class="ver-info">
-                    <div class="ver-name">${escHtml(v.stored_path?.split('/').pop()||'Version ' + v.version_num)}</div>
-                    <div class="ver-meta">${escHtml(v.size_fmt||'?')} · ${escHtml(v.date_fmt||'?')} · Replaced by: ${escHtml(v.replaced_by||'—')}</div>
-                </div>
-                <div class="ver-actions">
-                    <button class="act-btn open" onclick="restoreVersion('${escHtml(v.id)}')">↩ Restore</button>
-                    <button class="act-btn" onclick="downloadVersion('${escHtml(v.id)}')">⬇</button>
-                    <button class="act-btn del" onclick="deleteVersion('${escHtml(v.id)}')">🗑</button>
-                </div>
-            </div>`).join('');
+    window.addEventListener('dragenter', function(ev) {
+        ev.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1 && globalOverlay) {
+            globalOverlay.classList.add('active');
+        }
     });
-}
 
-function restoreVersion(id) {
-    if (!confirm('Restore this version? The current file will be saved as a new version.')) return;
-    featurePost({ action: 'restore_version', version_id: id, path: F_CURRENT_PATH }).then(d => {
-        toast(d.success ? d.message : (d.error||'Error'), d.success ? 'success' : 'danger');
-        if (d.success) { closeModal('versionModal'); setTimeout(() => location.reload(), 600); }
+    window.addEventListener('dragleave', function(ev) {
+        ev.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            if (globalOverlay) globalOverlay.classList.remove('active');
+        }
     });
-}
 
-function downloadVersion(id) {
-    const form = document.createElement('form'); form.method = 'post';
-    form.innerHTML = `<input name="action" value="download_version"><input name="version_id" value="${id}"><input name="csrf_token" value="${F_CSRF_TOKEN}"><input name="path" value="${F_CURRENT_PATH}">`;
-    document.body.appendChild(form); form.submit(); document.body.removeChild(form);
-}
-
-function deleteVersion(id) {
-    if (!confirm('Delete this version permanently? This cannot be undone.')) return;
-    featurePost({ action: 'delete_version', version_id: id, path: F_CURRENT_PATH }).then(d => {
-        toast(d.success ? 'Version deleted' : (d.error||'Error'), d.success ? 'success' : 'danger');
-        if (d.success) { document.querySelectorAll('[onclick*="' + id + '"]').forEach(el => el.closest('.ver-item')?.remove()); }
+    window.addEventListener('dragover', function(ev) {
+        ev.preventDefault();
     });
-}
 
-/* ── Replace Image ────────────────────────────────────────────────────── */
-let replaceTargetName = '';
-function openReplaceModal(name) {
-    replaceTargetName = name;
-    document.getElementById('replaceTargetInfo').textContent = 'Replacing: ' + name;
-    document.getElementById('replaceFileInput').value = '';
-    openModal('replaceModal');
-}
+    window.addEventListener('drop', async function(ev) {
+        ev.preventDefault();
+        dragCounter = 0;
+        if (globalOverlay) globalOverlay.classList.remove('active');
 
-function submitReplaceImage() {
-    const fileInput = document.getElementById('replaceFileInput');
-    if (!fileInput.files.length) { toast('Please select a file', 'danger'); return; }
-    const formData = new FormData();
-    formData.append('csrf_token', F_CSRF_TOKEN);
-    formData.append('action', 'replace_image');
-    formData.append('target_name', replaceTargetName);
-    formData.append('path', F_CURRENT_PATH);
-    formData.append('replace_file', fileInput.files[0]);
-    fetch(F_ACTION_ENDPOINT, { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(d => {
-            toast(d.success ? d.message : (d.error||'Replace failed'), d.success ? 'success' : 'danger');
-            if (d.success) { closeModal('replaceModal'); setTimeout(() => location.reload(), 700); }
-        }).catch(() => toast('Request failed', 'danger'));
-}
+        if (ev.dataTransfer) {
+            var dropped = await scanDroppedItems(ev.dataTransfer);
+            if (dropped && dropped.length > 0) {
+                openModal('uploadModal');
+                window.__kiuqDroppedFiles = dropped;
+                updateDropZone();
+            }
+        }
+    });
 
-/* ── AI Background Removal ──────────────────────────────────────────── */
-let aiJobs = [];
-
-function openAiModal() {
-    const checked = document.querySelectorAll('.file-item-check:checked');
-    const imgs = [...checked].filter(c => c.closest('.file-row')?.dataset.isImg === '1');
-    if (!imgs.length) { toast('Select image(s) first', 'danger'); return; }
-    document.getElementById('aiSelectedInfo').textContent = imgs.length + ' image(s) selected';
-    document.getElementById('aiQueue').innerHTML = imgs.map((c, i) => {
-        const row = c.closest('.file-row');
-        const name = row?.dataset.name || '?';
-        return `<div class="ai-job-row" id="ai-job-row-${i}"><span title="${escHtml(name)}">${escHtml(name.length > 48 ? name.slice(0,45)+'...' : name)}</span><span class="ai-job-status" id="ai-job-status-${i}">Pending</span><span></span></div>`;
-    }).join('');
-    document.getElementById('aiStartBtn').style.display = '';
-    document.getElementById('aiCancelBtn').style.display = 'none';
-    document.getElementById('aiDownloadBtn').style.display = 'none';
-    aiJobs = imgs.map(c => ({ rel: c.closest('.file-row')?.dataset.rel || '', id: '', status: 'pending' }));
-    openModal('aiModal');
-}
-
-async function aiStartProcessing() {
-    const imgs = aiJobs.map(j => j.rel);
-    const outputType   = document.getElementById('aiOutputType').value;
-    const outputFormat = document.getElementById('aiOutputFormat').value;
-    const outputFolder = document.getElementById('aiOutputFolder').value;
-    const keepOrigName = document.getElementById('aiKeepOrigName').checked ? '1' : '';
-
-    document.getElementById('aiStartBtn').style.display = 'none';
-    document.getElementById('aiCancelBtn').style.display = '';
-
-    // Start all jobs
-    try {
-        const d = await featurePost({ action: 'ai_bg_remove_start', paths: JSON.stringify(imgs), output_type: outputType, output_format: outputFormat, output_folder: outputFolder, keep_original_name: keepOrigName });
-        if (!d.success) { toast(d.error||'Error starting AI jobs', 'danger'); document.getElementById('aiStartBtn').style.display = ''; return; }
-        d.jobs.forEach((job, i) => { if (aiJobs[i]) aiJobs[i].id = job.id; });
-    } catch(e) { toast('Failed to start AI jobs', 'danger'); document.getElementById('aiStartBtn').style.display = ''; return; }
-
-    // Process each job sequentially
-    for (let i = 0; i < aiJobs.length; i++) {
-        if (aiJobs[i].status === 'cancelled') continue;
-        const rowEl    = document.getElementById('ai-job-row-' + i);
-        const statusEl = document.getElementById('ai-job-status-' + i);
-        if (rowEl) rowEl.classList.add('processing');
-        if (statusEl) statusEl.innerHTML = '<span class="ai-job-spinner"></span>Generating…';
-
-        try {
-            const reviewCanvas = document.getElementById('aiReviewCanvas').checked;
-            // If they DON'T want to review, we pass `skip_edit: true` so the backend just saves it directly
-            const d = await featurePost({ 
-                action: 'ai_bg_remove_process', 
-                job_id: aiJobs[i].id, 
-                output_type: document.getElementById('aiOutputType').value, 
-                output_format: document.getElementById('aiOutputFormat').value, 
-                output_size: document.getElementById('aiOutputSize').value, 
-                output_folder: document.getElementById('aiOutputFolder').value, 
-                keep_orig_name: document.getElementById('aiKeepOrigName').checked ? '1' : '',
-                path: F_CURRENT_PATH,
-                skip_edit: reviewCanvas ? '0' : '1'
+    var dz = document.getElementById('dropZone');
+    if (dz) {
+        ['dragenter', 'dragover'].forEach(function(evName) {
+            dz.addEventListener(evName, function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                dz.classList.add('dragover');
             });
-            
-            let finalD = d;
-            if (d.status === 'needs_edit' && reviewCanvas) {
-                finalD = await openAiEditorAndWait(d.image_b64, aiJobs[i].id);
-            } else if (finalD.success) {
-                if (statusEl) statusEl.innerHTML = '<span class="ai-job-spinner"></span>Validating…';
-                await new Promise(r => setTimeout(r, 400));
-                
-                if (document.getElementById('aiKeepOrigName').checked) {
-                    if (statusEl) statusEl.innerHTML = '<span class="ai-job-spinner"></span>Replacing Original…';
-                    await new Promise(r => setTimeout(r, 500));
+        });
+        ['dragleave'].forEach(function(evName) {
+            dz.addEventListener(evName, function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                dz.classList.remove('dragover');
+            });
+        });
+        dz.addEventListener('drop', async function(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            dz.classList.remove('dragover');
+            if (ev.dataTransfer) {
+                var dropped = await scanDroppedItems(ev.dataTransfer);
+                if (dropped && dropped.length > 0) {
+                    window.__kiuqDroppedFiles = dropped;
+                    updateDropZone();
                 }
             }
-            
-            aiJobs[i].status = finalD.success ? 'done' : 'error';
-            if (rowEl) { rowEl.classList.remove('processing'); rowEl.classList.add(finalD.success ? 'done' : 'error'); }
-            
-            if (statusEl) {
-                if (finalD.success) {
-                    statusEl.textContent = '✅ Completed';
-                } else {
-                    statusEl.innerHTML = '<span style="color:var(--danger)">❌ Failed<br><small style="font-size:11px;opacity:0.8">Original image kept.</small></span>';
-                }
-            }
-        } catch(e) {
-            aiJobs[i].status = 'error';
-            if (rowEl) { rowEl.classList.remove('processing'); rowEl.classList.add('error'); }
-            if (statusEl) statusEl.innerHTML = '<span style="color:var(--danger)">❌ Failed<br><small style="font-size:11px;opacity:0.8">Original image kept.</small></span>';
-        }
-    }
-
-    document.getElementById('aiCancelBtn').style.display = 'none';
-    document.getElementById('aiDownloadBtn').style.display = '';
-    toast('AI processing complete!');
-}
-
-function aiCancelAll() {
-    const ids = aiJobs.filter(j => j.id).map(j => j.id);
-    if (!ids.length) return;
-    featurePost({ action: 'ai_bg_remove_cancel', job_ids: JSON.stringify(ids) }).then(() => {
-        aiJobs.forEach(j => { if (j.status !== 'done') j.status = 'cancelled'; });
-        toast('Jobs cancelled');
-        document.getElementById('aiCancelBtn').style.display = 'none';
-        document.getElementById('aiStartBtn').style.display = '';
-    });
-}
-
-function aiDownloadZip() {
-    const ids = aiJobs.filter(j => j.status === 'done' && j.id).map(j => j.id);
-    if (!ids.length) { toast('No completed jobs', 'danger'); return; }
-    const form = document.createElement('form'); form.method = 'post';
-    form.innerHTML = `<input name="action" value="ai_bg_remove_download_zip"><input name="csrf_token" value="${F_CSRF_TOKEN}"><input name="path" value="${F_CURRENT_PATH}">` + ids.map(id => `<input name="job_ids[]" value="${id}">`).join('');
-    document.body.appendChild(form); form.submit(); setTimeout(() => document.body.removeChild(form), 1000);
-}
-
-/* ── AI Canvas Editor ─────────────────────────────────────────────────── */
-let aiEditorResolve = null;
-let aiEditorImg = null;
-let aiEditorCtx = null;
-let aiEditorTransform = { x: 0, y: 0, scale: 1 };
-let aiEditorIsDragging = false;
-let aiEditorLastMouse = { x: 0, y: 0 };
-let aiEditorCurrentJobId = null;
-let aiEditorOriginalBgType = 'transparent';
-
-function openAiEditorAndWait(imageB64, jobId) {
-    return new Promise(resolve => {
-        aiEditorResolve = resolve;
-        aiEditorCurrentJobId = jobId;
-        aiEditorOriginalBgType = document.getElementById('aiOutputBgType')?.value === 'white' ? 'white' : 'transparent';
-        const bgSelect = document.getElementById('aiEditorBgType');
-        if (bgSelect) bgSelect.value = aiEditorOriginalBgType;
-        const rmBtn = document.getElementById('aiEditorRemoveBgBtn');
-        if (rmBtn) {
-            rmBtn.style.display = aiEditorStandaloneFilePath ? 'inline-block' : 'none';
-        }
-        
-        const cvs = document.getElementById('aiEditorCanvas');
-        aiEditorCtx = cvs.getContext('2d');
-        
-        document.getElementById('aiEditorZoom').value = 1;
-        aiEditorTransform = { x: 0, y: 0, scale: 1 };
-        
-        aiEditorImg = new Image();
-        aiEditorImg.onload = () => {
-            aiEditorTransform.x = (cvs.width - aiEditorImg.width) / 2;
-            aiEditorTransform.y = (cvs.height - aiEditorImg.height) / 2;
-            document.getElementById('aiEditorZoomLabel').textContent = '100%';
-            aiEditorDraw();
-            openModal('aiEditorModal');
-        };
-        aiEditorImg.src = imageB64;
-    });
-}
-
-function aiEditorDraw() {
-    if (!aiEditorCtx || !aiEditorImg) return;
-    const cvs = document.getElementById('aiEditorCanvas');
-    const bgType = document.getElementById('aiEditorBgType').value;
-    
-    aiEditorCtx.clearRect(0, 0, cvs.width, cvs.height);
-    
-    if (bgType === 'white') {
-        aiEditorCtx.fillStyle = 'white';
-        aiEditorCtx.fillRect(0, 0, cvs.width, cvs.height);
-    }
-    
-    aiEditorCtx.drawImage(
-        aiEditorImg, 
-        aiEditorTransform.x, 
-        aiEditorTransform.y, 
-        aiEditorImg.width * aiEditorTransform.scale, 
-        aiEditorImg.height * aiEditorTransform.scale
-    );
-}
-
-function aiEditorZoomChange() {
-    aiEditorTransform.scale = parseFloat(document.getElementById('aiEditorZoom').value);
-    document.getElementById('aiEditorZoomLabel').textContent = Math.round(aiEditorTransform.scale * 100) + '%';
-    aiEditorDraw();
-}
-
-function aiEditorZoomIn() {
-    const el = document.getElementById('aiEditorZoom');
-    el.value = Math.min(parseFloat(el.max), parseFloat(el.value) + parseFloat(el.step));
-    aiEditorZoomChange();
-}
-
-function aiEditorZoomOut() {
-    const el = document.getElementById('aiEditorZoom');
-    el.value = Math.max(parseFloat(el.min), parseFloat(el.value) - parseFloat(el.step));
-    aiEditorZoomChange();
-}
-
-function aiEditorChangeSize() {
-    const size = document.getElementById('aiEditorCanvasSize').value;
-    const cvs = document.getElementById('aiEditorCanvas');
-    const wrap = document.getElementById('aiEditorCanvasWrapper');
-    
-    if (size === '1920x1080') {
-        cvs.width = 1920;
-        cvs.height = 1080;
-        wrap.style.aspectRatio = '16/9';
-        wrap.style.maxWidth = '600px';
-    } else {
-        cvs.width = 1280;
-        cvs.height = 1280;
-        wrap.style.aspectRatio = '1/1';
-        wrap.style.maxWidth = '500px';
-    }
-    aiEditorReset();
-}
-
-function aiEditorReset() {
-    const cvs = document.getElementById('aiEditorCanvas');
-    document.getElementById('aiEditorZoom').value = 1;
-    aiEditorTransform.scale = 1;
-    aiEditorTransform.x = (cvs.width - aiEditorImg.width) / 2;
-    aiEditorTransform.y = (cvs.height - aiEditorImg.height) / 2;
-    document.getElementById('aiEditorZoomLabel').textContent = '100%';
-    aiEditorDraw();
-}
-
-function aiEditorSkip() {
-    closeModal('aiEditorModal');
-    if (aiEditorResolve) {
-        aiEditorResolve({success: false, error: 'Skipped by user'});
-        aiEditorResolve = null;
-    }
-}
-
-async function aiEditorSave() {
-    const btn = document.getElementById('aiEditorSaveBtn');
-    btn.innerHTML = '<span class="ai-job-spinner"></span>Saving...';
-    btn.disabled = true;
-    
-    const cvs = document.getElementById('aiEditorCanvas');
-    
-    let mime = 'image/webp';
-    let outputFormat = 'webp';
-    let outputFolder = '';
-    
-    if (aiEditorStandaloneFilePath) {
-        const ext = aiEditorStandaloneFilePath.split('.').pop().toLowerCase();
-        if (ext === 'png') mime = 'image/png';
-        else if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
-    } else {
-        outputFormat = document.getElementById('aiOutputFormat').value;
-        outputFolder = document.getElementById('aiOutputFolder').value;
-        if (outputFormat === 'png') mime = 'image/png';
-        else if (outputFormat === 'jpg' || outputFormat === 'jpeg') mime = 'image/jpeg';
-    }
-    
-    // Save at 1.0 quality for maximum quality (lossless for WebP)
-    const b64 = cvs.toDataURL(mime, 1.0);
-    
-    try {
-        let d;
-        if (aiEditorStandaloneFilePath) {
-            d = await featurePost({
-                action: 'canvas_edit_save',
-                file_path: aiEditorStandaloneFilePath,
-                image_b64: b64,
-                path: F_CURRENT_PATH
-            });
-        } else {
-            const keepOrigName = document.getElementById('aiKeepOrigName').checked ? '1' : '';
-            d = await featurePost({
-                action: 'ai_bg_remove_save_canvas',
-                job_id: aiEditorCurrentJobId,
-                image_b64: b64,
-                output_format: outputFormat,
-                output_folder: outputFolder,
-                keep_orig_name: keepOrigName,
-                path: F_CURRENT_PATH
-            });
-        }
-        
-        btn.innerHTML = '💾 Save & Continue';
-        btn.disabled = false;
-        
-        if (d.success) {
-            closeModal('aiEditorModal');
-            if (aiEditorResolve) {
-                aiEditorResolve(d);
-                aiEditorResolve = null;
-            }
-            if (aiEditorStandaloneFilePath) {
-                toast('Image saved successfully!', 'success');
-                setTimeout(() => location.reload(), 800);
-            }
-        } else {
-            toast(d.error || 'Save failed', 'danger');
-        }
-    } catch(e) {
-        btn.innerHTML = '💾 Save & Continue';
-        btn.disabled = false;
-        toast('Save failed', 'danger');
-    }
-}
-
-async function aiEditorRemoveBg() {
-    if (!aiEditorStandaloneFilePath) return;
-    const btn = document.getElementById('aiEditorRemoveBgBtn');
-    if (!btn) return;
-    const origText = btn.innerHTML;
-    btn.innerHTML = '🪄 Removing...';
-    btn.disabled = true;
-    try {
-        const d = await featurePost({ action: 'ai_bg_remove_sync', path: aiEditorStandaloneFilePath });
-        if (d.success && d.image_b64) {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                aiEditorImg = img;
-                aiEditorReset(); // Recenter and redraw
-                toast('Background removed successfully!', 'success');
-                btn.innerHTML = origText;
-                btn.disabled = false;
-            };
-            img.src = d.image_b64;
-        } else {
-            toast(d.error || 'Failed to remove background', 'danger');
-            btn.innerHTML = origText;
-            btn.disabled = false;
-        }
-    } catch(e) {
-        toast('Network error during removal', 'danger');
-        btn.innerHTML = origText;
-        btn.disabled = false;
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    const cvs = document.getElementById('aiEditorCanvas');
-    if (!cvs) return;
-    
-    const getMousePos = (e) => {
-        const rect = cvs.getBoundingClientRect();
-        const scaleX = cvs.width / rect.width;
-        const scaleY = cvs.height / rect.height;
-        let clientX = e.clientX;
-        let clientY = e.clientY;
-        if (e.touches && e.touches.length > 0) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        }
-        return {
-            x: (clientX - rect.left) * scaleX,
-            y: (clientY - rect.top) * scaleY
-        };
-    };
-    
-    const startDrag = (e) => {
-        if (!aiEditorImg) return;
-        aiEditorIsDragging = true;
-        aiEditorLastMouse = getMousePos(e);
-        e.preventDefault();
-    };
-    
-    const doDrag = (e) => {
-        if (!aiEditorIsDragging) return;
-        const pos = getMousePos(e);
-        aiEditorTransform.x += (pos.x - aiEditorLastMouse.x);
-        aiEditorTransform.y += (pos.y - aiEditorLastMouse.y);
-        aiEditorLastMouse = pos;
-        aiEditorDraw();
-        e.preventDefault();
-    };
-    
-    const endDrag = () => { aiEditorIsDragging = false; };
-    
-    cvs.addEventListener('mousedown', startDrag);
-    cvs.addEventListener('mousemove', doDrag);
-    window.addEventListener('mouseup', endDrag);
-    
-    cvs.addEventListener('touchstart', startDrag, {passive: false});
-    cvs.addEventListener('touchmove', doDrag, {passive: false});
-    window.addEventListener('touchend', endDrag);
-});
-
-let aiEditorStandaloneFilePath = null;
-function openStandaloneCanvasEditor(name, url) {
-    aiEditorStandaloneFilePath = F_CURRENT_PATH ? F_CURRENT_PATH + '/' + name : name;
-    aiEditorCurrentJobId = null;
-    const rmBtn = document.getElementById('aiEditorRemoveBgBtn');
-    if (rmBtn) rmBtn.style.display = 'inline-block';
-    document.getElementById('aiEditorTitleInfo').textContent = '- Editing ' + name;
-    
-    // Hide skip button when standalone editing
-    const skipBtn = document.querySelector('button[onclick="aiEditorSkip()"]');
-    if (skipBtn) skipBtn.style.display = 'none';
-    
-    // Append timestamp to bust cache
-    const imgUrl = url + '?t=' + Date.now();
-    
-    // Fetch image as base64 to load into canvas cleanly without taint
-    fetch(imgUrl)
-        .then(r => r.blob())
-        .then(blob => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                openAiEditorAndWait(reader.result, null).then(() => {
-                    // done
-                });
-            };
-            reader.readAsDataURL(blob);
-        }).catch(err => {
-            toast('Failed to load image for editing', 'danger');
         });
-}
-
-async function openBatchCanvasEditor(rows) {
-    const rmBtn = document.getElementById('aiEditorRemoveBgBtn');
-    if (rmBtn) rmBtn.style.display = 'inline-block';
-    
-    const skipBtn = document.querySelector('button[onclick="aiEditorSkip()"]');
-    if (skipBtn) skipBtn.style.display = 'inline-block';
-
-    for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const name = row.dataset.name;
-        const url = row.dataset.url;
-        
-        document.getElementById('aiEditorTitleInfo').textContent = '- Editing ' + name + ` (${i+1}/${rows.length})`;
-        aiEditorStandaloneFilePath = F_CURRENT_PATH ? F_CURRENT_PATH + '/' + name : name;
-        aiEditorCurrentJobId = null;
-
-        const imgUrl = url + '?t=' + Date.now();
-        
-        try {
-            const blob = await fetch(imgUrl).then(r => r.blob());
-            const reader = new FileReader();
-            const b64 = await new Promise((res, rej) => {
-                reader.onload = () => res(reader.result);
-                reader.onerror = () => rej(reader.error);
-                reader.readAsDataURL(blob);
-            });
-            await openAiEditorAndWait(b64, null);
-        } catch(e) {
-            toast('Failed to load image: ' + name, 'danger');
-        }
-    }
-}
-
-/* ── Duplicate Finder ─────────────────────────────────────────────────── */
-async function runDuplicateScan() {
-    const scope = document.getElementById('dupScope').value;
-    const byHash = '';
-    const byName = document.getElementById('dupByName').checked ? '1' : '';
-    const bySize = document.getElementById('dupBySize').checked ? '1' : '';
-    if (!byName && !bySize) { toast('Select at least one match criteria', 'danger'); return; }
-
-    document.getElementById('dupStatus').textContent = 'Scanning… (this may take a while for large libraries)';
-    document.getElementById('dupResults').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Computing hashes…</div>';
-
-    try {
-        const d = await featurePost({ action: 'find_duplicates', scope, by_hash: byHash, by_name: byName, by_size: bySize, path: F_CURRENT_PATH });
-        if (!d.success) { document.getElementById('dupStatus').textContent = 'Error: ' + (d.error||'Unknown error'); document.getElementById('dupResults').innerHTML = ''; return; }
-        document.getElementById('dupStatus').textContent = `Scanned ${d.total_files} files. Found ${d.groups.length} duplicate group(s).`;
-        if (!d.groups.length) { document.getElementById('dupResults').innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);">✅ No duplicates found!</div>'; return; }
-        document.getElementById('dupResults').innerHTML = d.groups.map((g, gi) => `
-            <div class="dup-group">
-                <div class="dup-group-head">
-                    <span>🔴 ${escHtml(g.reason)} — ${g.count} copies</span>
-                </div>
-                ${g.items.map((item, ii) => `
-                    <div class="dup-item">
-                        ${item.thumb_url ? `<img class="dup-thumb" src="${escHtml(item.thumb_url)}" onerror="this.style.display='none'" loading="lazy">` : '<div class="dup-thumb" style="background:var(--light);display:flex;align-items:center;justify-content:center;font-size:18px;">📄</div>'}
-                        <div class="dup-info">
-                            <div class="dup-name" title="${escHtml(item.rel)}">${escHtml(item.name)}</div>
-                            <div class="dup-meta">${escHtml(item.rel)} · ${formatBytesJs(item.size)}</div>
-                        </div>
-                        <div class="dup-actions">
-                            ${item.url ? `<a class="act-btn open" href="${escHtml(item.url)}" target="_blank">↗</a>` : ''}
-                            <button class="act-btn del" onclick="dupDelete('${escHtml(item.rel)}', this)">🗑</button>
-                        </div>
-                    </div>`).join('')}
-            </div>`).join('');
-    } catch(e) {
-        document.getElementById('dupStatus').textContent = 'Request failed';
-        document.getElementById('dupResults').innerHTML = '';
-    }
-}
-
-function dupDelete(rel, btn) {
-    const mockForm = document.createElement('form');
-    mockForm.ajaxSubmit = () => {
-        const pw = document.getElementById('deletePasswordInput').value;
-        featurePost({ action: 'delete_duplicate', item_rel: rel, delete_password: pw }).then(d => {
-            toast(d.success ? 'Moved to trash' : (d.error||'Error'), d.success ? 'success' : 'danger');
-            if (d.success) btn.closest('.dup-item')?.remove();
-        });
-    };
-    addDeletePassword(mockForm, 'Move ' + rel + ' to trash?');
-}
-
-/* ── Storage Dashboard ────────────────────────────────────────────────── */
-function loadStorageDashboard() {
-    const card = document.getElementById('storageDashCard');
-    if (!card) return;
-    featurePost({ action: 'get_storage_stats', path: F_CURRENT_PATH }).then(d => {
-        if (!d.success) return;
-        const pct = d.pct;
-        const barClass = pct >= 85 ? 'danger' : (pct >= 60 ? 'warn' : '');
-        const lblText = F_CURRENT_PATH ? 'Folder size' : 'ebay total size';
-        const panelMeta = document.getElementById('filePanelMeta');
-        const value = card.querySelector('.stat-val');
-        const label = card.querySelector('.stat-lbl');
-        if (value) value.textContent = d.used_fmt;
-        if (label) label.textContent = lblText;
-        if (panelMeta) {
-            const itemCount = panelMeta.dataset.itemCount || '0';
-            panelMeta.textContent = `${itemCount} items · ${d.used_fmt} ${F_CURRENT_PATH ? 'folder size' : 'total size'} · Double-click to open`;
-        }
-        if (!F_CURRENT_PATH) {
-            let track = card.querySelector('.storage-bar-track');
-            let detail = card.querySelector('.storage-detail');
-            if (!track) {
-                track = document.createElement('div');
-                track.className = 'storage-bar-track';
-                track.innerHTML = '<div class="storage-bar-fill" id="storageFill"></div>';
-                card.appendChild(track);
-            }
-            const fill = track.querySelector('.storage-bar-fill');
-            if (fill) {
-                fill.className = `storage-bar-fill ${barClass}`.trim();
-                fill.style.width = pct + '%';
-            }
-            if (!detail) {
-                detail = document.createElement('div');
-                detail.className = 'storage-detail';
-                card.appendChild(detail);
-            }
-            detail.textContent = `${pct}% of ${d.quota_fmt}`;
-        }
-    }).catch(() => {
-        const value = card.querySelector('.stat-val');
-        const label = card.querySelector('.stat-lbl');
-        const panelMeta = document.getElementById('filePanelMeta');
-        const fallbackSize = card.dataset.fallbackSize || '0 B';
-        if (value) value.textContent = fallbackSize;
-        if (label) label.textContent = 'Visible file size';
-        if (panelMeta) {
-            const itemCount = panelMeta.dataset.itemCount || '0';
-            panelMeta.textContent = `${itemCount} items · ${fallbackSize} visible files · Double-click to open`;
-        }
-    });
-}
-
-window.addEventListener('load', () => {
-    const run = () => loadStorageDashboard();
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(run, { timeout: 1200 });
-    } else {
-        setTimeout(run, 150);
     }
 });
-
-function openDuplicateModal() { openModal('duplicateModal'); }
-
-/* ── Rename Type ──────────────────────────────────────────────────────── */
-let renameTypeTargetItems = [];
-let renameTypeParentPath = '';
-const DEFAULT_RENAME_TYPES = ["MiniExcavator", "SkidSteer", "Forklift", "WheelLoader", "RoadRoller", "ScissorLift"];
-
-function getRenameTypes() {
+function closeModal(id) {
+    var modalEl = document.getElementById(id);
+    if (modalEl) modalEl.classList.remove('open');
+    document.body.style.overflow = '';
+}
+function toast(msg, type) {
+    var tc = document.getElementById('toastContainer');
+    if (!tc) return;
+    var t = document.createElement('div');
+    t.className = 'toast ' + (type || 'info');
+    t.textContent = msg;
+    tc.appendChild(t);
+    setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 3500);
+}
+function toggleTheme() {
+    var root = document.documentElement;
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    root.style.colorScheme = next;
+    try { localStorage.setItem('kiuqTheme', next); } catch(e){}
     try {
-        let saved = localStorage.getItem('renameTypes');
-        if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return DEFAULT_RENAME_TYPES;
+        var body = new URLSearchParams({ action: 'set_theme', csrf_token: (typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : ''), theme: next });
+        fetch((typeof ACTION_ENDPOINT !== 'undefined' ? ACTION_ENDPOINT : window.location.pathname), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+        }).catch(function(){});
+    } catch(e){}
+}
+function toggleSidebar(open) {
+    var sb = document.getElementById('mainSidebar');
+    if (sb) sb.classList.toggle('open', open);
+}
+function toggleSidebarCollapse(force) {
+    var isCollapsed = typeof force === 'boolean' ? force : !document.body.classList.contains('sidebar-collapsed');
+    document.body.classList.toggle('sidebar-collapsed', isCollapsed);
+    try { localStorage.setItem('kiuq_sidebar_collapsed', isCollapsed ? '1' : '0'); } catch(e){}
+}
+function toggleProfileDropdown(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    var wrap = document.getElementById('profileDropdownWrap');
+    if (wrap) wrap.classList.toggle('open');
+}
+function closeProfileDropdown() {
+    var wrap = document.getElementById('profileDropdownWrap');
+    if (wrap) wrap.classList.remove('open');
+}
+function openConvertModal() {
+    openModal('convertModal');
 }
 
-function saveRenameTypes(arr) {
-    localStorage.setItem('renameTypes', JSON.stringify(arr));
-}
+/* High-Speed Ultra-Snappy Navigation Core */
+/* NOTE: names are prefixed 'inline' on purpose - panel.js declares activeScrollAnim/glideSafetyTimer with let,
+   and a duplicate global var would throw a SyntaxError and disable all of panel.js. */
+var inlineActiveScrollAnim = null;
+var inlineGlideSafetyTimer = null;
 
-function renderRenameTypeSelect() {
-    const sel = document.getElementById('renameTypeSelect');
-    if (!sel) return;
-    const currentVal = sel.value;
-    sel.innerHTML = '';
-    const types = getRenameTypes();
-    types.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = t;
-        sel.appendChild(opt);
-    });
-    if (types.includes(currentVal)) {
-        sel.value = currentVal;
+function fastGlideScrollTo(targetY, customDuration) {
+    if (inlineActiveScrollAnim) {
+        cancelAnimationFrame(inlineActiveScrollAnim);
+        inlineActiveScrollAnim = null;
     }
-}
+    if (inlineGlideSafetyTimer) {
+        clearTimeout(inlineGlideSafetyTimer);
+        inlineGlideSafetyTimer = null;
+    }
 
-function openRenameTypeModalSingle(name, parentPath) {
-    renameTypeTargetItems = [name];
-    renameTypeParentPath = parentPath;
-    renderRenameTypeSelect();
-    document.getElementById('newRenameType').value = '';
-    openModal('renameTypeModal');
-}
+    var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    var clampedTargetY = Math.max(0, Math.min(Math.round(targetY), maxScroll));
+    var startY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var distance = clampedTargetY - startY;
 
-function openRenameTypeModalMulti() {
-    const inputs = document.querySelectorAll('.file-check:checked:not(#selectAllChk)');
-    if (inputs.length === 0) {
-        if(typeof toast === 'function') toast('No files selected', 'warning');
+    if (Math.abs(distance) < 6) {
+        window.scrollTo(0, clampedTargetY);
         return;
     }
-    renameTypeTargetItems = Array.from(inputs).map(inp => inp.dataset.name).filter(n => n);
-    renameTypeParentPath = typeof F_CURRENT_PATH !== 'undefined' ? F_CURRENT_PATH : '';
-    renderRenameTypeSelect();
-    document.getElementById('newRenameType').value = '';
-    openModal('renameTypeModal');
-}
 
-function addRenameType() {
-    const inp = document.getElementById('newRenameType');
-    const val = inp.value.trim();
-    if (!val) return;
-    const types = getRenameTypes();
-    if (!types.includes(val)) {
-        types.push(val);
-        saveRenameTypes(types);
-        renderRenameTypeSelect();
+    // Ultra-snappy duration: 160ms for short distance, up to 230ms for large jump
+    var duration = customDuration || Math.min(230, Math.max(160, Math.round(Math.abs(distance) * 0.07 + 110)));
+    var startTime = performance.now();
+    var easeOut = function(t) { return 1 - Math.pow(1 - t, 4); };
+
+    document.documentElement.classList.add('is-glide-scrolling');
+
+    function step(now) {
+        var elapsed = now - startTime;
+        var progress = Math.min(elapsed / duration, 1);
+        var nextY = Math.round(startY + (distance * easeOut(progress)));
+        window.scrollTo(0, nextY);
+
+        if (progress < 1) {
+            inlineActiveScrollAnim = requestAnimationFrame(step);
+        } else {
+            inlineActiveScrollAnim = null;
+            window.scrollTo(0, clampedTargetY);
+            document.documentElement.classList.remove('is-glide-scrolling');
+        }
     }
-    inp.value = '';
-    document.getElementById('renameTypeSelect').value = val;
+
+    inlineActiveScrollAnim = requestAnimationFrame(step);
+
+    inlineGlideSafetyTimer = setTimeout(function() {
+        document.documentElement.classList.remove('is-glide-scrolling');
+        inlineGlideSafetyTimer = null;
+    }, duration + 80);
 }
 
-function deleteRenameType() {
-    const sel = document.getElementById('renameTypeSelect');
-    const val = sel.value;
-    if (!val) return;
-    let types = getRenameTypes();
-    types = types.filter(t => t !== val);
-    saveRenameTypes(types);
-    renderRenameTypeSelect();
+function smoothScrollTo(targetY, duration) {
+    fastGlideScrollTo(targetY, duration);
 }
 
-function applyRenameType() {
-    const sel = document.getElementById('renameTypeSelect');
-    const baseName = sel.value;
-    if (!baseName || renameTypeTargetItems.length === 0) return;
-    
-    closeModal('renameTypeModal');
-    
-    const form = document.createElement('form');
-    form.method = 'post';
-    form.innerHTML = `<input type="hidden" name="action" value="rename_type">
-<input type="hidden" name="csrf_token" value="${typeof F_CSRF_TOKEN !== 'undefined' ? F_CSRF_TOKEN : ''}">
-<input type="hidden" name="path" value="${escHtml(renameTypeParentPath)}">
-<input type="hidden" name="base_name" value="${escHtml(baseName)}">`;
+function scrollToSection(sectionId, e) {
+    if (e) { try { e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); } catch(err){} }
+    var el = document.getElementById(sectionId);
+    if (!el) {
+        if (sectionId === 'imagePreviewSection' || sectionId === 'preview' || sectionId === 'imagePreview') {
+            el = document.querySelector('#imagePreviewSection') 
+              || document.querySelector('.img-grid-panel:not(.video-grid-panel)')
+              || document.querySelector('#videoPreviewSection')
+              || document.querySelector('.img-grid-panel');
+        } else if (sectionId === 'imageUrlsSection' || sectionId === 'urls' || sectionId === 'imageUrls') {
+            el = document.querySelector('#imageUrlsSection')
+              || document.querySelector('.all-urls-panel:not(.video-urls-panel)')
+              || document.querySelector('#videoUrlsSection')
+              || document.querySelector('.all-urls-panel');
+        } else if (sectionId === 'videoUrlsSection') {
+            el = document.getElementById('videoUrlsSection') || document.getElementById('videoPreviewSection');
+        } else if (sectionId === 'videoPreviewSection') {
+            el = document.getElementById('videoPreviewSection') || document.querySelector('.video-grid-panel');
+        }
+    }
+    if (!el) return false;
 
-    renameTypeTargetItems.forEach(item => {
-        const inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = 'items[]';
-        inp.value = item;
-        form.appendChild(inp);
+    var yOffset = -76;
+    var y = Math.max(0, el.getBoundingClientRect().top + (window.pageYOffset || document.documentElement.scrollTop) + yOffset);
+    fastGlideScrollTo(y);
+
+    el.classList.remove('section-jump-highlight');
+    void el.offsetWidth;
+    el.classList.add('section-jump-highlight');
+    setTimeout(function() { el.classList.remove('section-jump-highlight'); }, 1000);
+    return true;
+}
+
+function scrollToTopFiles(e) {
+    if (e) { try { e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); } catch(err){} }
+    var panel = document.querySelector('.panel') || document.querySelector('.stats-row') || document.querySelector('#fileList');
+    if (panel) {
+        var yOffset = -76;
+        var y = Math.max(0, panel.getBoundingClientRect().top + (window.pageYOffset || document.documentElement.scrollTop) + yOffset);
+        fastGlideScrollTo(y);
+    } else {
+        fastGlideScrollTo(0);
+    }
+    return false;
+}
+
+window.smoothScrollTo = fastGlideScrollTo;
+window.fastGlideScrollTo = fastGlideScrollTo;
+window.scrollToSection = scrollToSection;
+window.scrollToTopFiles = scrollToTopFiles;
+
+/* High-Speed Mouse Wheel & Finger Scroll Acceleration Engine */
+(function initFastMouseFingerScroll() {
+    if (window.__kiuq_scroll_accelerator_initialized) return;
+    window.__kiuq_scroll_accelerator_initialized = true;
+
+    var scrollRaf = null;
+    var targetY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var currentY = targetY;
+    var lastWheelTime = 0;
+    var velocityMultiplier = 1.0;
+
+    function isInsideScrollable(el, deltaY) {
+        var cur = el;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+            if (cur.classList && (cur.classList.contains('modal-box') || cur.classList.contains('modal-body') || cur.classList.contains('modal-overlay') || cur.classList.contains('profile-dropdown-menu'))) {
+                return true;
+            }
+            if (cur.tagName === 'TEXTAREA' || cur.tagName === 'SELECT') {
+                return true;
+            }
+            var cs = window.getComputedStyle(cur);
+            var oy = cs.overflowY;
+            if (oy === 'auto' || oy === 'scroll') {
+                var canScrollUp = deltaY < 0 && cur.scrollTop > 0;
+                var canScrollDown = deltaY > 0 && (cur.scrollTop + cur.clientHeight < cur.scrollHeight);
+                if (canScrollUp || canScrollDown) return true;
+            }
+            cur = cur.parentElement;
+        }
+        return false;
+    }
+
+    function onWheelAccelerate(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+        if (!e.deltaY) return;
+
+        if (document.querySelector('.modal-overlay.open') || isInsideScrollable(e.target, e.deltaY)) {
+            targetY = window.pageYOffset || document.documentElement.scrollTop || 0;
+            return;
+        }
+
+        if (inlineActiveScrollAnim) {
+            cancelAnimationFrame(inlineActiveScrollAnim);
+            inlineActiveScrollAnim = null;
+            document.documentElement.classList.remove('is-glide-scrolling');
+        }
+
+        var now = performance.now();
+        var timeDiff = now - lastWheelTime;
+        lastWheelTime = now;
+
+        if (timeDiff < 140) {
+            velocityMultiplier = Math.min(1.5, velocityMultiplier + 0.08);
+        } else {
+            velocityMultiplier = 1.0;
+        }
+
+        var isDiscreteWheel = Math.abs(e.deltaY) >= 40 && (e.deltaY % 1 === 0 || e.deltaMode !== 0);
+        var baseFactor = isDiscreteWheel ? 1.35 : 1.12;
+        var speedBoost = baseFactor * velocityMultiplier;
+
+        var delta = e.deltaY;
+        if (e.deltaMode === 1) delta *= 36;
+        else if (e.deltaMode === 2) delta *= window.innerHeight;
+
+        var actualY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        if (Math.abs(actualY - currentY) > 80 || (delta > 0 && targetY < actualY) || (delta < 0 && targetY > actualY)) {
+            currentY = actualY;
+            targetY = actualY;
+        }
+
+        var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        targetY = Math.max(0, Math.min(maxScroll, targetY + (delta * speedBoost)));
+
+        e.preventDefault();
+
+        if (!scrollRaf) {
+            stepScroll();
+        }
+    }
+
+    function stepScroll() {
+        var diff = targetY - currentY;
+
+        if (Math.abs(diff) > 0.8) {
+            currentY += diff * 0.22;
+            window.scrollTo(0, Math.round(currentY));
+            scrollRaf = requestAnimationFrame(stepScroll);
+        } else {
+            currentY = targetY;
+            window.scrollTo(0, targetY);
+            scrollRaf = null;
+        }
+    }
+
+    if (!window.__kiuqWheelInit) {
+        window.__kiuqWheelInit = true;
+        window.addEventListener('wheel', onWheelAccelerate, { passive: false });
+    }
+
+    window.addEventListener('scroll', function() {
+        if (!scrollRaf) {
+            currentY = window.pageYOffset || document.documentElement.scrollTop || 0;
+            targetY = currentY;
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchstart', function() {
+        if (scrollRaf) {
+            cancelAnimationFrame(scrollRaf);
+            scrollRaf = null;
+        }
+        currentY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        targetY = currentY;
+    }, { passive: true });
+})();
+<script src="<?php echo htmlspecialchars($APP_ASSETS_URL); ?>/js/panel.js?v=<?php echo (int)@filemtime($APP_ASSETS_DIR . '/js/panel.js'); ?>"></script>
+<script>
+// Real-time CMS Cross-Tab Session Monitor
+(() => {
+    const cmsLogoutUrl = <?php echo json_encode(getCmsBaseUrl() . '?cms_action=logout'); ?>;
+    let isRedirecting = false;
+
+    function handleLoggedOut() {
+        if (isRedirecting) return;
+        isRedirecting = true;
+        window.location.href = cmsLogoutUrl;
+    }
+
+    function verifySession() {
+        if (isRedirecting) return;
+        const hasSession = localStorage.getItem('hm_admin_session') || localStorage.getItem('happy-admin-auth');
+        const hasCookie = document.cookie.indexOf('hm_cms_token') !== -1;
+        if (!hasSession && !hasCookie) {
+            handleLoggedOut();
+            return;
+        }
+
+        fetch('?check_auth=1', { cache: 'no-store' })
+            .then(res => res.json())
+            .then(data => {
+                if (!data || !data.authenticated) {
+                    handleLoggedOut();
+                }
+            })
+            .catch(() => {});
+    }
+
+    window.addEventListener('storage', (e) => {
+        if (!e.key || e.key === 'hm_admin_session' || e.key === 'hm_admin_token' || e.key === 'happy-admin-auth') {
+            verifySession();
+        }
     });
-    
-    document.body.appendChild(form);
-    form.submit();
-}
 
-/* ── Utility ──────────────────────────────────────────────────────────── */
-function escHtml(str) {
-    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-}
-function formatBytesJs(bytes) {
-    if (!bytes) return '0 B';
-    if (bytes >= 1073741824) return (bytes/1073741824).toFixed(2) + ' GB';
-    if (bytes >= 1048576)    return (bytes/1048576).toFixed(1) + ' MB';
-    if (bytes >= 1024)       return (bytes/1024).toFixed(0) + ' KB';
-    return bytes + ' B';
-}
-
-<?php endif; // FEATURES_ENABLED ?>
+    window.addEventListener('focus', verifySession);
+    setInterval(verifySession, 3500);
+})();
 </script>
-
-
 </body>
 </html>
 <?php

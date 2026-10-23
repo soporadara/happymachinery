@@ -187,7 +187,7 @@ export default function YoutubeNodeView({
 
   return (
     <NodeViewWrapper 
-      className="relative my-8 group/yt select-none"
+      className="tw-scope relative my-8 group/yt select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

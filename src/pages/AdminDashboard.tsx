@@ -26,6 +26,7 @@ import {
   Inquiry,
   BlogComment,
   CartOrder,
+  getUserProfileAvatar,
   DEFAULT_POSTS, 
   DEFAULT_PRODUCTS, 
   DEFAULT_MEDIA
@@ -513,6 +514,13 @@ export default function AdminDashboard() {
 
   // Authentication State
   const [currentUser, setCurrentUser] = useState<AdminUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      const search = window.location.search
+      if (search.includes('cms_action=logout') || search.includes('action=logout') || search.includes('logged_out=1')) {
+        clearStoredSession()
+        return null
+      }
+    }
     const session = getStoredSession()
     return session?.user || null
   })
@@ -1203,13 +1211,16 @@ export default function AdminDashboard() {
   const [youtubeModalTitle, setYoutubeModalTitle] = useState('')
   const [savedCursorPos, setSavedCursorPos] = useState<{ start: number; end: number } | null>(null)
   const [editorCategory, setEditorCategory] = useState('Jobsite Productivity')
-  const [editorAuthor, setEditorAuthor] = useState('Happy Machinery')
   const [editorStatus, setEditorStatus] = useState<'Published' | 'Draft' | 'Scheduled'>('Draft')
   const [editorCoverImage, setEditorCoverImage] = useState('')
   const [editorCoverAlt, setEditorCoverAlt] = useState('')
   const [editorVideoUrl, setEditorVideoUrl] = useState('')
   const [editorSeoTitle, setEditorSeoTitle] = useState('')
   const [editorSeoDesc, setEditorSeoDesc] = useState('')
+  const [editorScheduledAt, setEditorScheduledAt] = useState('')
+  const [editorBreaking, setEditorBreaking] = useState(false)
+  const [editorBreakingUntil, setEditorBreakingUntil] = useState('')
+  const [breakingMode, setBreakingMode] = useState<'forever' | 'until_date'>('forever')
 
   // Rich WYSIWYG & Media Editor States (Matches Image 2)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1352,9 +1363,14 @@ export default function AdminDashboard() {
   // Media Library Fullscreen & Multi-Select States
   const [isMediaFullScreen, setIsMediaFullScreen] = useState(false)
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([])
-  const mediaStandaloneUrl = typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}${window.location.port && window.location.port !== '5173' && window.location.port !== '5174' && window.location.port !== '5175' ? `:${window.location.port}` : ''}/happymachinery/Media_Library/medialibrary.php`
-    : 'http://localhost/happymachinery/Media_Library/medialibrary.php'
+  const getMediaStandaloneUrl = () => {
+    const session = getStoredSession()
+    const token = session?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('hm_admin_token') : '') || ''
+    const base = typeof window !== 'undefined'
+      ? `${window.location.protocol}//${window.location.hostname}${window.location.port && !['5173', '5174', '5175', '5176', '3000'].includes(window.location.port) ? `:${window.location.port}` : ''}/happymachinery/Media_Library/medialibrary.php`
+      : 'http://localhost/happymachinery/Media_Library/medialibrary.php'
+    return token ? `${base}?cms_token=${encodeURIComponent(token)}` : base
+  }
 
   const handleSelectAllMedia = (e: React.ChangeEvent<HTMLInputElement>, list: MediaItem[]) => {
     if (e.target.checked) {
@@ -1833,10 +1849,46 @@ export default function AdminDashboard() {
   }
 
   const handleLogout = async () => {
+    const session = getStoredSession()
+    const token = session?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('hm_admin_token') : '') || ''
+
     if (currentUser) {
       await logSecurityEvent('LOGOUT', `User ${currentUser.username} logged out.`, 'info', currentUser.username)
     }
+
+    // 1. Remove active session from shared content storage and revoke on server
+    if (token) {
+      try {
+        const existingSessions = (await readSharedContent<Array<{ token: string; user: AdminUser; expiresAt: number }>>('admin-sessions')) || []
+        const updated = existingSessions.filter((s) => s.token !== token)
+        await writeSharedContent('admin-sessions', updated)
+      } catch {}
+
+      try {
+        fetch('/api/content.php?action=logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ token })
+        }).catch(() => {})
+      } catch {}
+    }
+
+    // 2. Explicitly notify and terminate Apache Media Library session
+    try {
+      fetch('/happymachinery/Media_Library/medialibrary.php?logout=1', {
+        method: 'GET',
+        credentials: 'include'
+      }).catch(() => {})
+    } catch {}
+
+    // 3. Clear all client storage and cookies
     clearStoredSession()
+    if (typeof document !== 'undefined') {
+      document.cookie = 'hm_cms_token=; path=/; max-age=0; SameSite=Lax'
+    }
     setCurrentUser(null)
     setIsProfileDropdownOpen(false)
     showToast('Signed out successfully.', 'success')
@@ -2038,13 +2090,16 @@ export default function AdminDashboard() {
     setActiveVisualBlockIndex(null)
     setEditingBlockIndex(null)
     setEditorCategory(blogCategories[0]?.name || 'Jobsite Productivity')
-    setEditorAuthor(currentUser?.name || 'Happy Machinery')
     setEditorStatus('Draft')
     setEditorCoverImage('')
     setEditorCoverAlt('')
     setEditorVideoUrl('')
     setEditorSeoTitle('')
     setEditorSeoDesc('')
+    setEditorScheduledAt('')
+    setEditorBreaking(false)
+    setEditorBreakingUntil('')
+    setBreakingMode('forever')
     setAssignedSeries('None (Standalone Article)')
     setArticlesSubView('editor')
   }
@@ -2062,13 +2117,16 @@ export default function AdminDashboard() {
     setActiveVisualBlockIndex(null)
     setEditingBlockIndex(null)
     setEditorCategory(post.category)
-    setEditorAuthor(post.author || 'Happy Machinery')
     setEditorStatus('Published')
     setEditorCoverImage(post.image)
     setEditorCoverAlt('')
     setEditorVideoUrl('')
     setEditorSeoTitle(post.title)
     setEditorSeoDesc(post.excerpt)
+    setEditorScheduledAt((post as any).scheduled_at || '')
+    setEditorBreaking(Boolean((post as any).is_breaking))
+    setEditorBreakingUntil((post as any).breaking_until || '')
+    setBreakingMode((post as any).breaking_until ? 'until_date' : 'forever')
     setArticlesSubView('editor')
   }
 
@@ -2320,7 +2378,7 @@ export default function AdminDashboard() {
               excerpt: finalExcerpt,
               content: contentParagraphs,
               category: editorCategory,
-              author: editorAuthor || currentUser?.name || 'Happy Machinery',
+              author: 'Happy Machinery',
               image: editorCoverImage || p.image,
               status: finalStatus,
               content_raw: editorContentRaw || undefined
@@ -2343,7 +2401,7 @@ export default function AdminDashboard() {
         image: editorCoverImage || '/images/why-choose-v900-jobsite.png',
         date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         readTime: `${Math.max(2, Math.ceil(contentParagraphs.join(' ').split(/\s+/).length / 180))} min read`,
-        author: editorAuthor || currentUser?.name || 'Happy Machinery',
+        author: 'Happy Machinery',
         status: finalStatus,
         content_raw: editorContentRaw || undefined
       }
@@ -4546,47 +4604,70 @@ export default function AdminDashboard() {
               {/* SUBVIEW A: NEW / EDIT ARTICLE (VISUAL SECTION & BLOCK BUILDER) */}
               {articlesSubView === 'editor' && (
                 <div className="cms-rafvex-editor-container">
-                  {/* Top Header Row with Back Button and Actions (Matching Image 2) */}
+                  {/* Top Header Row with Back Button, Status Badge and Actions (Matches Rafelblog Screenshot 2 & 5) */}
                   <div className="cms-rafvex-editor-header">
-                    <div className="cms-editor-header-left">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <button
                         type="button"
-                        className="cms-btn-back-link"
+                        className="cms-editor-back-box"
                         onClick={() => setArticlesSubView('list')}
+                        title="Back to Articles"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <line x1="19" y1="12" x2="5" y2="12" />
                           <polyline points="12 19 5 12 12 5" />
                         </svg>
-                        <span>{editingArticle ? 'Edit Article' : 'New Article'}</span>
                       </button>
-                      <p className="cms-editor-subtitle">Write and publish an editorial post</p>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <h1 className="cms-editor-h1-title">{editingArticle ? 'Edit Article' : 'New Article'}</h1>
+                          <span className={`cms-status-header-pill ${editorStatus === 'Published' ? 'status-published' : editorStatus === 'Scheduled' ? 'status-scheduled' : 'status-draft'}`}>
+                            {editorStatus === 'Published' ? 'Public' : editorStatus}
+                          </span>
+                        </div>
+                        <p className="cms-editor-header-submeta">
+                          ID #{editingArticle?.id || 'NEW'} • {editingArticle ? `Created ${(editingArticle as any).created_at || editingArticle.date || '10/15/2026'}` : 'Write and publish an editorial post'}
+                        </p>
+                      </div>
                     </div>
 
                     <div className="cms-editor-header-actions">
                       <button
                         type="button"
-                        className="cms-btn cms-btn-secondary cms-btn-outline-white"
+                        className="cms-btn-header-preview"
+                        onClick={() => {
+                          if (editorSlug) window.open(`/blog/${editorSlug}`, '_blank');
+                          else setEditorMode('preview');
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span>Preview</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn-header-draft"
                         onClick={() => handleSaveArticle('Draft')}
                       >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span>Save as Draft</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="cms-btn-header-publish"
+                        onClick={() => handleSaveArticle(editorStatus === 'Scheduled' ? 'Scheduled' : 'Published')}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                           <polyline points="17 21 17 13 7 13 7 21" />
                           <polyline points="7 3 7 8 15 8" />
                         </svg>
-                        Save as Draft
-                      </button>
-                      <button
-                        type="button"
-                        className="cms-btn cms-btn-publish-red"
-                        onClick={() => handleSaveArticle('Published')}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="2" y1="12" x2="22" y2="12" />
-                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
-                        Publish Article
+                        <span>{editingArticle ? 'Save Changes' : 'Publish Article'}</span>
                       </button>
                     </div>
                   </div>
@@ -4595,12 +4676,12 @@ export default function AdminDashboard() {
                   <div className="cms-rafvex-editor-grid">
                     {/* Left Main Column */}
                     <div className="cms-editor-main-col">
-                      {/* Card 1: Article Title & Slug (Matching Image 2) */}
-                      <div className="cms-editor-card">
+                      {/* Card 1: Article Title & Slug (Matches Screenshot 2 & 5) */}
+                      <div className="cms-editor-card cms-title-slug-card">
                         <label className="cms-editor-eyebrow">ARTICLE TITLE</label>
                         <input
                           type="text"
-                          className="cms-editor-title-input"
+                          className="cms-raf-title-input"
                           placeholder="Give your article a descriptive, captivating title..."
                           value={editorTitle}
                           onChange={(e) => {
@@ -4611,18 +4692,16 @@ export default function AdminDashboard() {
                           }}
                           required
                         />
-                        <div className="cms-editor-slug-row">
-                          <span className="cms-slug-globe-icon">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <circle cx="12" cy="12" r="10" />
-                              <line x1="2" y1="12" x2="22" y2="12" />
-                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                            </svg>
-                          </span>
+                        <div className="cms-raf-slug-row">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8', flexShrink: 0 }}>
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                          </svg>
                           <span className="cms-slug-prefix">happymachinery.com/blog/</span>
                           <input
                             type="text"
-                            className="cms-editor-slug-input"
+                            className="cms-raf-slug-input"
                             placeholder="custom-article-slug"
                             value={editorSlug}
                             onChange={(e) => setEditorSlug(e.target.value)}
@@ -4630,72 +4709,45 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* Card 2: Article Summary / Excerpt (Matching Image 2) */}
-                      <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row">
-                          <label className="cms-editor-eyebrow">ARTICLE SUMMARY / EXCERPT</label>
-                          <span className="cms-char-counter">{editorExcerpt.length}/300 chars</span>
-                        </div>
-                        <textarea
-                          rows={3}
-                          className="cms-editor-textarea cms-excerpt-textarea"
-                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
-                          value={editorExcerpt}
-                          maxLength={300}
-                          onChange={(e) => setEditorExcerpt(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Card 3: Article Content (Unified Modern WYSIWYG & Media - Rafelblog Style) */}
+                      {/* Card 2: Article Body (Unified Modern WYSIWYG & Media - Rafelblog Style) */}
                       <div className="cms-editor-card cms-article-content-card">
-                        <div className="cms-editor-card-header-row">
-                          <div className="cms-editor-card-header-left">
-                            <label className="cms-editor-eyebrow">ARTICLE CONTENT</label>
+                        <div className="cms-editor-card-header-row" style={{ paddingBottom: '12px', borderBottom: '1px solid var(--cms-border, #e2e8f0)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <label className="cms-editor-eyebrow" style={{ margin: 0 }}>ARTICLE BODY</label>
                             <span className="cms-wysiwyg-badge">
-                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : editorMode === 'code' ? 'Markdown / HTML Source' : 'Live Reader Preview'}
+                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : editorMode === 'code' ? 'Markdown Source' : 'Live Reader Preview'}
                             </span>
                           </div>
 
                           {/* Mode Switcher Buttons */}
-                          <div className="cms-editor-mode-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <div className="cms-raf-mode-switcher">
                             <button
                               type="button"
-                              className={`cms-mode-toggle-btn ${editorMode === 'visual' ? 'active' : ''}`}
+                              className={`cms-raf-mode-btn ${editorMode === 'visual' ? 'active' : ''}`}
                               onClick={() => setEditorMode('visual')}
-                              title="Visual WYSIWYG: Seamless fluid writing, clipboard paste (Cmd+V), drag & drop, and inline media controls"
+                              title="Visual WYSIWYG: Fluid writing with inline media, formatting ribbon, and drag & drop"
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                <circle cx="12" cy="12" r="3" />
-                              </svg>
-                              <span>Visual (WYSIWYG)</span>
+                              Visual (WYSIWYG)
                             </button>
                             <button
                               type="button"
-                              className={`cms-mode-toggle-btn ${editorMode === 'code' ? 'active' : ''}`}
+                              className={`cms-raf-mode-btn ${editorMode === 'code' ? 'active' : ''}`}
                               onClick={() => setEditorMode('code')}
                               title="Raw Code: Direct markdown or HTML editing"
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polyline points="16 18 22 12 16 6" />
-                                <polyline points="8 6 2 12 8 18" />
-                              </svg>
-                              <span>Code (Markdown)</span>
+                              Code (Markdown)
                             </button>
                             <button
                               type="button"
-                              className={`cms-mode-toggle-btn ${editorMode === 'preview' ? 'active' : ''}`}
+                              className={`cms-raf-mode-btn ${editorMode === 'preview' ? 'active' : ''}`}
                               onClick={() => setEditorMode('preview')}
-                              title="Live Reader Preview: Preview how this article looks to readers on the website"
+                              title="Live Reader Preview: Preview how this article looks to visitors"
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                                <circle cx="12" cy="12" r="3" />
-                              </svg>
-                              <span>Preview</span>
+                              Preview
                             </button>
                           </div>
                         </div>
+
 
                         {/* Content Body Based on Mode */}
                         {editorMode === 'visual' && (
@@ -4829,79 +4881,101 @@ export default function AdminDashboard() {
                       </div>
                     </div>
 
-                    {/* Right Inspector Column (Matching Image 2) */}
+                    {/* Right Inspector Column (Matches Rafelblog Screenshot 2) */}
                     <div className="cms-editor-sidebar-col">
-                      {/* Card 1: Publishing Status */}
+                      {/* Card 1: Publishing Status & Breaking Alert */}
                       <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row">
-                          <label className="cms-editor-eyebrow">Publishing Status</label>
-                          <span className="cms-status-pill-badge">{editorStatus}</span>
+                        <h3 className="cms-card-subhead">Publishing</h3>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <div>
+                            <label className="cms-field-label-sm">STATUS</label>
+                            <select
+                              className="cms-editor-select"
+                              value={editorStatus}
+                              onChange={(e) => setEditorStatus(e.target.value as any)}
+                            >
+                              <option value="Draft">Draft</option>
+                              <option value="Published">Public (Published)</option>
+                              <option value="Scheduled">Scheduled</option>
+                            </select>
+                          </div>
+
+                          {editorStatus === 'Scheduled' && (
+                            <div className="cms-scheduled-box animate-in">
+                              <label className="cms-field-label-sm" style={{ color: '#b45309' }}>Schedule Date & Time</label>
+                              <input
+                                type="datetime-local"
+                                value={editorScheduledAt}
+                                onChange={(e) => setEditorScheduledAt(e.target.value)}
+                                className="cms-editor-select"
+                                style={{ fontSize: '12px' }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Breaking Alert Toggle (Exact match to Screenshot 2) */}
+                          <div className={`cms-breaking-alert-box ${editorBreaking ? 'active' : ''}`}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className={`cms-pulse-indicator ${editorBreaking ? 'pulsing' : ''}`}></span>
+                                <div>
+                                  <strong className="cms-breaking-title">BREAKING ALERT</strong>
+                                  <span className="cms-breaking-desc">Slides in homepage breaking ticker</span>
+                                </div>
+                              </div>
+                              <label className="cms-ios-switch">
+                                <input
+                                  type="checkbox"
+                                  checked={editorBreaking}
+                                  onChange={(e) => setEditorBreaking(e.target.checked)}
+                                />
+                                <span className="cms-switch-slider"></span>
+                              </label>
+                            </div>
+
+                            {editorBreaking && (
+                              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '8px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setBreakingMode('forever'); setEditorBreakingUntil(''); }}
+                                    className={`cms-mode-pill-btn ${breakingMode === 'forever' ? 'active' : ''}`}
+                                  >
+                                    ● Always
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setBreakingMode('until_date');
+                                      if (!editorBreakingUntil) {
+                                        const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                                        setEditorBreakingUntil(d.toISOString().slice(0, 16));
+                                      }
+                                    }}
+                                    className={`cms-mode-pill-btn ${breakingMode === 'until_date' ? 'active' : ''}`}
+                                  >
+                                    📅 Until Date
+                                  </button>
+                                </div>
+                                {breakingMode === 'until_date' && (
+                                  <input
+                                    type="datetime-local"
+                                    value={editorBreakingUntil}
+                                    onChange={(e) => setEditorBreakingUntil(e.target.value)}
+                                    className="cms-editor-select"
+                                    style={{ fontSize: '11.5px', padding: '6px 8px' }}
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <label className="cms-field-label-sm">STATUS</label>
-                        <select
-                          className="cms-editor-select"
-                          value={editorStatus}
-                          onChange={(e) => setEditorStatus(e.target.value as any)}
-                        >
-                          <option value="Draft">Draft</option>
-                          <option value="Published">Published</option>
-                          <option value="Scheduled">Scheduled</option>
-                        </select>
                       </div>
 
-                      {/* Card 2: Article Author */}
+                      {/* Card 2: Classification & Category */}
                       <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row">
-                          <span className="cms-author-head-title">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2">
-                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                              <circle cx="12" cy="7" r="4" />
-                            </svg>
-                            <span>Article Author</span>
-                          </span>
-                          <button
-                            type="button"
-                            className="cms-link-action-red"
-                            onClick={() => showToast("New Author invitation modal is ready.", "success")}
-                          >
-                            + New Author
-                          </button>
-                        </div>
-                        <label className="cms-field-label-sm">ASSIGN AUTHOR</label>
-                        <select
-                          className="cms-editor-select"
-                          value={editorAuthor}
-                          onChange={(e) => setEditorAuthor(e.target.value)}
-                        >
-                          <option value="Lead Administrator (Super Administrator)">Lead Administrator (Super Administrator)</option>
-                          <option value="Happy Machinery (Lead Equipment Specialist & Editorial Director)">Happy Machinery (Lead Equipment Specialist & Editorial Director)</option>
-                          <option value="Field Support Engineer (Technical Support)">Field Support Engineer (Technical Support)</option>
-                        </select>
-
-                        {/* Author Profile Preview Card */}
-                        <div className="cms-author-preview-card">
-                          <div className="cms-author-avatar-badge">
-                            <img src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp" alt="Author" />
-                          </div>
-                          <div className="cms-author-info">
-                            <strong className="cms-author-name">
-                              {editorAuthor.includes("(") ? editorAuthor.split("(")[0].trim() : editorAuthor}
-                            </strong>
-                            <span className="cms-author-role">
-                              {editorAuthor.includes("(") ? editorAuthor.split("(")[1].replace(")", "").trim() : "Editorial Specialist"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Card 3: Classification & Category + Topic Cluster */}
-                      <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row">
-                          <label className="cms-editor-eyebrow">Classification & Category</label>
-                        </div>
-                        <label className="cms-field-label-sm">
-                          CATEGORY <span style={{ color: "#ef4444" }}>*</span>
-                        </label>
+                        <label className="cms-field-label-sm">CATEGORY</label>
                         <select
                           className="cms-editor-select"
                           value={editorCategory}
@@ -4911,101 +4985,214 @@ export default function AdminDashboard() {
                             <option key={c.name} value={c.name}>{c.name}</option>
                           ))}
                         </select>
+                      </div>
 
-                        {/* Topic Cluster & Playlist Manager Card (Image 2) */}
-                        <div className="cms-topic-cluster-card">
-                          <div className="cms-topic-cluster-header">
-                            <div className="cms-topic-cluster-icon">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
-                                <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                                <polyline points="2 17 12 22 22 17" />
-                                <polyline points="2 12 12 17 22 12" />
-                              </svg>
-                            </div>
-                            <div className="cms-topic-cluster-text">
-                              <h4>TOPIC CLUSTER & PLAYLIST MANAGER</h4>
-                              <p>Group articles into Pillar and Sub-Blog series for readers</p>
-                            </div>
-                            <button
-                              type="button"
-                              className="cms-btn-new-series"
-                              onClick={() => showToast("Create Topic Series dialog opened.", "success")}
-                            >
-                              + New Series
-                            </button>
+                      {/* Card 4: Topic Cluster & Series Manager (Screenshot 2) */}
+                      <div className="cms-editor-card cms-topic-cluster-card">
+                        <div className="cms-topic-cluster-header">
+                          <div className="cms-topic-cluster-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                              <polyline points="2 17 12 22 22 17" />
+                              <polyline points="2 12 12 17 22 12" />
+                            </svg>
                           </div>
-                          <div className="cms-topic-cluster-body">
-                            <label className="cms-field-label-sm">Assigned Series / Playlist</label>
-                            <select
-                              className="cms-editor-select"
-                              value={assignedSeries}
-                              onChange={(e) => setAssignedSeries(e.target.value)}
-                            >
-                              <option value="None (Standalone Article)">None (Standalone Article)</option>
-                              <option value="Mini Skid Steer Operations & Safety Guide">Mini Skid Steer Operations & Safety Guide</option>
-                              <option value="Hydraulic System Maintenance & Troubleshooting">Hydraulic System Maintenance & Troubleshooting</option>
-                              <option value="Jobsite Productivity & Attachment Selection">Jobsite Productivity & Attachment Selection</option>
-                            </select>
+                          <div className="cms-topic-cluster-text">
+                            <h4>TOPIC CLUSTER & PLAYLIST MANAGER</h4>
+                            <p>Group articles into Pillar and Sub-Blog series for readers</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="cms-btn-new-series"
+                            onClick={() => showToast("Create Topic Series dialog opened.", "success")}
+                          >
+                            + New Series
+                          </button>
+                        </div>
+                        <div className="cms-topic-cluster-body">
+                          <label className="cms-field-label-sm">Assigned Series / Playlist</label>
+                          <select
+                            className="cms-editor-select"
+                            value={assignedSeries}
+                            onChange={(e) => setAssignedSeries(e.target.value)}
+                          >
+                            <option value="None (Standalone Article)">None (Standalone Article)</option>
+                            <option value="Mini Skid Steer Operations & Safety Guide">Mini Skid Steer Operations & Safety Guide</option>
+                            <option value="Hydraulic System Maintenance & Troubleshooting">Hydraulic System Maintenance & Troubleshooting</option>
+                            <option value="Jobsite Productivity & Attachment Selection">Jobsite Productivity & Attachment Selection</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Card 5: Excerpt (Clean Right Sidebar Card matching Screenshot 2) */}
+                      <div className="cms-editor-card">
+                        <label className="cms-editor-eyebrow">EXCERPT</label>
+                        <textarea
+                          rows={3}
+                          className="cms-editor-textarea"
+                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
+                          value={editorExcerpt}
+                          maxLength={300}
+                          onChange={(e) => setEditorExcerpt(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', fontSize: '11px', color: '#64748b' }}>
+                          <span>🕒 Revisions count: 5</span>
+                          <span>{editorExcerpt.length}/300 chars</span>
+                        </div>
+                      </div>
+
+                      {/* Card 6: Featured Cover Image (Exact Rafelblog UI) */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                            Featured Cover Image
+                          </h3>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8' }}>
+                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                            <circle cx="9" cy="9" r="2" />
+                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                          </svg>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div>
+                            <label className="cms-field-label-sm" style={{ marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
+                              Image URL
+                            </label>
+                            <input
+                              type="url"
+                              className="cms-editor-input-sm"
+                              placeholder="https://images.unsplash.com/... or /images/..."
+                              value={editorCoverImage}
+                              onChange={(e) => setEditorCoverImage(e.target.value)}
+                            />
+                          </div>
+
+                          {editorCoverImage && (
+                            <div className="cms-cover-preview-wrapper">
+                              <img
+                                src={editorCoverImage}
+                                alt={editorCoverAlt || "Cover preview"}
+                                className="cms-cover-preview-img"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.opacity = '0.5'
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setEditorCoverImage('')}
+                                className="cms-cover-remove-btn"
+                                title="Remove cover image"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="cms-field-label-sm" style={{ marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
+                              Image Alt Description
+                            </label>
+                            <input
+                              type="text"
+                              className="cms-editor-input-sm"
+                              placeholder="e.g. Modern web developer desk setup with laptop displaying domain and hostin..."
+                              value={editorCoverAlt}
+                              onChange={(e) => setEditorCoverAlt(e.target.value)}
+                            />
                           </div>
                         </div>
                       </div>
 
-                      {/* Card 4: Cover Image */}
+                      {/* Card 7: Attached Video (Optional - Matches Rafelblog) */}
                       <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">Featured Cover Image</label>
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                            Attached Video (Optional)
+                          </h3>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                            <polygon points="23 7 16 12 23 17 23 7" />
+                            <rect width="14" height="14" x="1" y="5" rx="2" ry="2" />
+                          </svg>
+                        </div>
+                        <p style={{ fontSize: '11px', color: 'var(--cms-text-muted, #94a3b8)', margin: '0 0 10px 0', lineHeight: 1.45 }}>
+                          YouTube or Facebook video URL. When provided, an interactive video player is displayed at the top of the blog article.
+                        </p>
                         <input
-                          type="text"
+                          type="url"
                           className="cms-editor-input-sm"
-                          placeholder="Image URL (/images/... or https://...)"
-                          value={editorCoverImage}
-                          onChange={(e) => setEditorCoverImage(e.target.value)}
+                          placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                          value={editorVideoUrl}
+                          onChange={(e) => setEditorVideoUrl(e.target.value)}
                         />
-                        <input
-                          type="text"
-                          className="cms-editor-input-sm"
-                          style={{ marginTop: '8px' }}
-                          placeholder="Image Alt Description (e.g. V900 loader on jobsite)"
-                          value={editorCoverAlt}
-                          onChange={(e) => setEditorCoverAlt(e.target.value)}
-                        />
-                        {editorCoverImage && (
-                          <div className="cms-editor-thumb-preview">
-                            <img src={editorCoverImage} alt="Cover preview" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                        {editorVideoUrl && (
+                          <div style={{ marginTop: '10px' }}>
+                            <p style={{ fontSize: '10px', fontWeight: 750, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--cms-text-muted, #94a3b8)', marginBottom: '6px' }}>
+                              Live Player Preview
+                            </p>
+                            <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', paddingBottom: '56.25%', height: 0, background: '#000', border: '1px solid var(--cms-border, #e2e8f0)' }}>
+                              <iframe
+                                src={editorVideoUrl.includes('embed') ? editorVideoUrl : editorVideoUrl.replace('watch?v=', 'embed/').replace('youtu.be/', 'youtube.com/embed/')}
+                                title="Video Preview"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Card 5: Attached Video */}
+                      {/* Card 8: SEO & Social Meta */}
                       <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">Attached Video (Optional)</label>
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                            SEO & Social Meta
+                          </h3>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                          </svg>
+                        </div>
+                        <label className="cms-field-label-sm" style={{ marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
+                          Meta Title
+                        </label>
                         <input
                           type="text"
                           className="cms-editor-input-sm"
-                          placeholder="https://www.youtube.com/watch?v=..."
-                          value={editorVideoUrl}
-                          onChange={(e) => setEditorVideoUrl(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Card 6: SEO & Social Meta */}
-                      <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">SEO & Social Meta</label>
-                        <input
-                          type="text"
-                          className="cms-editor-input-sm"
-                          placeholder="Page meta title..."
+                          placeholder="Page meta title (defaults to article title)..."
                           value={editorSeoTitle}
                           onChange={(e) => setEditorSeoTitle(e.target.value)}
                         />
+                        <label className="cms-field-label-sm" style={{ marginTop: '10px', marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
+                          Meta Description
+                        </label>
                         <textarea
                           rows={2}
                           className="cms-editor-textarea"
-                          style={{ marginTop: '8px' }}
                           placeholder="Search engine snippet (recommended 150-160 characters)..."
                           value={editorSeoDesc}
                           onChange={(e) => setEditorSeoDesc(e.target.value)}
                         />
                       </div>
+
+                      {/* Danger Zone: Move to Trash */}
+                      {editingArticle && (
+                        <div style={{ paddingTop: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveArticleToTrash(editingArticle)}
+                            className="cms-trash-danger-btn"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                            <span>Move to Trash</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -5191,7 +5378,7 @@ export default function AdminDashboard() {
                             type="button"
                             className="cms-modal-open-ext-btn"
                             title="Open Original Media Library in New Tab"
-                            onClick={() => window.open(mediaStandaloneUrl, '_blank')}
+                            onClick={() => window.open(getMediaStandaloneUrl(), '_blank')}
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -6204,7 +6391,7 @@ export default function AdminDashboard() {
                     className="cms-kiuq-cms-btn"
                     onClick={() => {
                       showToast('Opening Standalone Media Library (/happymachinery/Media_Library/medialibrary.php)... Make sure Apache is running in XAMPP.', 'info' as any)
-                      window.open(mediaStandaloneUrl, '_blank')
+                      window.open(getMediaStandaloneUrl(), '_blank')
                     }}
                     title="Open Standalone Media Library in full browser window"
                   >
@@ -8813,39 +9000,54 @@ export default function AdminDashboard() {
                       )
                     }
 
-                    return filteredComments.map((item) => (
-                      <div
-                        key={item.id}
-                        className="cms-comment-row-item"
-                        style={{
-                          background: 'var(--cms-bg-surface)',
-                          border: '1px solid var(--cms-border)',
-                          borderRadius: '12px',
-                          padding: '16px 20px',
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          gap: '16px'
-                        }}
-                      >
-                        <div style={{ display: 'flex', gap: '14px' }}>
-                          <div
-                            style={{
-                              width: '40px',
-                              height: '40px',
-                              borderRadius: '50%',
-                              background: '#1d7ff3',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 'bold',
-                              flexShrink: 0
-                            }}
-                          >
-                            {item.author.charAt(0)}
-                          </div>
-                          <div>
+                    return filteredComments.map((item) => {
+                      const avatarUrl = item.avatar || getUserProfileAvatar(item.email, item.author)
+                      return (
+                        <div
+                          key={item.id}
+                          className="cms-comment-row-item"
+                          style={{
+                            background: 'var(--cms-bg-surface)',
+                            border: '1px solid var(--cms-border)',
+                            borderRadius: '12px',
+                            padding: '16px 20px',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: '16px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', gap: '14px' }}>
+                            <div
+                              style={{
+                                width: '40px',
+                                height: '40px',
+                                borderRadius: '50%',
+                                background: '#1d7ff3',
+                                color: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 'bold',
+                                flexShrink: 0,
+                                overflow: 'hidden',
+                                border: '1.5px solid var(--cms-border)'
+                              }}
+                            >
+                              {avatarUrl ? (
+                                <img
+                                  src={avatarUrl}
+                                  alt={item.author}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = 'none'
+                                  }}
+                                />
+                              ) : (
+                                item.author.charAt(0)
+                              )}
+                            </div>
+                            <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                               <strong style={{ fontSize: '0.94rem' }}>{item.author}</strong>
                               {item.email && (
@@ -8895,8 +9097,9 @@ export default function AdminDashboard() {
                           </button>
                         </div>
                       </div>
-                    ))
-                  })()}
+                    )
+                  })
+                })()}
                 </div>
               </div>
             </div>

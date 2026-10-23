@@ -20,52 +20,63 @@ export const getAuthHeaders = (): Record<string, string> => {
 }
 
 export const readSharedContent = async <T>(key: string): Promise<T | undefined> => {
-  const response = await fetch(endpoint(key), {
-    headers: {
-      Accept: 'application/json',
-      ...getAuthHeaders()
-    },
-    cache: 'no-store'
-  })
+  try {
+    const response = await fetch(endpoint(key), {
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders()
+      },
+      cache: 'no-store'
+    })
 
-  if (response.status === 404) return undefined
-  if (!response.ok) {
-    throw new Error(`Shared content request failed (${response.status}).`)
+    if (response.status === 404) return undefined
+    if (!response.ok) {
+      return undefined
+    }
+
+    const payload = await response.json() as { value?: T }
+    return payload.value
+  } catch {
+    return undefined
   }
-
-  const payload = await response.json() as { value?: T }
-  return payload.value
 }
 
 export const writeSharedContent = async <T>(key: string, value: T): Promise<void> => {
-  const response = await fetch(endpoint(key), {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders()
-    },
-    body: JSON.stringify({ value })
-  })
+  try {
+    const response = await fetch(endpoint(key), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({ value })
+    })
 
-  const payload = await response.json().catch(() => null) as { error?: string; saved?: boolean } | null
-  if (!response.ok || payload?.saved !== true) {
-    throw new Error(payload?.error || `Shared content save failed (${response.status}).`)
+    const payload = await response.json().catch(() => null) as { error?: string; saved?: boolean } | null
+    if (!response.ok || payload?.saved !== true) {
+      console.warn(`[SharedContent] write to ${key} failed (${response.status})`)
+    }
+  } catch (err) {
+    console.warn(`[SharedContent] write to ${key} network error:`, err)
   }
 }
 
 export const appendSharedContent = async <T>(key: string, value: T): Promise<void> => {
-  const response = await fetch(endpoint(key), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders()
-    },
-    body: JSON.stringify({ value })
-  })
+  try {
+    const response = await fetch(endpoint(key), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({ value })
+    })
 
-  const payload = await response.json().catch(() => null) as { error?: string; saved?: boolean } | null
-  if (!response.ok || payload?.saved !== true) {
-    throw new Error(payload?.error || `Shared content append failed (${response.status}).`)
+    const payload = await response.json().catch(() => null) as { error?: string; saved?: boolean } | null
+    if (!response.ok || payload?.saved !== true) {
+      console.warn(`[SharedContent] append to ${key} failed (${response.status})`)
+    }
+  } catch (err) {
+    console.warn(`[SharedContent] append to ${key} network error:`, err)
   }
 }
-

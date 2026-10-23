@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { authenticateUser } from '../data/cmsAuth'
+import { authenticateUser, clearStoredSession } from '../data/cmsAuth'
 import type { AdminUser } from '../data/cmsTypes'
 import { useSiteBranding } from '../data/siteBranding'
 import './CmsLogin.css'
@@ -17,6 +17,20 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
   const [rememberMe, setRememberMe] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('cms_action') === 'logout' || params.get('action') === 'logout' || params.has('logged_out')) {
+        clearStoredSession()
+        return 'You have been safely signed out from Happy Machinery CMS & Media Library.'
+      }
+      if (params.has('timeout')) {
+        clearStoredSession()
+        return 'You were logged out after a period of inactivity. Please sign in again.'
+      }
+    }
+    return ''
+  })
   const [showForgotModal, setShowForgotModal] = useState(false)
   const [lockoutTimer, setLockoutTimer] = useState<number | null>(null)
 
@@ -39,10 +53,27 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
 
     setIsLoading(true)
     setErrorMessage('')
+    setSuccessMessage('')
 
     try {
       const result = await authenticateUser(username, password, rememberMe)
       if (result.success && result.user) {
+        if (typeof window !== 'undefined') {
+          try {
+            const currentUrl = new URL(window.location.href)
+            currentUrl.searchParams.delete('cms_action')
+            currentUrl.searchParams.delete('action')
+            currentUrl.searchParams.delete('logged_out')
+            currentUrl.searchParams.delete('timeout')
+            const redirect = currentUrl.searchParams.get('redirect')
+            const cleanUrl = currentUrl.pathname + (currentUrl.search ? currentUrl.search : '')
+            window.history.replaceState({}, document.title, cleanUrl)
+            if (redirect) {
+              window.location.href = redirect
+              return
+            }
+          } catch {}
+        }
         onLoginSuccess(result.user)
       } else {
         setErrorMessage(result.error || 'Authentication failed. Please verify credentials.')
@@ -51,7 +82,12 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Server communication error. Please try again.')
+      const msg = err?.message
+      if (msg && msg !== 'Failed to fetch') {
+        setErrorMessage(msg)
+      } else {
+        setErrorMessage('Cannot reach the local CMS server. Please ensure the server is running or reload the page.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -84,6 +120,29 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
           <h1 className="cms-login-title">Sign in</h1>
           <p className="cms-login-subtitle">Happy Machinery Content Management System</p>
         </div>
+
+        {successMessage && (
+          <div className="cms-success-banner" role="status" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            borderRadius: '12px',
+            background: 'rgba(16, 185, 129, 0.12)',
+            border: '1.5px solid rgba(16, 185, 129, 0.4)',
+            color: '#10b981',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            lineHeight: 1.4
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            <span>{successMessage}</span>
+          </div>
+        )}
 
         {errorMessage && (
           <div className="cms-error-banner" role="alert">

@@ -32,7 +32,11 @@ function feature_db(): ?PDO {
         ]);
         $pdo->exec('PRAGMA journal_mode=WAL');
         $pdo->exec('PRAGMA foreign_keys=ON');
-        feature_db_migrate($pdo);
+        $ver = (int)$pdo->query('PRAGMA user_version')->fetchColumn();
+        if ($ver < 1) {
+            feature_db_migrate($pdo);
+            $pdo->exec('PRAGMA user_version = 1');
+        }
         return $pdo;
     } catch (Throwable $e) {
         error_log('[FeatureDB] ' . $e->getMessage());

@@ -354,31 +354,31 @@ const MenuBar = ({
 }: MenuBarProps) => {
   if (!editor) return null;
 
-  const btnClass = "p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed select-none";
-  const activeClass = "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 font-semibold";
+  const btnClass = "tiptap-ribbon-btn";
+  const activeClass = "is-active";
 
   return (
-    <div className="sticky top-[70px] z-20 flex flex-wrap items-center gap-1 border-b border-slate-200 dark:border-slate-800 p-2 bg-slate-50/98 dark:bg-slate-900/98 backdrop-blur-md rounded-t-2xl shadow-xs transition-shadow">
+    <div className="tiptap-ribbon-menubar tw-scope">
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} className={`${btnClass} ${editor.isActive('bold') ? activeClass : ''}`} type="button" title="Bold"><Bold size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} className={`${btnClass} ${editor.isActive('italic') ? activeClass : ''}`} type="button" title="Italic"><Italic size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleUnderline().run()} className={`${btnClass} ${editor.isActive('underline') ? activeClass : ''}`} type="button" title="Underline"><UnderlineIcon size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} className={`${btnClass} ${editor.isActive('strike') ? activeClass : ''}`} type="button" title="Strikethrough"><Strikethrough size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleCode().run()} className={`${btnClass} ${editor.isActive('code') ? activeClass : ''}`} type="button" title="Inline Code"><Code size={16} /></button>
       
-      <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+      <div className="tiptap-ribbon-divider"></div>
       
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={`${btnClass} ${editor.isActive('heading', { level: 1 }) ? activeClass : ''}`} type="button" title="Heading 1"><Heading1 size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={`${btnClass} ${editor.isActive('heading', { level: 2 }) ? activeClass : ''}`} type="button" title="Heading 2"><Heading2 size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={`${btnClass} ${editor.isActive('heading', { level: 3 }) ? activeClass : ''}`} type="button" title="Heading 3"><Heading3 size={16} /></button>
       
-      <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+      <div className="tiptap-ribbon-divider"></div>
       
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} className={`${btnClass} ${editor.isActive('bulletList') ? activeClass : ''}`} type="button" title="Bullet List"><List size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} className={`${btnClass} ${editor.isActive('orderedList') ? activeClass : ''}`} type="button" title="Ordered List"><ListOrdered size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBlockquote().run()} className={`${btnClass} ${editor.isActive('blockquote') ? activeClass : ''}`} type="button" title="Blockquote"><Quote size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setHorizontalRule().run()} className={btnClass} type="button" title="Horizontal Rule"><Minus size={16} /></button>
       
-      <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+      <div className="tiptap-ribbon-divider"></div>
 
       {/* Link and Link Card */}
       <button 
@@ -395,43 +395,43 @@ const MenuBar = ({
       <button 
         onMouseDown={(e) => e.preventDefault()}
         onClick={onOpenImageModal} 
-        className={`${btnClass} bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20`} 
+        className={`${btnClass} ${editor.isActive('image') ? activeClass : ''}`} 
         type="button" 
         title="Insert Image into Section"
       >
         <ImageIcon size={16} />
       </button>
 
-      <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+      <div className="tiptap-ribbon-divider"></div>
 
       {/* Code Terminal Button - Pixel-matched to user screenshot: 🔴 🟡 🟢  >_ Terminal */}
       <button 
         onMouseDown={(e) => e.preventDefault()}
         onClick={onOpenTerminalModal} 
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0f172a] hover:bg-[#1e293b] text-slate-100 border border-slate-700/60 shadow-xs cursor-pointer select-none transition-all active:scale-95" 
+        className="tiptap-terminal-pill" 
         type="button" 
         title="Insert macOS Code Terminal Block"
       >
-        <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] inline-block shadow-xs"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b] inline-block shadow-xs"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] inline-block shadow-xs"></span>
+        <span className="tiptap-terminal-dots">
+          <span className="code-terminal-dot red"></span>
+          <span className="code-terminal-dot yellow"></span>
+          <span className="code-terminal-dot green"></span>
         </span>
-        <span className="font-mono text-emerald-400 font-bold text-xs select-none ml-0.5">&gt;_</span>
-        <span className="font-mono text-xs font-semibold text-slate-200 select-none">Terminal</span>
+        <span style={{ color: '#10b981', fontWeight: 800, fontFamily: 'monospace', marginLeft: '2px' }}>&gt;_</span>
+        <span style={{ color: '#f8fafc', fontWeight: 600 }}>Terminal</span>
       </button>
 
-      <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+      <div className="tiptap-ribbon-divider"></div>
 
       {/* Dedicated YouTube Video Tool */}
       <button 
         onMouseDown={(e) => e.preventDefault()}
         onClick={onOpenYoutubeModal} 
-        className={`${btnClass} ${editor.isActive('youtube') ? activeClass : ''} flex items-center gap-1.5 px-2.5 bg-red-600/10 text-red-600 dark:text-red-400 hover:bg-red-600/20 font-semibold text-xs rounded-lg transition-all`} 
+        className={`tiptap-youtube-pill ${editor.isActive('youtube') ? 'is-active' : ''}`} 
         type="button" 
         title="Insert YouTube Video into Section"
       >
-        <svg className="w-4 h-4 fill-current text-red-600 dark:text-red-500" viewBox="0 0 24 24">
+        <svg viewBox="0 0 24 24">
           <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
         </svg>
         <span>YouTube</span>
@@ -441,29 +441,29 @@ const MenuBar = ({
       <button 
         onMouseDown={(e) => e.preventDefault()}
         onClick={onOpenTableModal} 
-        className={`${btnClass} ${editor.isActive('table') ? activeClass : ''} flex items-center gap-1 px-2.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40`} 
+        className={`tiptap-table-pill ${editor.isActive('table') ? 'is-active' : ''}`} 
         type="button" 
         title="Insert & Style Tables"
       >
         <TableIcon size={15} />
-        <span className="text-xs font-semibold">Table</span>
-        <ChevronDown size={11} className="opacity-60" />
+        <span>Table</span>
+        <ChevronDown size={11} style={{ opacity: 0.6 }} />
       </button>
 
       {/* Special Content Styles & Callouts */}
       <button 
         onMouseDown={(e) => e.preventDefault()}
         onClick={onOpenStylesModal} 
-        className={`${btnClass} flex items-center gap-1 px-2.5 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40`} 
+        className="tiptap-styles-pill" 
         type="button" 
         title="Callout Boxes & Rich Styles"
       >
         <Sparkles size={15} />
-        <span className="text-xs font-semibold">Styles</span>
-        <ChevronDown size={11} className="opacity-60" />
+        <span>Styles</span>
+        <ChevronDown size={11} style={{ opacity: 0.6 }} />
       </button>
         
-      <div className="flex-1"></div>
+      <div className="tiptap-ribbon-spacer"></div>
       
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} className={btnClass} type="button" title="Undo"><Undo size={16} /></button>
       <button onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} className={btnClass} type="button" title="Redo"><Redo size={16} /></button>
@@ -1408,7 +1408,7 @@ export default function TiptapEditor({
   );
 
   return (
-    <div className="relative border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 shadow-sm focus-within:ring-2 focus-within:ring-red-500/20 focus-within:border-red-500 transition-all">
+    <div className="tw-scope relative border border-slate-300 dark:border-slate-700 rounded-2xl bg-white dark:bg-slate-900 shadow-sm focus-within:ring-2 focus-within:ring-red-500/20 focus-within:border-red-500 transition-all">
       <MenuBar 
         editor={editor} 
         onOpenLinkModal={handleOpenLinkModal} 
@@ -1421,7 +1421,7 @@ export default function TiptapEditor({
 
       {/* Sticky Table Operations & Section Move Bar (when inside a table) */}
       {editor?.isActive('table') && (
-        <div className="sticky top-[115px] z-10 flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-blue-50/95 dark:bg-slate-800/95 backdrop-blur-sm border-b border-blue-200 dark:border-blue-900/60 text-xs shadow-xs animate-in slide-in-from-top-1 duration-150">
+        <div className="sticky top-[48px] z-20 flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-blue-50 dark:bg-slate-800 border-b border-blue-200 dark:border-blue-900 text-xs shadow-xs animate-in slide-in-from-top-1 duration-150">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="flex items-center gap-1 font-bold text-blue-700 dark:text-blue-300">
               <TableIcon size={14} /> Active Table:

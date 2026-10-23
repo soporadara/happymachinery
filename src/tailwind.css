@@ -1,0 +1,99 @@
+/*
+  Tailwind CSS v4 — utilities only (no global preflight / reset).
+
+  The article editor (TiptapEditor + its node views) is written with Tailwind
+  utility classes. We generate ONLY the utilities used inside src/components/Editor
+  and put them in a cascade layer, so every other page (which uses its own vanilla
+  CSS) is never affected.
+*/
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source("./components/Editor");
+
+/* `dark:` follows the CMS theme switcher (html.cms-theme-dark / cms-theme-neon) */
+@custom-variant dark (&:where(.cms-theme-dark, .cms-theme-dark *, .cms-theme-neon, .cms-theme-neon *, .dark, .dark *));
+
+@theme {
+  --font-display: 'Outfit', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/*
+  Minimal preflight, scoped to the editor only (.tw-scope) and only to elements
+  that carry a class attribute. Equivalent to the parts of Tailwind's preflight
+  that the editor markup relies on (borders, form controls, text margins).
+*/
+@layer base {
+  :is(.tw-scope, .blog-body-html-block) :where([class]),
+  :is(.tw-scope, .blog-body-html-block) :where([class])::before,
+  :is(.tw-scope, .blog-body-html-block) :where([class])::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: currentColor;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(button[class], input[class], select[class], textarea[class]) {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background-color: transparent;
+    margin: 0;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(button[class]) {
+    cursor: pointer;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(button[class]:disabled) {
+    cursor: not-allowed;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(input[class], textarea[class])::placeholder {
+    opacity: 1;
+    color: color-mix(in oklab, currentColor 50%, transparent);
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(textarea[class]) {
+    resize: vertical;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(p[class], h1[class], h2[class], h3[class], h4[class], h5[class], h6[class], ul[class], ol[class], pre[class], figure[class], blockquote[class]) {
+    margin: 0;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(h1[class], h2[class], h3[class], h4[class], h5[class], h6[class]) {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(ul[class], ol[class]) {
+    list-style: none;
+    padding: 0;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(img[class], svg[class], video[class], iframe[class]) {
+    display: block;
+    vertical-align: middle;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(img[class], video[class]) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  :is(.tw-scope, .blog-body-html-block) :where(label[class]) {
+    margin: 0;
+  }
+
+  /* Subtle entrance animations used by modals (animate-in / fade-in / zoom-in-95 …) */
+  :is(.tw-scope, .blog-body-html-block) .animate-in {
+    animation: tw-modal-in 0.18s ease-out both;
+  }
+
+  @keyframes tw-modal-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+  }
+}
