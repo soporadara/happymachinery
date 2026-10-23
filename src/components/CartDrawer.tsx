@@ -45,14 +45,24 @@ export default function CartDrawer({
           {cartItems.length === 0 ? (
             <div className="empty-cart-state">
               <p>Your cart is empty.</p>
-              <a
-                href="/store#!/~/cart"
-                onClick={onClose}
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  const ecwid = (window as any).Ecwid
+                  if (ecwid && typeof ecwid.openPage === 'function') {
+                    try {
+                      ecwid.openPage('cart')
+                      return
+                    } catch {}
+                  }
+                  window.location.href = '/store#!/~/cart'
+                }}
                 className="checkout-btn"
-                style={{ display: 'inline-block', marginTop: '14px', textDecoration: 'none', textAlign: 'center' }}
+                style={{ display: 'inline-block', marginTop: '14px', textAlign: 'center', cursor: 'pointer' }}
               >
                 Open Ecwid Store & Cart &rarr;
-              </a>
+              </button>
             </div>
           ) : (
             <ul className="cart-items-list">
