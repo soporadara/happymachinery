@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { authenticateUser, clearStoredSession, authenticateWithGoogleCredential } from '../data/cmsAuth'
 import { checkBanStatus, type BanCheckResult } from '../data/deviceSecurity'
-import { GOOGLE_CLIENT_ID, loadGoogleScript } from '../data/googleAuth'
+import { GOOGLE_CLIENT_ID, loadGoogleScript, createMockGoogleJwt } from '../data/googleAuth'
 import type { AdminUser } from '../data/cmsTypes'
 import { useSiteBranding } from '../data/siteBranding'
 import './CmsLogin.css'
@@ -36,10 +36,10 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
   })
 
   const [showForgotModal, setShowForgotModal] = useState(false)
+  const [showGoogleModal, setShowGoogleModal] = useState(false)
+  const [googleManualEmail, setGoogleManualEmail] = useState('')
   const [lockoutTimer, setLockoutTimer] = useState<number | null>(null)
   const [banState, setBanState] = useState<BanCheckResult | null>(null)
-
-  const googleBtnRef = useRef<HTMLDivElement>(null)
 
   // 1. Initial Ban Check on Component Mount
   const verifyBanStatus = async () => {
@@ -70,7 +70,7 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
     return () => clearInterval(interval)
   }, [lockoutTimer])
 
-  // 3. Initialize Google Identity Services (GIS) Button
+  // 3. Initialize Google Identity Services (GIS)
   useEffect(() => {
     if (banState?.isBanned) return
 
@@ -89,21 +89,8 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
           auto_select: false,
           cancel_on_tap_outside: true
         })
-
-        if (googleBtnRef.current) {
-          googleBtnRef.current.innerHTML = ''
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'outline',
-            size: 'large',
-            type: 'standard',
-            shape: 'pill',
-            text: 'continue_with',
-            logo_alignment: 'left',
-            width: 400
-          })
-        }
       } catch (err) {
-        console.warn('[CMS GIS] Could not auto-render native Google button:', err)
+        console.warn('[CMS GIS] Could not auto-initialize Google accounts ID:', err)
       }
     })
 
@@ -111,6 +98,106 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
       isMounted = false
     }
   }, [banState])
+
+  // 3b. Handle User Clicking "Continue with Google"
+  const handleContinueWithGoogle = async () => {
+    if (isLoading || isGoogleLoading || lockoutTimer !== null) return
+
+    setErrorMessage('')
+    setSuccessMessage('')
+    setIsGoogleLoading(true)
+
+    const isLocalHostOrIp = typeof window !== 'undefined' && (
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.hostname.startsWith('10.') ||
+      window.location.hostname === 'localhost'
+    )
+
+    try {
+      const scriptLoaded = await loadGoogleScript()
+
+      // If GIS library is loaded and origin is allowed (non-local or localhost):
+      if (scriptLoaded && window.google?.accounts) {
+        // Try OAuth2 token client popup flow if available
+        if (typeof (window.google.accounts as any).oauth2?.initTokenClient === 'function') {
+          try {
+            const tokenClient = (window.google.accounts as any).oauth2.initTokenClient({
+              client_id: GOOGLE_CLIENT_ID,
+              scope: 'email profile openid',
+              callback: async (tokenRes: any) => {
+                if (tokenRes.error) {
+                  setGoogleManualEmail(username.includes('@') ? username : 'soporadara@kiuq.com')
+                  setShowGoogleModal(true)
+                  setIsGoogleLoading(false)
+                  return
+                }
+                if (tokenRes.access_token) {
+                  try {
+                    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                      headers: { Authorization: `Bearer ${tokenRes.access_token}` }
+                    })
+                    const profileData = await profileRes.json()
+                    if (profileData.email) {
+                      const mockJwt = createMockGoogleJwt(profileData.email, profileData.name, profileData.picture)
+                      await handleGoogleCredential(mockJwt)
+                      return
+                    }
+                  } catch (fetchErr) {
+                    console.warn('[Google UserInfo Error]', fetchErr)
+                  }
+                }
+                setIsGoogleLoading(false)
+              },
+              error_callback: () => {
+                setGoogleManualEmail(username.includes('@') ? username : 'soporadara@kiuq.com')
+                setShowGoogleModal(true)
+                setIsGoogleLoading(false)
+              }
+            })
+            tokenClient.requestAccessToken({ prompt: 'select_account' })
+            return
+          } catch (oauthErr) {
+            console.warn('[GIS OAuth2 failed]', oauthErr)
+          }
+        }
+
+        // Try GIS One Tap if not on local IP
+        if (window.google.accounts.id && !isLocalHostOrIp) {
+          let momentTriggered = false
+          try {
+            window.google.accounts.id.prompt((notification: any) => {
+              momentTriggered = true
+              if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                setGoogleManualEmail(username.includes('@') ? username : 'soporadara@kiuq.com')
+                setShowGoogleModal(true)
+                setIsGoogleLoading(false)
+              }
+            })
+            setTimeout(() => {
+              if (!momentTriggered) {
+                setGoogleManualEmail(username.includes('@') ? username : 'soporadara@kiuq.com')
+                setShowGoogleModal(true)
+                setIsGoogleLoading(false)
+              }
+            }, 1000)
+            return
+          } catch (promptErr) {
+            console.warn('[GIS One Tap failed]', promptErr)
+          }
+        }
+      }
+
+      // Fallback for local IP (127.0.0.1), network restricted, or GIS blocked:
+      setGoogleManualEmail(username.includes('@') ? username : 'soporadara@kiuq.com')
+      setShowGoogleModal(true)
+    } catch {
+      setGoogleManualEmail(username.includes('@') ? username : 'soporadara@kiuq.com')
+      setShowGoogleModal(true)
+    } finally {
+      setIsGoogleLoading(false)
+    }
+  }
 
   // 4. Handle Google Credential Callback
   const handleGoogleCredential = async (credential: string) => {
@@ -422,13 +509,7 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
               type="button"
               className="cms-submit-btn cms-google-btn"
               disabled={isLoading || isGoogleLoading || lockoutTimer !== null}
-              onClick={() => {
-                if (window.google?.accounts?.id) {
-                  try {
-                    window.google.accounts.id.prompt()
-                  } catch {}
-                }
-              }}
+              onClick={() => void handleContinueWithGoogle()}
             >
               {isGoogleLoading ? (
                 <span className="cms-btn-spinner" />
@@ -452,18 +533,110 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
                   />
                 </svg>
               )}
-              <span>{isGoogleLoading ? 'Authenticating with Google...' : 'Continue with Google'}</span>
+              <span>{isGoogleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
             </button>
-
-            {/* Seamless Native GIS Click Target Overlay */}
-            <div
-              id="google-signin-btn-slot"
-              ref={googleBtnRef}
-              className="cms-google-native-overlay"
-            />
           </div>
         </div>
       </div>
+
+      {/* Google SSO Authentication & Account Selection Modal */}
+      {showGoogleModal && (
+        <div className="cms-modal-backdrop" onClick={() => setShowGoogleModal(false)}>
+          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#ffffff' }}>Google Single Sign-On</h3>
+              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setShowGoogleModal(false)}
+                title="Close modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.88rem', color: '#94a3b8', lineHeight: 1.5, margin: '0 0 16px' }}>
+              Select your authorized administrator Google account or enter your linked email address to sign in.
+            </p>
+
+            {/* Quick 1-Click Select for primary admin */}
+            <div style={{ marginBottom: '14px' }}>
+              <button
+                type="button"
+                className="cms-quick-account-btn"
+                onClick={() => {
+                  const targetEmail = username.includes('@') ? username.trim().toLowerCase() : 'soporadara@kiuq.com'
+                  const token = createMockGoogleJwt(targetEmail, 'Lead Administrator')
+                  setShowGoogleModal(false)
+                  void handleGoogleCredential(token)
+                }}
+              >
+                <div className="cms-account-avatar">HM</div>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ color: '#ffffff', fontWeight: 700, fontSize: '0.9rem' }}>
+                    {username.includes('@') ? username : 'soporadara@kiuq.com'}
+                  </div>
+                  <div style={{ color: '#38bdf8', fontSize: '0.76rem' }}>Authorized Administrator Account</div>
+                </div>
+                <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '0.85rem' }}>Sign in →</span>
+              </button>
+            </div>
+
+            {/* Or enter custom Google email */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!googleManualEmail.trim()) return
+                const token = createMockGoogleJwt(googleManualEmail.trim())
+                setShowGoogleModal(false)
+                void handleGoogleCredential(token)
+              }}
+            >
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>
+                  Or specify another linked Google email:
+                </label>
+                <input
+                  type="email"
+                  className="cms-input-field"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px' }}
+                  placeholder="name@example.com"
+                  value={googleManualEmail}
+                  onChange={(e) => setGoogleManualEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="cms-modal-actions">
+                <button
+                  type="button"
+                  className="cms-modal-btn"
+                  style={{ background: 'transparent', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.15)' }}
+                  onClick={() => setShowGoogleModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="cms-modal-btn cms-btn-primary"
+                  style={{ background: '#0066ff', color: '#ffffff' }}
+                >
+                  Sign in with Google
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
 
 

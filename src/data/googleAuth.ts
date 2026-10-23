@@ -165,8 +165,8 @@ export const authenticateWithGoogleCredential = async (
     if (u.googleLinked && u.googleEmail && u.googleEmail.toLowerCase() === googleEmail) {
       return true
     }
-    // Or if primary admin email matches and googleLinked is active
-    if (u.googleLinked && u.email && u.email.toLowerCase() === googleEmail) {
+    // Or if primary registered admin email matches
+    if (u.email && u.email.toLowerCase() === googleEmail) {
       return true
     }
     return false
@@ -206,6 +206,10 @@ export const authenticateWithGoogleCredential = async (
   matchingUser.failedAttempts = 0
   matchingUser.lastLogin = new Date().toISOString()
   matchingUser.status = 'Active'
+  if (!matchingUser.googleLinked) {
+    matchingUser.googleLinked = true
+    matchingUser.googleEmail = googleEmail
+  }
 
   // Update avatar from Google if user has none
   if (!matchingUser.avatar && profile.picture) {

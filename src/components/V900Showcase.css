@@ -197,6 +197,10 @@
   opacity: 0.9;
 }
 
+.marker-default-poly {
+  fill: #0066ff;
+}
+
 .v900-arrow-item.is-active .v900-leader-line {
   stroke: #00e5ff;
   stroke-width: 2.8;
@@ -548,4 +552,331 @@
     width: 100%;
     justify-content: flex-start;
   }
+}
+
+/* ==========================================================================
+   DARK THEME OVERRIDES — V900 ENGINE & TRIANGULAR TRACK SECTION
+   ========================================================================== */
+.app-shell.dark .v900-deep-dive-section,
+html.dark .v900-deep-dive-section,
+body.dark .v900-deep-dive-section {
+  background:
+    radial-gradient(circle at 10% 15%, rgba(0, 102, 255, 0.14), transparent 35rem),
+    radial-gradient(circle at 90% 85%, rgba(56, 189, 248, 0.12), transparent 38rem),
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.6), transparent 50rem),
+    linear-gradient(180deg, #070d18 0%, #0a1424 50%, #070d18 100%);
+  border-top: 1px solid rgba(56, 189, 248, 0.16);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.16);
+}
+
+.app-shell.dark .v900-pill-badge,
+html.dark .v900-pill-badge,
+body.dark .v900-pill-badge {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.32);
+  color: #38bdf8;
+}
+
+.app-shell.dark .badge-pulse,
+html.dark .badge-pulse,
+body.dark .badge-pulse {
+  background: #38bdf8;
+  box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7);
+}
+
+.app-shell.dark .v900-master-title,
+html.dark .v900-master-title,
+body.dark .v900-master-title {
+  color: #ffffff;
+}
+
+.app-shell.dark .v900-master-subtitle,
+html.dark .v900-master-subtitle,
+body.dark .v900-master-subtitle {
+  color: #94a3b8;
+}
+
+.app-shell.dark .v900-master-subtitle strong,
+html.dark .v900-master-subtitle strong,
+body.dark .v900-master-subtitle strong {
+  color: #38bdf8;
+}
+
+/* Nav Filter Pills in Dark Mode */
+.app-shell.dark .v900-nav-pill,
+html.dark .v900-nav-pill,
+body.dark .v900-nav-pill {
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.app-shell.dark .v900-nav-pill:hover,
+.app-shell.dark .v900-nav-pill.active,
+html.dark .v900-nav-pill:hover,
+html.dark .v900-nav-pill.active,
+body.dark .v900-nav-pill:hover,
+body.dark .v900-nav-pill.active {
+  background: #0066ff;
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 102, 255, 0.42);
+}
+
+/* System Separator */
+.app-shell.dark .v900-core-block,
+html.dark .v900-core-block,
+body.dark .v900-core-block {
+  border-top: 1px solid rgba(56, 189, 248, 0.12);
+}
+
+/* Precision Stage Canvas Box in Dark Mode */
+.app-shell.dark .v900-precision-canvas-box,
+html.dark .v900-precision-canvas-box,
+body.dark .v900-precision-canvas-box {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.22) 0%, transparent 70%),
+    linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, #0b1528 0%, #070e1b 65%, #040811 100%);
+  background-size: 100% 100%, 28px 28px, 28px 28px, 100% 100%;
+  border: 1.5px solid rgba(56, 189, 248, 0.28);
+  box-shadow:
+    0 25px 50px -15px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(56, 189, 248, 0.14) inset;
+}
+
+.app-shell.dark .v900-precision-img,
+html.dark .v900-precision-img,
+body.dark .v900-precision-img {
+  filter: drop-shadow(0 20px 35px rgba(0, 0, 0, 0.65));
+}
+
+/* SVG Leader Arrows & Target Pins in Dark Mode */
+.app-shell.dark .v900-leader-line,
+html.dark .v900-leader-line,
+body.dark .v900-leader-line {
+  stroke: #38bdf8;
+  opacity: 0.95;
+}
+
+.app-shell.dark .pin-center,
+html.dark .pin-center,
+body.dark .pin-center {
+  fill: #38bdf8;
+}
+
+.app-shell.dark .pin-pulse,
+html.dark .pin-pulse,
+body.dark .pin-pulse {
+  stroke: rgba(56, 189, 248, 0.55);
+}
+
+.app-shell.dark .marker-default-poly,
+html.dark .marker-default-poly,
+body.dark .marker-default-poly {
+  fill: #38bdf8;
+}
+
+.app-shell.dark .v900-arrow-item.is-active .v900-leader-line,
+html.dark .v900-arrow-item.is-active .v900-leader-line,
+body.dark .v900-arrow-item.is-active .v900-leader-line {
+  stroke: #00e5ff;
+  filter: drop-shadow(0 0 8px rgba(0, 229, 255, 0.9));
+}
+
+.app-shell.dark .v900-arrow-item.is-active .pin-center,
+html.dark .v900-arrow-item.is-active .pin-center,
+body.dark .v900-arrow-item.is-active .pin-center {
+  fill: #00e5ff;
+}
+
+.app-shell.dark .v900-arrow-item.is-active .pin-pulse,
+html.dark .v900-arrow-item.is-active .pin-pulse,
+body.dark .v900-arrow-item.is-active .pin-pulse {
+  stroke: #00e5ff;
+}
+
+/* Floating Callout Badges in Dark Mode */
+.app-shell.dark .v900-pointer-badge,
+html.dark .v900-pointer-badge,
+body.dark .v900-pointer-badge {
+  background: rgba(10, 21, 38, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(56, 189, 248, 0.32);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+.app-shell.dark .v900-pointer-badge:hover,
+.app-shell.dark .v900-pointer-badge.is-active,
+html.dark .v900-pointer-badge:hover,
+html.dark .v900-pointer-badge.is-active,
+body.dark .v900-pointer-badge:hover,
+body.dark .v900-pointer-badge.is-active {
+  background: rgba(14, 28, 52, 0.98);
+  border-color: #38bdf8;
+  box-shadow: 0 12px 30px rgba(0, 102, 255, 0.4);
+}
+
+.app-shell.dark .badge-num,
+html.dark .badge-num,
+body.dark .badge-num {
+  background: rgba(56, 189, 248, 0.16);
+  color: #38bdf8;
+}
+
+.app-shell.dark .badge-copy strong,
+html.dark .badge-copy strong,
+body.dark .badge-copy strong {
+  color: #ffffff;
+}
+
+.app-shell.dark .badge-copy small,
+html.dark .badge-copy small,
+body.dark .badge-copy small {
+  color: #38bdf8;
+}
+
+/* Mobile Callout Switcher Strip in Dark Mode */
+.app-shell.dark .mobile-pill-btn,
+html.dark .mobile-pill-btn,
+body.dark .mobile-pill-btn {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  color: #cbd5e1;
+}
+
+.app-shell.dark .mobile-pill-btn:hover,
+.app-shell.dark .mobile-pill-btn.is-active,
+html.dark .mobile-pill-btn:hover,
+html.dark .mobile-pill-btn.is-active,
+body.dark .mobile-pill-btn:hover,
+body.dark .mobile-pill-btn.is-active {
+  background: #0066ff;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.app-shell.dark .pill-n,
+html.dark .pill-n,
+body.dark .pill-n {
+  color: #38bdf8;
+}
+
+.app-shell.dark .mobile-pill-btn.is-active .pill-n,
+html.dark .mobile-pill-btn.is-active .pill-n,
+body.dark .mobile-pill-btn.is-active .pill-n {
+  color: #ffffff;
+}
+
+/* Content Headings & Descriptions in Dark Mode */
+.app-shell.dark .v900-eyebrow,
+html.dark .v900-eyebrow,
+body.dark .v900-eyebrow {
+  color: #38bdf8;
+}
+
+.app-shell.dark .v900-core-heading,
+html.dark .v900-core-heading,
+body.dark .v900-core-heading {
+  color: #ffffff;
+}
+
+.app-shell.dark .v900-core-desc,
+html.dark .v900-core-desc,
+body.dark .v900-core-desc {
+  color: #94a3b8;
+}
+
+.app-shell.dark .v900-core-desc strong,
+html.dark .v900-core-desc strong,
+body.dark .v900-core-desc strong {
+  color: #f1f5f9;
+}
+
+/* 3 Quick Spec Badges Strip in Dark Mode */
+.app-shell.dark .spec-badge-box,
+html.dark .spec-badge-box,
+body.dark .spec-badge-box {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1.5px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.app-shell.dark .spec-badge-box:hover,
+.app-shell.dark .spec-badge-box.highlighted,
+html.dark .spec-badge-box:hover,
+html.dark .spec-badge-box.highlighted,
+body.dark .spec-badge-box:hover,
+body.dark .spec-badge-box.highlighted {
+  background: rgba(18, 34, 60, 0.9);
+  border-color: #38bdf8;
+  box-shadow: 0 8px 24px rgba(0, 102, 255, 0.3);
+}
+
+.app-shell.dark .spec-big,
+html.dark .spec-big,
+body.dark .spec-big {
+  color: #38bdf8;
+}
+
+.app-shell.dark .spec-sub,
+html.dark .spec-sub,
+body.dark .spec-sub {
+  color: #94a3b8;
+}
+
+/* 3 Clean Key Feature Points in Dark Mode */
+.app-shell.dark .clean-point,
+html.dark .clean-point,
+body.dark .clean-point {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1.5px solid rgba(56, 189, 248, 0.18);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.app-shell.dark .clean-point:hover,
+.app-shell.dark .clean-point.highlighted,
+html.dark .clean-point:hover,
+html.dark .clean-point.highlighted,
+body.dark .clean-point:hover,
+body.dark .clean-point.highlighted {
+  background: rgba(18, 34, 60, 0.9);
+  border-color: #38bdf8;
+  box-shadow: 0 6px 20px rgba(0, 102, 255, 0.25);
+}
+
+.app-shell.dark .point-icon,
+html.dark .point-icon,
+body.dark .point-icon {
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.app-shell.dark .clean-point strong,
+html.dark .clean-point strong,
+body.dark .clean-point strong {
+  color: #ffffff;
+}
+
+.app-shell.dark .clean-point p,
+html.dark .clean-point p,
+body.dark .clean-point p {
+  color: #94a3b8;
+}
+
+.app-shell.dark .btn-core-primary,
+html.dark .btn-core-primary,
+body.dark .btn-core-primary {
+  background: #0066ff;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(0, 102, 255, 0.45);
+}
+
+.app-shell.dark .btn-core-primary:hover,
+html.dark .btn-core-primary:hover,
+body.dark .btn-core-primary:hover {
+  background: #0052cc;
+  box-shadow: 0 6px 24px rgba(0, 102, 255, 0.6);
 }

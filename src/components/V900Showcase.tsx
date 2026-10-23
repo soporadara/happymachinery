@@ -64,7 +64,7 @@ function PrecisionProductStage({
               refY="3"
               orient="auto"
             >
-              <polygon points="0 0.5, 5 3, 0 5.5" fill="#0066ff" />
+              <polygon points="0 0.5, 5 3, 0 5.5" fill="currentColor" className="marker-default-poly" />
             </marker>
             <marker
               id={`arr-active-${sysId}`}

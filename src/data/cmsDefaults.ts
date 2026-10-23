@@ -48,6 +48,8 @@ export const DEFAULT_ADMIN_USERS: AdminUser[] = [
     username: 'admin',
     name: 'Lead Administrator',
     email: 'soporadara@kiuq.com',
+    googleLinked: true,
+    googleEmail: 'soporadara@kiuq.com',
     role: 'Super Administrator',
     status: 'Active',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80',

@@ -597,26 +597,63 @@
 }
 
 .cms-google-native-overlay {
-  position: absolute;
-  inset: 0;
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Google SSO Dialog Styles */
+.cms-quick-account-btn {
   width: 100%;
-  height: 100%;
-  opacity: 0.0001;
-  overflow: hidden;
-  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 12px;
   cursor: pointer;
-  z-index: 5;
+  transition: all 180ms ease;
+  box-sizing: border-box;
+}
+
+.cms-quick-account-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.cms-account-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #0066ff;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.82rem;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.cms-google-native-overlay iframe {
-  width: 100% !important;
-  height: 100% !important;
-  transform: scale(1.6);
-  transform-origin: center center;
-  cursor: pointer !important;
+.cms-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 140ms ease;
+}
+
+.cms-modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
 }
 
 /* Banned State Card */
