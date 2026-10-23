@@ -63,7 +63,7 @@ const COLOR_GALLERY_FALLBACKS: Record<string, string[]> = {
 const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
   '901': {
     id: 901,
-    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Crimson Red',
     price: V900_SALE_PRICE,
     originalPrice: V900_ORIGINAL_PRICE,
     description: 'The TYPH-V900R skid steer loader delivers powerful performance, reliable operation, and exceptional value. Perfect for construction, landscaping, and material handling tasks.',
@@ -84,7 +84,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
   },
   '902': {
     id: 902,
-    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Industrial Yellow',
     price: V900_SALE_PRICE,
     originalPrice: V900_ORIGINAL_PRICE,
     description: 'The TYPH-V900Y skid steer loader delivers powerful performance, reliable operation, and exceptional value. Perfect for construction, landscaping, and material handling tasks.',
@@ -105,7 +105,7 @@ const LOADER_PRODUCTS: Record<string, LoaderProduct> = {
   },
   '903': {
     id: 903,
-    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue',
+    name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Cobalt Blue',
     price: V900_SALE_PRICE,
     originalPrice: V900_ORIGINAL_PRICE,
     description: 'The TYPH-V900B skid steer loader delivers powerful performance, reliable operation, and exceptional value. Perfect for construction, landscaping, and material handling tasks.',
@@ -139,16 +139,16 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
         const saved = JSON.parse(savedRaw) as AdminProduct[]
         let modified = false
         const updated = saved.map((item) => {
-          if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
-            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red'
+          if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP') || item.name.includes('Piston Pump'))) {
+            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Crimson Red'
             modified = true
           }
-          if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
-            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow'
+          if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP') || item.name.includes('Piston Pump'))) {
+            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Industrial Yellow'
             modified = true
           }
-          if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
-            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue'
+          if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP') || item.name.includes('Piston Pump'))) {
+            item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Cobalt Blue'
             modified = true
           }
           return item
@@ -234,16 +234,16 @@ export default function ProductDetail({ onAddToCart, onOpenCart }: ProductDetail
           const saved = JSON.parse(savedRaw) as AdminProduct[]
           let modified = false
           const updated = saved.map((item) => {
-            if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
-              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red'
+            if (item.id === 901 && (!item.name || !item.name.includes('TYPHON STOMP') || item.name.includes('Piston Pump'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Crimson Red'
               modified = true
             }
-            if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
-              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow'
+            if (item.id === 902 && (!item.name || !item.name.includes('TYPHON STOMP') || item.name.includes('Piston Pump'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Industrial Yellow'
               modified = true
             }
-            if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP'))) {
-              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue'
+            if (item.id === 903 && (!item.name || !item.name.includes('TYPHON STOMP') || item.name.includes('Piston Pump'))) {
+              item.name = 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Cobalt Blue'
               modified = true
             }
             return item

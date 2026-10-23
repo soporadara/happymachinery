@@ -12,9 +12,9 @@ interface CheckoutItem {
 }
 
 const LOADER_LOOKUP: Record<number, { name: string; price: number; image: string }> = {
-  849053936: { name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Crimson Red', price: 11999, image: '/images/loader-red.png' },
-  849060904: { name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Industrial Yellow', price: 11999, image: '/images/loader-yellow.png' },
-  849057653: { name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, Piston Pump, 1,102 lb Max Load – Cobalt Blue', price: 11999, image: '/images/loader-blue.png' },
+  849053936: { name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Crimson Red', price: 11999, image: '/images/loader-red.png' },
+  849060904: { name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Industrial Yellow', price: 11999, image: '/images/loader-yellow.png' },
+  849057653: { name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Cobalt Blue', price: 11999, image: '/images/loader-blue.png' },
   553910423: { name: 'TYPH-5005M Heavy-Duty Pallet Fork', price: 1764, image: '/images/fork-yellow.jpg' }
 }
 
