@@ -74,6 +74,26 @@ const sharedContentApi = () => {
     configureServer(server: { middlewares: { use: (handler: (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse, next: () => void) => void) => void } }) {
       server.middlewares.use((request, response, next) => {
         const url = new URL(request.url ?? '/', 'http://localhost')
+
+        if (url.pathname === '/api/save-3d-model' && request.method === 'POST') {
+          const chunks: Buffer[] = []
+          request.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+          request.on('end', async () => {
+            try {
+              const buffer = Buffer.concat(chunks)
+              const targetPath = resolve(process.cwd(), 'public/models/kubota-d1105.glb')
+              await mkdir(dirname(targetPath), { recursive: true })
+              await writeFile(targetPath, buffer)
+              response.setHeader('Content-Type', 'application/json')
+              response.end(JSON.stringify({ success: true }))
+            } catch (err: unknown) {
+              response.statusCode = 500
+              response.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Save failed.' }))
+            }
+          })
+          return
+        }
+
         if (url.pathname !== '/api/content.php') {
           next()
           return

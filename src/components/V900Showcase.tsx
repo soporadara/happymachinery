@@ -157,6 +157,32 @@ export default function V900Showcase() {
   const [activeTab, setActiveTab] = useState<'both' | 'engine' | 'track'>('both')
   const [engineMode, setEngineMode] = useState<'diagram' | '3d'>('3d')
   const [activeCallout, setActiveCallout] = useState<string | null>(null)
+  const [customModelUrl, setCustomModelUrl] = useState<string | null>(null)
+  const [uploadToast, setUploadToast] = useState<string | null>(null)
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const objectUrl = URL.createObjectURL(file)
+    setCustomModelUrl(objectUrl)
+    setUploadToast(`Loaded ${file.name}! Saving...`)
+
+    try {
+      const buffer = await file.arrayBuffer()
+      const res = await fetch('/api/save-3d-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: buffer
+      })
+      if (res.ok) {
+        setUploadToast(`✔ ${file.name} saved permanently!`)
+        setTimeout(() => setUploadToast(null), 4000)
+      }
+    } catch {
+      setUploadToast(`✔ Loaded in 3D viewer!`)
+      setTimeout(() => setUploadToast(null), 4000)
+    }
+  }
 
   // 1. Kubota D1105 (25 HP) Engine - Exact Points Calibrated to Product Image
   const engineCallouts: AccurateCallout[] = [
@@ -316,7 +342,7 @@ export default function V900Showcase() {
                     </div>
 
                     <model-viewer
-                      src="/models/kubota-d1105.glb"
+                      src={customModelUrl || "/models/kubota-d1105.glb"}
                       alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
                       auto-rotate
                       auto-rotate-delay="300"
@@ -349,21 +375,40 @@ export default function V900Showcase() {
                       <span className="v900-3d-hint-text">
                         🖱️ Drag to rotate 360° • Scroll to zoom
                       </span>
-                      <a
-                        href="https://www.meshy.ai/3d-models/f249cbd6-7e0d-40cf-a4a2-9d99b2c5ba66?utm_medium=referral-program&utm_source=meshy&utm_content=2RJKFJ&share_type=3d-models"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="v900-3d-link-mini"
-                        title="View on Meshy.ai"
-                      >
-                        <span>Meshy Source</span>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                          <polyline points="15 3 21 3 21 9" />
-                          <line x1="10" y1="14" x2="21" y2="3" />
-                        </svg>
-                      </a>
+
+                      <div className="v900-3d-actions-group">
+                        <label className="v900-3d-upload-btn" title="Upload exported GLB file directly from Meshy">
+                          <input type="file" accept=".glb,.gltf" onChange={handleFileUpload} style={{ display: 'none' }} />
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                          <span>Import Meshy .glb</span>
+                        </label>
+
+                        <a
+                          href="https://www.meshy.ai/3d-models/f249cbd6-7e0d-40cf-a4a2-9d99b2c5ba66?utm_medium=referral-program&utm_source=meshy&utm_content=2RJKFJ&share_type=3d-models"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="v900-3d-link-mini"
+                          title="Open full model on Meshy.ai"
+                        >
+                          <span>Open in Meshy</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </a>
+                      </div>
                     </div>
+
+                    {uploadToast && (
+                      <div className="v900-3d-toast-float">
+                        <span>{uploadToast}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

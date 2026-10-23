@@ -427,6 +427,54 @@ model-viewer:active,
   color: #475569;
 }
 
+.v900-3d-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.v900-3d-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  background: #0066ff;
+  color: #ffffff !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 102, 255, 0.3);
+}
+
+.v900-3d-upload-btn:hover {
+  background: #0052cc;
+  transform: translateY(-1px);
+}
+
+.v900-3d-toast-float {
+  position: absolute;
+  top: 3.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.45rem 1rem;
+  background: #0f172a;
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  z-index: 20;
+  animation: v900ToastIn 0.3s ease-out;
+}
+
+@keyframes v900ToastIn {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
 .v900-3d-link-mini {
   display: inline-flex;
   align-items: center;
