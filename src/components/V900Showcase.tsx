@@ -144,38 +144,7 @@ export default function V900Showcase() {
   const [activeTab, setActiveTab] = useState<'both' | 'engine' | 'track'>('both')
   const [activeCallout, setActiveCallout] = useState<string | null>(null)
 
-  // 1. Kubota D1105 (25 HP) Engine - Exact Points Calibrated to Product Image
-  const engineCallouts: AccurateCallout[] = [
-    {
-      id: 'eng-fan',
-      title: 'Cooling Fan',
-      subtitle: 'Multi-Blade Thermal Cooling',
-      // Centroid of white fan blades: X=66.2%, Y=36.4%
-      target: { x: 66.2, y: 36.4 },
-      origin: { x: 74, y: 16 },
-      lineStart: { x: 74, y: 22 }
-    },
-    {
-      id: 'eng-block',
-      title: '25 HP Kubota Block',
-      subtitle: '3-Cylinder Diesel Engine',
-      // Exact center of the 25 HP engine block: X=48.0%, Y=52.0%
-      target: { x: 48.0, y: 52.0 },
-      origin: { x: 5, y: 36 },
-      lineStart: { x: 26, y: 40 }
-    },
-    {
-      id: 'eng-flywheel',
-      title: 'Flywheel Output',
-      subtitle: 'Direct Hydraulic Power Flange',
-      // Center of left flywheel rim: X=33.0%, Y=52.0%
-      target: { x: 33.0, y: 52.0 },
-      origin: { x: 5, y: 68 },
-      lineStart: { x: 26, y: 68 }
-    }
-  ]
-
-  // 2. Triangular Track Undercarriage - Exact Points Calibrated to Product Image
+  // Triangular Track Undercarriage - Exact Points Calibrated to Product Image
   const trackCallouts: AccurateCallout[] = [
     {
       id: 'trk-sprocket',
@@ -253,17 +222,18 @@ export default function V900Showcase() {
         {(activeTab === 'both' || activeTab === 'engine') && (
           <div id="v900-engine" className="v900-core-block">
             <div className="v900-core-grid">
-              {/* Left / Visual: Image with Exact Arrows */}
+              {/* Left / Visual: Interactive 3D Model Iframe Viewer */}
               <div className="v900-core-visual">
-                <PrecisionProductStage
-                  imageSrc="/images/v900/v900-kubota-d1105-engine.webp"
-                  imageAlt="Kubota D1105 25 HP compact diesel engine"
-                  imageTitle="Kubota D1105 25 HP Engine"
-                  sysId="KUBOTA-25HP"
-                  callouts={engineCallouts}
-                  activeCallout={activeCallout}
-                  onHoverCallout={setActiveCallout}
-                />
+                <div className="v900-3d-model-card">
+                  <iframe
+                    src="https://www.meshy.ai/3d-models/f249cbd6-7e0d-40cf-a4a2-9d99b2c5ba66?utm_medium=referral-program&utm_source=meshy&utm_content=2RJKFJ&share_type=3d-models"
+                    title="Kubota D1105 (25 HP) Engine 3D Interactive Model"
+                    className="v900-3d-iframe"
+                    allow="accelerometer; autoplay; camera; gyroscope; magnetometer; xr-spatial-tracking; fullscreen"
+                    allowFullScreen
+                    loading="lazy"
+                  />
+                </div>
               </div>
 
               {/* Right / Content: Concise & Punchy ("dont too much detail") */}
@@ -279,15 +249,15 @@ export default function V900Showcase() {
 
                 {/* 3 Key Spec Badges */}
                 <div className="v900-specs-strip">
-                  <div className={`spec-badge-box ${activeCallout === 'eng-block' ? 'highlighted' : ''}`}>
+                  <div className="spec-badge-box">
                     <span className="spec-big">25 HP</span>
                     <span className="spec-sub">Gross Power @ 3000 RPM</span>
                   </div>
-                  <div className={`spec-badge-box ${activeCallout === 'eng-fan' ? 'highlighted' : ''}`}>
+                  <div className="spec-badge-box">
                     <span className="spec-big">3-Cyl</span>
                     <span className="spec-sub">1.123L Liquid-Cooled</span>
                   </div>
-                  <div className={`spec-badge-box ${activeCallout === 'eng-flywheel' ? 'highlighted' : ''}`}>
+                  <div className="spec-badge-box">
                     <span className="spec-big">Tier 4</span>
                     <span className="spec-sub">EPA Final Compliant</span>
                   </div>
@@ -295,7 +265,7 @@ export default function V900Showcase() {
 
                 {/* 3 Concise Key Feature Points */}
                 <div className="v900-clean-points">
-                  <div className={`clean-point ${activeCallout === 'eng-block' ? 'highlighted' : ''}`}>
+                  <div className="clean-point">
                     <div className="point-icon">⚡</div>
                     <div>
                       <strong>25 HP High-Torque Performance</strong>
@@ -303,7 +273,7 @@ export default function V900Showcase() {
                     </div>
                   </div>
 
-                  <div className={`clean-point ${activeCallout === 'eng-fan' ? 'highlighted' : ''}`}>
+                  <div className="clean-point">
                     <div className="point-icon">❄️</div>
                     <div>
                       <strong>Multi-Blade Cooling System</strong>
@@ -311,7 +281,7 @@ export default function V900Showcase() {
                     </div>
                   </div>
 
-                  <div className={`clean-point ${activeCallout === 'eng-flywheel' ? 'highlighted' : ''}`}>
+                  <div className="clean-point">
                     <div className="point-icon">⚙️</div>
                     <div>
                       <strong>Direct Hydraulic Coupling</strong>
