@@ -179,6 +179,15 @@ export interface HomeCtaStripContent {
   secondaryBtnUrl: string
 }
 
+export interface HomeLatestArticlesContent {
+  visible?: boolean
+  eyebrow?: string
+  title?: string
+  description?: string
+  viewAllText?: string
+  viewAllUrl?: string
+}
+
 export interface HomePageContent {
   hero: HomeHeroContent
   featuresOverview: HomeFeaturesOverviewContent
@@ -191,6 +200,7 @@ export interface HomePageContent {
   advantages: HomeAdvantagesContent
   delivery: HomeDeliveryContent
   youtube: HomeYoutubeContent
+  latestArticles?: HomeLatestArticlesContent
   feedback: HomeFeedbackContent
   ctaStrip: HomeCtaStripContent
   updatedAt?: string
@@ -511,6 +521,14 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
         role: 'Equipment delivery'
       }
     ]
+  },
+  latestArticles: {
+    visible: true,
+    eyebrow: 'Equipment Insights & Guides',
+    title: 'Latest Articles',
+    description: 'Explore field equipment guides, preventive maintenance checklists, and operational best practices.',
+    viewAllText: 'View All Blogs',
+    viewAllUrl: '/blog'
   },
   ctaStrip: {
     visible: true,

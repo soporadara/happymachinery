@@ -6,6 +6,9 @@ import {
 } from '../data/v900Pricing'
 import { DEFAULT_HOME_CONTENT, HomePageContent } from '../data/homeContent'
 import { readSharedContent } from '../data/sharedContentStorage'
+import { readPersistentContent } from '../data/persistentStorage'
+import { DEFAULT_POSTS, type BlogPost } from './adminData'
+import { getBlogPostPath } from '../data/blogUrls'
 import V900Showcase from '../components/V900Showcase'
 import './Home.css'
 
@@ -84,6 +87,45 @@ export default function Home() {
     title: string
     tag: string
   } | null>(null)
+  const [latestPosts, setLatestPosts] = useState<BlogPost[]>(() => {
+    try {
+      const local = localStorage.getItem('happy-machinery-blog-posts')
+      const parsed = local ? JSON.parse(local) : DEFAULT_POSTS
+      return (parsed as BlogPost[]).filter((p) => p.status !== 'Draft').slice(0, 3)
+    } catch {
+      return DEFAULT_POSTS.filter((p) => p.status !== 'Draft').slice(0, 3)
+    }
+  })
+
+  useEffect(() => {
+    let mounted = true
+    const fetchLatestPosts = async () => {
+      try {
+        const shared = await readSharedContent<BlogPost[]>('blog-posts')
+        if (shared && Array.isArray(shared) && shared.length > 0 && mounted) {
+          setLatestPosts(shared.filter((p) => p.status !== 'Draft').slice(0, 3))
+          return
+        }
+      } catch {}
+
+      try {
+        const persist = await readPersistentContent<BlogPost[]>('blog-posts')
+        if (persist && Array.isArray(persist) && persist.length > 0 && mounted) {
+          setLatestPosts(persist.filter((p) => p.status !== 'Draft').slice(0, 3))
+          return
+        }
+      } catch {}
+    }
+    void fetchLatestPosts()
+    const handleUpdate = () => void fetchLatestPosts()
+    window.addEventListener('blog-updated', handleUpdate)
+    window.addEventListener('storage', handleUpdate)
+    return () => {
+      mounted = false
+      window.removeEventListener('blog-updated', handleUpdate)
+      window.removeEventListener('storage', handleUpdate)
+    }
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -121,6 +163,16 @@ export default function Home() {
             advantages: { ...prev.advantages, ...(saved.advantages || {}) },
             delivery: { ...prev.delivery, ...(saved.delivery || {}) },
             youtube: { ...prev.youtube, ...(saved.youtube || {}) },
+            latestArticles: {
+              visible: true,
+              eyebrow: 'Equipment Insights & Guides',
+              title: 'Latest Articles',
+              description: 'Explore field equipment guides, preventive maintenance checklists, and operational best practices.',
+              viewAllText: 'View All Blogs',
+              viewAllUrl: '/blog',
+              ...(prev.latestArticles || {}),
+              ...(saved.latestArticles || {})
+            },
             feedback: { ...prev.feedback, ...(saved.feedback || {}) },
             ctaStrip: { ...prev.ctaStrip, ...(saved.ctaStrip || {}) },
           }))
@@ -1038,6 +1090,78 @@ export default function Home() {
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* 11.5. Latest Articles & Jobsite Insights Section */}
+      {content.latestArticles?.visible !== false && (
+        <section className="latest-articles-section" aria-labelledby="latest-articles-title">
+          <div className="latest-articles-shell">
+            <div className="latest-articles-head">
+              <div>
+                <p className="eyebrow">{content.latestArticles?.eyebrow || 'Equipment Insights & Guides'}</p>
+                <h2 id="latest-articles-title">{content.latestArticles?.title || 'Latest Articles'}</h2>
+                <p className="latest-articles-desc">
+                  {content.latestArticles?.description || 'Explore field equipment guides, preventive maintenance checklists, and operational best practices.'}
+                </p>
+              </div>
+              <div className="latest-articles-action">
+                <Link to={content.latestArticles?.viewAllUrl || '/blog'} className="latest-articles-view-all-btn">
+                  <span>{content.latestArticles?.viewAllText || 'View All Blogs'}</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+
+            <div className="latest-articles-grid">
+              {latestPosts.map((post) => (
+                <article className="latest-article-card" key={post.id}>
+                  <Link to={getBlogPostPath(post)} className="latest-article-cover-link" tabIndex={-1} aria-hidden="true">
+                    <div className="latest-article-cover">
+                      <img
+                        src={post.image || '/images/why-choose-v900-jobsite.png'}
+                        alt={post.title}
+                        className="latest-article-img"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/images/why-choose-v900-jobsite.png'
+                        }}
+                      />
+                      <div className="latest-article-overlay"></div>
+                      <span className="latest-article-category-badge">{post.category}</span>
+                    </div>
+                  </Link>
+
+                  <div className="latest-article-body">
+                    <div className="latest-article-meta">
+                      <span className="latest-article-date">{post.date}</span>
+                      <span className="latest-article-divider">•</span>
+                      <span className="latest-article-readtime">{post.readTime}</span>
+                    </div>
+
+                    <h3 className="latest-article-title">
+                      <Link to={getBlogPostPath(post)}>
+                        {post.title}
+                      </Link>
+                    </h3>
+
+                    <p className="latest-article-excerpt">{post.excerpt}</p>
+
+                    <div className="latest-article-footer">
+                      <Link to={getBlogPostPath(post)} className="latest-article-read-link">
+                        <span>Read Article</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                          <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
         </section>
       )}
 

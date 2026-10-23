@@ -33,6 +33,7 @@ const SECTIONS_LIST: SectionMeta[] = [
   { id: 'advantages', name: 'Key Advantages', icon: '🛡️', badge: 'TRUST', desc: 'Core business strengths & guarantees' },
   { id: 'delivery', name: 'Nationwide Delivery', icon: '🚚', badge: 'LOGISTICS', desc: 'Delivery process steps, map/diagram & notes' },
   { id: 'youtube', name: 'YouTube Walkarounds', icon: '📺', badge: 'YOUTUBE', desc: 'Embedded video reviews & walkthroughs' },
+  { id: 'latestArticles', name: 'Latest Articles', icon: '📰', badge: 'BLOG', desc: 'Featured 3 latest published blog articles & view all link' },
   { id: 'feedback', name: 'Customer Testimonials', icon: '💬', badge: 'REVIEWS', desc: 'Verified buyer reviews, ratings & feedback' },
   { id: 'ctaStrip', name: 'Bottom Action Banner', icon: '🚀', badge: 'FOOTER CTA', desc: 'Full-width call to action strip' },
 ]
@@ -2149,6 +2150,117 @@ export default function HomePageCmsEditor({
                     </button>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* 11.5. LATEST ARTICLES & GUIDES */}
+          {activeSecId === 'latestArticles' && (
+            <div className="home-cms-card">
+              <h3 className="home-cms-card-title">📰 Latest Articles & Jobsite Insights</h3>
+              <p className="home-cms-card-desc">
+                This section dynamically displays the 3 latest published blog articles with image covers and titles, and links directly to each article or the full blog archive.
+              </p>
+
+              <div className="home-cms-grid-2">
+                <div className="home-cms-field">
+                  <label>Section Eyebrow</label>
+                  <input
+                    type="text"
+                    value={content.latestArticles?.eyebrow ?? 'Equipment Insights & Guides'}
+                    placeholder="Equipment Insights & Guides"
+                    onChange={(e) =>
+                      onChange({
+                        ...content,
+                        latestArticles: {
+                          ...(content.latestArticles || { visible: true, eyebrow: '', title: '', description: '', viewAllText: 'View All Blogs', viewAllUrl: '/blog' }),
+                          eyebrow: e.target.value
+                        }
+                      })
+                    }
+                  />
+                </div>
+                <div className="home-cms-field">
+                  <label>Section Title</label>
+                  <input
+                    type="text"
+                    value={content.latestArticles?.title ?? 'Latest Articles'}
+                    placeholder="Latest Articles"
+                    onChange={(e) =>
+                      onChange({
+                        ...content,
+                        latestArticles: {
+                          ...(content.latestArticles || { visible: true, eyebrow: '', title: '', description: '', viewAllText: 'View All Blogs', viewAllUrl: '/blog' }),
+                          title: e.target.value
+                        }
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="home-cms-field">
+                <label>Section Description / Subtitle</label>
+                <textarea
+                  rows={2}
+                  value={content.latestArticles?.description ?? 'Explore field equipment guides, preventive maintenance checklists, and operational best practices.'}
+                  placeholder="Short description under the title..."
+                  onChange={(e) =>
+                    onChange({
+                      ...content,
+                      latestArticles: {
+                        ...(content.latestArticles || { visible: true, eyebrow: '', title: '', description: '', viewAllText: 'View All Blogs', viewAllUrl: '/blog' }),
+                        description: e.target.value
+                      }
+                    })
+                  }
+                />
+              </div>
+
+              <div className="home-cms-grid-2">
+                <div className="home-cms-field">
+                  <label>Top-Right Button Text</label>
+                  <input
+                    type="text"
+                    value={content.latestArticles?.viewAllText ?? 'View All Blogs'}
+                    placeholder="View All Blogs"
+                    onChange={(e) =>
+                      onChange({
+                        ...content,
+                        latestArticles: {
+                          ...(content.latestArticles || { visible: true, eyebrow: '', title: '', description: '', viewAllText: 'View All Blogs', viewAllUrl: '/blog' }),
+                          viewAllText: e.target.value
+                        }
+                      })
+                    }
+                  />
+                </div>
+                <div className="home-cms-field">
+                  <label>Top-Right Button Destination URL</label>
+                  <input
+                    type="text"
+                    value={content.latestArticles?.viewAllUrl ?? '/blog'}
+                    placeholder="/blog"
+                    onChange={(e) =>
+                      onChange({
+                        ...content,
+                        latestArticles: {
+                          ...(content.latestArticles || { visible: true, eyebrow: '', title: '', description: '', viewAllText: 'View All Blogs', viewAllUrl: '/blog' }),
+                          viewAllUrl: e.target.value
+                        }
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="home-cms-divider" />
+
+              <div className="home-cms-info-callout" style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '8px', padding: '12px 16px' }}>
+                <span style={{ fontSize: '20px' }}>💡</span>
+                <span style={{ fontSize: '13px', color: 'var(--cms-text-secondary, #94a3b8)' }}>
+                  Articles are automatically pulled from your published blog posts in the <strong>Articles</strong> tab. To add or edit articles, use the Articles manager.
+                </span>
               </div>
             </div>
           )}
