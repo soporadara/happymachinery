@@ -78,3 +78,26 @@ test('4. Google Auth logic auto-links and authorizes registered primary administ
     'Must auto-link matching admin user on first Google login'
   )
 })
+
+test('5. Delivery section explicitly mentions and highlights 48 contiguous U.S. states', () => {
+  const homeContentPath = path.join(projectRoot, 'src/data/homeContent.ts')
+  const homeTsxPath = path.join(projectRoot, 'src/pages/Home.tsx')
+  const homeCssPath = path.join(projectRoot, 'src/pages/Home.css')
+
+  const homeContent = fs.readFileSync(homeContentPath, 'utf8')
+  const homeTsx = fs.readFileSync(homeTsxPath, 'utf8')
+  const homeCss = fs.readFileSync(homeCssPath, 'utf8')
+
+  // Check homeContent data
+  assert.ok(homeContent.includes('48 contiguous U.S. states'), 'homeContent delivery intro must mention 48 contiguous U.S. states')
+  assert.ok(homeContent.includes('Shipping available across 48 contiguous U.S. states'), 'homeContent delivery note must mention 48 contiguous U.S. states')
+
+  // Check Home.tsx UI
+  assert.ok(homeTsx.includes('delivery-region-pill'), 'Home.tsx must render delivery-region-pill')
+  assert.ok(homeTsx.includes('48 Contiguous U.S. States'), 'Home.tsx must render 48 Contiguous U.S. States in badge')
+
+  // Check Home.css styling
+  assert.ok(homeCss.includes('.delivery-region-pill'), 'Home.css must style delivery-region-pill')
+  assert.ok(homeCss.includes('.app-shell.dark .delivery-region-pill'), 'Home.css must style delivery-region-pill for dark mode')
+})
+

@@ -3525,6 +3525,31 @@
   line-height: 1.55;
 }
 
+.delivery-region-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(0, 102, 255, 0.08);
+  border: 1px solid rgba(0, 102, 255, 0.22);
+  color: #0052cc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.delivery-region-pill strong {
+  color: #0066ff;
+  font-weight: 800;
+}
+
+.delivery-region-pill .region-pill-flag {
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .delivery-actions {
   margin-top: 30px;
   display: flex;
@@ -3533,7 +3558,7 @@
 }
 
 .delivery-actions > span {
-  max-width: 130px;
+  max-width: 175px;
   color: #64748b;
   font-size: 0.68rem;
   font-weight: 700;
@@ -3544,6 +3569,16 @@
 
 .app-shell.dark .delivery-section {
   background: #091322;
+}
+
+.app-shell.dark .delivery-region-pill {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.28);
+  color: #38bdf8;
+}
+
+.app-shell.dark .delivery-region-pill strong {
+  color: #ffffff;
 }
 
 .app-shell.dark .delivery-content h2,

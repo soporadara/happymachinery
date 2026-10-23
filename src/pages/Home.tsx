@@ -161,7 +161,18 @@ export default function Home() {
             performance: { ...prev.performance, ...(saved.performance || {}) },
             faq: { ...prev.faq, ...(saved.faq || {}) },
             advantages: { ...prev.advantages, ...(saved.advantages || {}) },
-            delivery: { ...prev.delivery, ...(saved.delivery || {}) },
+            delivery: {
+              ...prev.delivery,
+              ...(saved.delivery || {}),
+              intro: saved?.delivery?.intro && saved.delivery.intro.includes('48 contiguous')
+                ? saved.delivery.intro
+                : (saved?.delivery?.intro
+                    ? `${saved.delivery.intro.replace(/\.?$/, '')} across all 48 contiguous U.S. states.`
+                    : prev.delivery.intro),
+              note: saved?.delivery?.note && saved.delivery.note.includes('48')
+                ? saved.delivery.note
+                : (prev.delivery.note || 'Shipping available across 48 contiguous U.S. states')
+            },
             youtube: { ...prev.youtube, ...(saved.youtube || {}) },
             latestArticles: {
               visible: true,
@@ -892,6 +903,10 @@ export default function Home() {
             <div className="delivery-content">
               <p className="eyebrow">{content.delivery.eyebrow}</p>
               <h2 id="delivery-title">{content.delivery.title}</h2>
+              <div className="delivery-region-pill">
+                <span className="region-pill-flag" aria-hidden="true">🇺🇸</span>
+                <span>Direct Delivery Across all <strong>48 Contiguous U.S. States</strong></span>
+              </div>
               <p className="delivery-intro">{content.delivery.intro}</p>
 
               <ol className="delivery-steps">

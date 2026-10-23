@@ -442,7 +442,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     visible: true,
     eyebrow: 'From Our Yard to Yours',
     title: 'Delivery, handled.',
-    intro: 'Your V900 is prepared, secured, and coordinated for dependable delivery. Our team keeps the process clear from order confirmation through arrival.',
+    intro: 'Your V900 is prepared, secured, and coordinated for dependable delivery across all 48 contiguous U.S. states. Our team keeps the process clear from order confirmation through arrival.',
     imageUrl: '/images/v900-delivery.png',
     badgeTitle: 'Load secured',
     badgeSubtitle: 'Ready for dispatch',
@@ -455,7 +455,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
       {
         number: '02',
         title: 'Secure transport',
-        text: 'Equipment is carefully positioned and tied down for safe, stable transportation.'
+        text: 'Equipment is carefully positioned and tied down for safe, stable transportation across the 48 contiguous U.S. states.'
       },
       {
         number: '03',
@@ -465,7 +465,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     ],
     btnText: 'Get a Delivery Quote',
     btnUrl: '/contact',
-    note: 'Nationwide US shipping available'
+    note: 'Shipping available across 48 contiguous U.S. states'
   },
   youtube: {
     visible: true,
