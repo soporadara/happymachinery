@@ -1034,11 +1034,34 @@
 }
 
 .cms-table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  width: 100%;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  max-width: 100% !important;
   border-radius: var(--cms-radius-md);
   border: 1px solid var(--cms-border);
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(29, 127, 243, 0.5) var(--cms-border);
+}
+
+.cms-table-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.cms-table-wrapper::-webkit-scrollbar-track {
+  background: var(--cms-bg-card, rgba(0, 0, 0, 0.03));
+  border-radius: 4px;
+}
+
+.cms-table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(29, 127, 243, 0.5);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.cms-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(29, 127, 243, 0.85);
 }
 
 .cms-table {
@@ -4749,13 +4772,46 @@ html.dark .cms-kpi-card.red .cms-kpi-icon-circle {
    ============================================================================== */
 .cms-dashboard-2col-layout {
   display: grid;
-  grid-template-columns: 1.8fr 1fr;
+  grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
   gap: 20px;
 }
 
 .cms-recent-articles-card {
   padding: 24px;
   border-radius: 16px;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden;
+}
+
+.cms-table.cms-dashboard-equipment-table {
+  min-width: 1080px !important;
+  width: 100%;
+}
+
+.cms-table.cms-dashboard-equipment-table th,
+.cms-table.cms-dashboard-equipment-table td {
+  white-space: nowrap;
+}
+
+.cms-table.cms-dashboard-equipment-table td.cms-article-title-cell {
+  min-width: 240px;
+  white-space: normal;
+}
+
+.cms-table.cms-dashboard-articles-table {
+  min-width: 960px !important;
+  width: 100%;
+}
+
+.cms-table.cms-dashboard-articles-table th,
+.cms-table.cms-dashboard-articles-table td {
+  white-space: nowrap;
+}
+
+.cms-table.cms-dashboard-articles-table td.cms-article-title-cell {
+  min-width: 250px;
+  white-space: normal;
 }
 
 .cms-card-header-row {
@@ -8186,7 +8242,7 @@ html.dark .cms-kpi-card.red .cms-kpi-icon-circle {
 .cms-table,
 .cms-prod-table,
 .cms-articles-table {
-  min-width: 660px !important;
+  min-width: 720px;
 }
 
 /* Sub-nav horizontal touch scrolling */

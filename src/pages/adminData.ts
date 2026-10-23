@@ -147,6 +147,109 @@ export interface CartOrder {
   date: string
 }
 
+export interface ProductAttribute {
+  id: string
+  name: string
+  slug: string
+  type: 'select' | 'pills' | 'text' | 'number'
+  terms: string[]
+  description?: string
+  isRequired?: boolean
+  isFilterable?: boolean
+  productsCount?: number
+}
+
+export const DEFAULT_PRODUCT_ATTRIBUTES: ProductAttribute[] = [
+  {
+    id: 'attr-engine',
+    name: 'Engine Model',
+    slug: 'engine-model',
+    type: 'select',
+    terms: ['Kubota D1105 (25 HP)', 'Kubota V1505 (24.8 HP)', 'Yanmar 3TNV80 (20 HP)', 'Briggs & Stratton Vanguard (23 HP)', 'Rato R740D (23 HP)'],
+    description: 'Original manufacturer diesel/gas engine power plant.',
+    isRequired: true,
+    isFilterable: true,
+    productsCount: 68
+  },
+  {
+    id: 'attr-horsepower',
+    name: 'Horsepower (HP)',
+    slug: 'horsepower',
+    type: 'pills',
+    terms: ['25 HP', '24.8 HP', '23 HP', '20 HP', '13.5 HP'],
+    description: 'Gross rated engine output horsepower.',
+    isRequired: true,
+    isFilterable: true,
+    productsCount: 84
+  },
+  {
+    id: 'attr-track',
+    name: 'Track & Undercarriage',
+    slug: 'track-type',
+    type: 'select',
+    terms: ['Triangular High-Drive Rubber Track', 'Standard Dual Rubber Track', 'Heavy-Duty Steel Track', 'Non-Marking Turf Track'],
+    description: 'Undercarriage track configuration and traction system.',
+    isRequired: false,
+    isFilterable: true,
+    productsCount: 42
+  },
+  {
+    id: 'attr-color',
+    name: 'Machine Color',
+    slug: 'machine-color',
+    type: 'pills',
+    terms: ['Crimson Red', 'Industrial Yellow', 'Cobalt Blue', 'Stealth Black', 'Safety Orange'],
+    description: 'Protective industrial powder-coated chassis finish.',
+    isRequired: false,
+    isFilterable: true,
+    productsCount: 56
+  },
+  {
+    id: 'attr-operating-weight',
+    name: 'Operating Weight',
+    slug: 'operating-weight',
+    type: 'select',
+    terms: ['1,400 kg (1.4 Ton / 3,086 lbs)', '1,000 kg (1.0 Ton / 2,204 lbs)', '800 kg (0.8 Ton / 1,763 lbs)', '500 kg (1,102 lbs)'],
+    description: 'Total operational equipment weight with standard attachments.',
+    isRequired: false,
+    isFilterable: true,
+    productsCount: 39
+  },
+  {
+    id: 'attr-hydraulic-flow',
+    name: 'Hydraulic Flow Rate',
+    slug: 'hydraulic-flow',
+    type: 'pills',
+    terms: ['48 L/min (12.7 GPM)', '32 L/min (8.5 GPM)', '24 L/min (6.3 GPM)'],
+    description: 'Auxiliary hydraulic pump flow rate for demanding attachments.',
+    isRequired: false,
+    isFilterable: true,
+    productsCount: 35
+  },
+  {
+    id: 'attr-roc',
+    name: 'Rated Operating Capacity (ROC)',
+    slug: 'rated-operating-capacity',
+    type: 'pills',
+    terms: ['1,102 lbs (500 kg)', '1,014 lbs (460 kg)', '800 lbs (363 kg)', '600 lbs (272 kg)'],
+    description: 'Safe SAE working lift load capacity.',
+    isRequired: false,
+    isFilterable: true,
+    productsCount: 48
+  },
+  {
+    id: 'attr-coupler',
+    name: 'Attachment Coupler',
+    slug: 'attachment-coupler',
+    type: 'select',
+    terms: ['Universal Skid Steer Quick-Attach (Bob-Tach style)', 'Mini Universal Mounting Plate', 'Direct Pin-On'],
+    description: 'Front hitch mounting bracket mechanism for tools and attachments.',
+    isRequired: false,
+    isFilterable: true,
+    productsCount: 62
+  }
+]
+
 export const DEFAULT_CART_ORDERS: CartOrder[] = [
   {
     id: 'HM-9821',
@@ -187,6 +290,16 @@ export const DEFAULT_CART_ORDERS: CartOrder[] = [
     amount: 11999.00,
     status: 'Completed',
     date: 'Oct 15, 2026'
+  },
+  {
+    id: 'HM-9817',
+    customer: 'Carlos Mendez',
+    email: 'carlos@mendezexcavation.com',
+    phone: '713-555-3490',
+    items: 'TYPHON V900 Skid Steer Loader — Crimson Red (1x), Heavy-Duty Pallet Fork (1x)',
+    amount: 13763.00,
+    status: 'Abandoned',
+    date: 'Oct 14, 2026'
   }
 ]
 
@@ -478,7 +591,9 @@ export const DEFAULT_INQUIRIES: Inquiry[] = [
   { id: 1, name: 'Jason Miller', email: 'jason@millerbuilt.com', phone: '214-555-0182', company: 'Miller Landscaping Services', message: 'Looking for a quote on the V900 loader in yellow with the pallet fork and auger attachments. Need delivery to Dallas.', date: '2026-07-22', status: 'New', productInterest: 'TYPHON V900 Mini Track Loader' },
   { id: 2, name: 'Sarah Jenkins', email: 's.jenkins@epiccontractors.com', phone: '312-555-9831', company: 'Epic Infrastructure Group', message: 'Need bulk pricing for 3 units of the V900 loader. Do you offer warranty extensions for commercial fleets?', date: '2026-07-21', status: 'In Progress', productInterest: 'TYPHON V900 Mini Track Loader' },
   { id: 3, name: 'Robert Chen', email: 'rchen@pacificbuilders.org', phone: '650-555-2245', company: 'Pacific Builders', message: 'Interested in the mini excavator attachments. Will the standard auger plate fit older bobcat models?', date: '2026-07-20', status: 'Contacted', productInterest: 'Universal Pallet Forks' },
-  { id: 4, name: 'David Vance', email: 'dvance@vanceconcrete.com', phone: '305-555-8812', company: 'Vance Concrete Contractors', message: 'Are the tracks non-marking rubber? We do indoor warehouse slab work and want to avoid track lines.', date: '2026-07-18', status: 'Resolved', productInterest: 'TYPHON V900 Mini Track Loader' }
+  { id: 4, name: 'David Vance', email: 'dvance@vanceconcrete.com', phone: '305-555-8812', company: 'Vance Concrete Contractors', message: 'Are the tracks non-marking rubber? We do indoor warehouse slab work and want to avoid track lines.', date: '2026-07-18', status: 'Resolved', productInterest: 'TYPHON V900 Mini Track Loader' },
+  { id: 5, name: 'Marcus Sterling', email: 'msterling@apexearth.com', phone: '404-555-7721', company: 'Apex Earth & Grading LLC', message: 'Can we schedule an on-site demo for the Kubota D1105 25HP V900 skid steer loader in Atlanta next Tuesday?', date: '2026-10-21', status: 'New', productInterest: 'TYPHON V900 Mini Track Loader' },
+  { id: 6, name: 'Elena Rostova', email: 'elena@summitcivils.com', phone: '206-555-4920', company: 'Summit Civil Contracting', message: 'Requesting formal commercial invoice for 1x TYPH-5005M Pallet Fork and 1x Hydraulic Breaker attachment with freight to Seattle.', date: '2026-10-20', status: 'In Progress', productInterest: 'TYPH-5005M Heavy-Duty Pallet Fork' }
 ]
 
 // Default comments
@@ -532,5 +647,16 @@ export const DEFAULT_COMMENTS: BlogComment[] = [
     text: 'Check out cheap equipment deals on this link! spam-link.xyz',
     date: '2026-07-20',
     status: 'Spam'
+  },
+  {
+    id: 4,
+    postId: 100,
+    postTitle: 'Maximizing Skid Steer Efficiency & Safety on Residential Jobsites',
+    author: 'Tom Henderson',
+    email: 'thenderson@hendersonbuild.com',
+    text: 'Does the 36-inch gate width profile apply to both the Crimson Red and Cobalt Blue versions? We do historic residential renovations in Boston.',
+    date: '2026-10-22',
+    status: 'Pending',
+    likes: 1
   }
 ]

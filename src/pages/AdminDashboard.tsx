@@ -26,10 +26,15 @@ import {
   Inquiry,
   BlogComment,
   CartOrder,
+  ProductAttribute,
   getUserProfileAvatar,
   DEFAULT_POSTS, 
   DEFAULT_PRODUCTS, 
-  DEFAULT_MEDIA
+  DEFAULT_MEDIA,
+  DEFAULT_PRODUCT_ATTRIBUTES,
+  DEFAULT_CART_ORDERS,
+  DEFAULT_INQUIRIES,
+  DEFAULT_COMMENTS
 } from './adminData'
 import { readSharedContent, writeSharedContent } from '../data/sharedContentStorage'
 import { getBlogPostPath } from '../data/blogUrls'
@@ -1049,7 +1054,7 @@ export default function AdminDashboard() {
 
   // Products Management States (Screenshots 1, 2, 3)
   const [isProductsExpanded, setIsProductsExpanded] = useState(true)
-  const [productsSubView, setProductsSubView] = useState<'list' | 'editor' | 'categories' | 'brands'>('list')
+  const [productsSubView, setProductsSubView] = useState<'list' | 'editor' | 'categories' | 'brands' | 'attributes'>('list')
   const [dashboardRecentTab, setDashboardRecentTab] = useState<'products' | 'articles'>('products')
   const [prodSearch, setProdSearch] = useState('')
   const [prodStatusFilter, setProdStatusFilter] = useState<'all' | 'published' | 'draft' | 'low-stock'>('all')
@@ -1147,6 +1152,25 @@ export default function AdminDashboard() {
   const [pcatCover, setPcatCover] = useState('')
   const [pcatSearch, setPcatSearch] = useState('')
 
+  // Product Attributes Management States (New Attributes Menu)
+  const [productAttributes, setProductAttributes] = useState<ProductAttribute[]>(() => {
+    try {
+      const saved = localStorage.getItem('hm_cms_product_attributes')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_PRODUCT_ATTRIBUTES
+  })
+  const [editingAttribute, setEditingAttribute] = useState<ProductAttribute | null>(null)
+  const [attrSearch, setAttrSearch] = useState('')
+  const [attrFormName, setAttrFormName] = useState('')
+  const [attrFormSlug, setAttrFormSlug] = useState('')
+  const [attrFormType, setAttrFormType] = useState<'select' | 'pills' | 'text' | 'number'>('select')
+  const [attrFormTerms, setAttrFormTerms] = useState('')
+  const [attrFormDesc, setAttrFormDesc] = useState('')
+  const [attrFormFilterable, setAttrFormFilterable] = useState(true)
+  const [attrFormRequired, setAttrFormRequired] = useState(false)
+  const [quickTermInput, setQuickTermInput] = useState<{ [attrId: string]: string }>({})
+
   // Product Editor Form States (Screenshots 1 & 3)
   const [prodEditorId, setProdEditorId] = useState<number | null>(null)
   const [prodEditorName, setProdEditorName] = useState('')
@@ -1168,15 +1192,33 @@ export default function AdminDashboard() {
   const [prodEditorSpecs, setProdEditorSpecs] = useState<{ name: string; value: string }[]>([])
 
   // Inquiries & Leads States
-  const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => [])
+  const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-inquiries')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_INQUIRIES
+  })
   const [inquirySearch, setInquirySearch] = useState('')
   const [inquiryStatusFilter, setInquiryStatusFilter] = useState<string>('all')
 
   // Cart Orders States
-  const [ordersList, setOrdersList] = useState<CartOrder[]>(() => [])
+  const [ordersList, setOrdersList] = useState<CartOrder[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-orders')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_CART_ORDERS
+  })
 
   // Comments Moderation States
-  const [commentsData, setCommentsData] = useState<BlogComment[]>(() => [])
+  const [commentsData, setCommentsData] = useState<BlogComment[]>(() => {
+    try {
+      const saved = localStorage.getItem('happy-machinery-comments')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_COMMENTS
+  })
   const [commentFilter, setCommentFilter] = useState<'all' | 'Pending' | 'Approved' | 'Spam'>('all')
 
   // Articles Sub-view & Editorial States
@@ -1224,16 +1266,6 @@ export default function AdminDashboard() {
 
   // Rich WYSIWYG & Media Editor States (Matches Image 2)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const dashboardTableRef = useRef<HTMLDivElement>(null)
-
-  const scrollDashboardTable = (direction: 'left' | 'right') => {
-    if (dashboardTableRef.current) {
-      dashboardTableRef.current.scrollBy({
-        left: direction === 'left' ? -380 : 380,
-        behavior: 'smooth'
-      })
-    }
-  }
 
   const [assignedSeries, setAssignedSeries] = useState('None (Standalone Article)')
 
@@ -1691,7 +1723,10 @@ export default function AdminDashboard() {
           inquiryMap.set(item.id, item)
         }
       })
-      const mergedInquiries = Array.from(inquiryMap.values()).sort((a, b) => b.id - a.id)
+      let mergedInquiries = Array.from(inquiryMap.values()).sort((a, b) => b.id - a.id)
+      if (mergedInquiries.length === 0) {
+        mergedInquiries = DEFAULT_INQUIRIES
+      }
       setInquiriesList(mergedInquiries)
       try {
         localStorage.setItem('happy-machinery-inquiries', JSON.stringify(mergedInquiries))
@@ -1700,11 +1735,45 @@ export default function AdminDashboard() {
       if (mergedInquiries.length > serverInquiries.length) {
         void writeSharedContent('inquiries', mergedInquiries).catch(() => {})
       }
-      if (fetchedOrders && Array.isArray(fetchedOrders)) {
+      if (fetchedOrders && Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
         setOrdersList(fetchedOrders)
+        try { localStorage.setItem('happy-machinery-orders', JSON.stringify(fetchedOrders)) } catch {}
+      } else {
+        let localOrders: CartOrder[] = []
+        try {
+          const raw = localStorage.getItem('happy-machinery-orders')
+          localOrders = raw ? JSON.parse(raw) : []
+        } catch {}
+        const finalOrders = localOrders.length > 0 ? localOrders : DEFAULT_CART_ORDERS
+        setOrdersList(finalOrders)
+        try { localStorage.setItem('happy-machinery-orders', JSON.stringify(finalOrders)) } catch {}
       }
-      if (fetchedComments && Array.isArray(fetchedComments)) {
+
+      if (fetchedComments && Array.isArray(fetchedComments) && fetchedComments.length > 0) {
         setCommentsData(fetchedComments)
+        try { localStorage.setItem('happy-machinery-comments', JSON.stringify(fetchedComments)) } catch {}
+      } else {
+        let localComments: BlogComment[] = []
+        try {
+          const raw = localStorage.getItem('happy-machinery-comments')
+          localComments = raw ? JSON.parse(raw) : []
+        } catch {}
+        const finalComments = localComments.length > 0 ? localComments : DEFAULT_COMMENTS
+        setCommentsData(finalComments)
+        try { localStorage.setItem('happy-machinery-comments', JSON.stringify(finalComments)) } catch {}
+      }
+
+      // Sync Product Attributes
+      let localAttrs: ProductAttribute[] = []
+      try {
+        const raw = localStorage.getItem('hm_cms_product_attributes')
+        localAttrs = raw ? JSON.parse(raw) : []
+      } catch {}
+      if (localAttrs.length > 0) {
+        setProductAttributes(localAttrs)
+      } else {
+        setProductAttributes(DEFAULT_PRODUCT_ATTRIBUTES)
+        try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(DEFAULT_PRODUCT_ATTRIBUTES)) } catch {}
       }
 
       if (fetchedHomeContent) {
@@ -3056,14 +3125,25 @@ export default function AdminDashboard() {
   const handleUpdateOrderStatus = async (id: string, status: CartOrder['status']) => {
     const updated = ordersList.map((item) => item.id === id ? { ...item, status } : item)
     setOrdersList(updated)
+    try { localStorage.setItem('happy-machinery-orders', JSON.stringify(updated)) } catch {}
     await writeSharedContent('orders', updated)
     showToast(`Order ${id} marked as ${status}.`, 'success')
+  }
+
+  const handleDeleteOrder = async (id: string) => {
+    if (!window.confirm(`Delete order ${id}? This cannot be undone.`)) return
+    const updated = ordersList.filter((item) => item.id !== id)
+    setOrdersList(updated)
+    try { localStorage.setItem('happy-machinery-orders', JSON.stringify(updated)) } catch {}
+    await writeSharedContent('orders', updated)
+    showToast(`Order ${id} removed.`, 'success')
   }
 
   // Comments Handlers
   const handleUpdateCommentStatus = async (id: number, status: 'Pending' | 'Approved' | 'Spam') => {
     const updated = commentsData.map((item) => item.id === id ? { ...item, status } : item)
     setCommentsData(updated)
+    try { localStorage.setItem('happy-machinery-comments', JSON.stringify(updated)) } catch {}
     await writeSharedContent('comments', updated)
     showToast(`Comment marked as ${status}.`, 'success')
   }
@@ -3071,8 +3151,151 @@ export default function AdminDashboard() {
   const handleDeleteComment = async (id: number) => {
     const updated = commentsData.filter((item) => item.id !== id)
     setCommentsData(updated)
+    try { localStorage.setItem('happy-machinery-comments', JSON.stringify(updated)) } catch {}
     await writeSharedContent('comments', updated)
     showToast('Comment deleted.', 'success')
+  }
+
+  // Product Attributes Handlers
+  const handleSaveAttribute = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const name = attrFormName.trim()
+    if (!name) {
+      showToast('Please enter an attribute name.', 'warning')
+      return
+    }
+
+    const slug = (attrFormSlug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')) || 'attr'
+    const termsArray = attrFormTerms
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+
+    if (editingAttribute) {
+      const updated = productAttributes.map((attr) =>
+        attr.id === editingAttribute.id
+          ? {
+              ...attr,
+              name,
+              slug,
+              type: attrFormType,
+              terms: termsArray.length > 0 ? termsArray : attr.terms,
+              description: attrFormDesc.trim(),
+              isFilterable: attrFormFilterable,
+              isRequired: attrFormRequired
+            }
+          : attr
+      )
+      setProductAttributes(updated)
+      try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(updated)) } catch {}
+      setEditingAttribute(null)
+      showToast(`Attribute "${name}" updated successfully.`, 'success')
+    } else {
+      const newAttr: ProductAttribute = {
+        id: `attr-${Date.now()}`,
+        name,
+        slug,
+        type: attrFormType,
+        terms: termsArray,
+        description: attrFormDesc.trim(),
+        isFilterable: attrFormFilterable,
+        isRequired: attrFormRequired,
+        productsCount: 0
+      }
+      const updated = [newAttr, ...productAttributes]
+      setProductAttributes(updated)
+      try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(updated)) } catch {}
+      showToast(`Attribute "${name}" created with ${termsArray.length} terms.`, 'success')
+    }
+
+    // Reset form
+    setAttrFormName('')
+    setAttrFormSlug('')
+    setAttrFormType('select')
+    setAttrFormTerms('')
+    setAttrFormDesc('')
+    setAttrFormFilterable(true)
+    setAttrFormRequired(false)
+  }
+
+  const handleStartEditAttribute = (attr: ProductAttribute) => {
+    setEditingAttribute(attr)
+    setAttrFormName(attr.name)
+    setAttrFormSlug(attr.slug)
+    setAttrFormType(attr.type)
+    setAttrFormTerms(attr.terms.join(', '))
+    setAttrFormDesc(attr.description || '')
+    setAttrFormFilterable(attr.isFilterable ?? true)
+    setAttrFormRequired(attr.isRequired ?? false)
+
+    const formEl = document.getElementById('cms-attr-form-anchor')
+    if (formEl) {
+      formEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleCancelEditAttribute = () => {
+    setEditingAttribute(null)
+    setAttrFormName('')
+    setAttrFormSlug('')
+    setAttrFormType('select')
+    setAttrFormTerms('')
+    setAttrFormDesc('')
+    setAttrFormFilterable(true)
+    setAttrFormRequired(false)
+  }
+
+  const handleDeleteAttribute = (attrId: string) => {
+    const target = productAttributes.find((a) => a.id === attrId)
+    if (!target) return
+    if (!window.confirm(`Are you sure you want to delete the attribute "${target.name}"?`)) return
+
+    const remaining = productAttributes.filter((a) => a.id !== attrId)
+    setProductAttributes(remaining)
+    try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(remaining)) } catch {}
+    if (editingAttribute?.id === attrId) {
+      handleCancelEditAttribute()
+    }
+    showToast(`Attribute "${target.name}" removed.`, 'success')
+  }
+
+  const handleAddTermToAttribute = (attrId: string, newTerm: string) => {
+    const clean = newTerm.trim()
+    if (!clean) return
+    const updated = productAttributes.map((attr) => {
+      if (attr.id === attrId) {
+        if (attr.terms.includes(clean)) {
+          showToast(`Term "${clean}" already exists on this attribute.`, 'warning')
+          return attr
+        }
+        return { ...attr, terms: [...attr.terms, clean] }
+      }
+      return attr
+    })
+    setProductAttributes(updated)
+    try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(updated)) } catch {}
+    setQuickTermInput((prev) => ({ ...prev, [attrId]: '' }))
+    showToast(`Added term "${clean}".`, 'success')
+  }
+
+  const handleRemoveTermFromAttribute = (attrId: string, termToRemove: string) => {
+    const updated = productAttributes.map((attr) => {
+      if (attr.id === attrId) {
+        return { ...attr, terms: attr.terms.filter((t) => t !== termToRemove) }
+      }
+      return attr
+    })
+    setProductAttributes(updated)
+    try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(updated)) } catch {}
+    showToast(`Removed "${termToRemove}".`, 'success')
+  }
+
+  const handleResetDefaultAttributes = () => {
+    if (window.confirm('Reset equipment attributes to the standard machinery presets? Any custom attributes will be replaced.')) {
+      setProductAttributes(DEFAULT_PRODUCT_ATTRIBUTES)
+      try { localStorage.setItem('hm_cms_product_attributes', JSON.stringify(DEFAULT_PRODUCT_ATTRIBUTES)) } catch {}
+      showToast('Reset attributes to standard machinery presets.', 'success')
+    }
   }
 
   // 1-Click Cache Purge
@@ -3430,6 +3653,30 @@ export default function AdminDashboard() {
                     </svg>
                   </span>
                   <span>Brands</span>
+                </button>
+
+                <button
+                  className={`cms-nav-sub-item ${activeTab === 'products' && productsSubView === 'attributes' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('products')
+                    setProductsSubView('attributes')
+                  }}
+                >
+                  <span className="cms-sub-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                      <line x1="4" y1="21" x2="4" y2="14" />
+                      <line x1="4" y1="10" x2="4" y2="3" />
+                      <line x1="12" y1="21" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12" y2="3" />
+                      <line x1="20" y1="21" x2="20" y2="16" />
+                      <line x1="20" y1="12" x2="20" y2="3" />
+                      <line x1="1" y1="14" x2="7" y2="14" />
+                      <line x1="9" y1="8" x2="15" y2="8" />
+                      <line x1="17" y1="16" x2="23" y2="16" />
+                    </svg>
+                  </span>
+                  <span>Attributes</span>
+                  <span className="cms-sub-count">{productAttributes.length}</span>
                 </button>
               </div>
             )}
@@ -4215,42 +4462,6 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {/* Horizontal Scroll Helper Pill & Buttons */}
-                      <div className="cms-table-scroll-hint-wrapper">
-                        <span className="cms-table-scroll-hint-pill" title="Table is horizontally scrollable to view all columns">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="7 10 2 12 7 14" />
-                            <polyline points="17 10 22 12 17 14" />
-                            <line x1="2" y1="12" x2="22" y2="12" />
-                          </svg>
-                          <span>Scrollable ⇄</span>
-                        </span>
-                        <div className="cms-table-scroll-controls" title="Scroll table left / right">
-                          <button
-                            type="button"
-                            className="cms-table-scroll-btn"
-                            onClick={() => scrollDashboardTable('left')}
-                            aria-label="Scroll left"
-                            title="Scroll table left"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="15 18 9 12 15 6" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-table-scroll-btn"
-                            onClick={() => scrollDashboardTable('right')}
-                            aria-label="Scroll right"
-                            title="Scroll table right"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="9 18 15 12 9 6" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-
                       <button
                         type="button"
                         className="cms-link-action-btn"
@@ -4270,9 +4481,9 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="cms-table-wrapper" ref={dashboardTableRef}>
+                  <div className="cms-table-wrapper">
                     {dashboardRecentTab === 'products' ? (
-                      <table className="cms-table cms-articles-table">
+                      <table className="cms-table cms-articles-table cms-dashboard-equipment-table">
                         <thead>
                           <tr>
                             <th>EQUIPMENT MODEL</th>
@@ -4373,7 +4584,7 @@ export default function AdminDashboard() {
                         </tbody>
                       </table>
                     ) : (
-                      <table className="cms-table cms-articles-table">
+                      <table className="cms-table cms-articles-table cms-dashboard-articles-table">
                         <thead>
                           <tr>
                             <th>ARTICLE</th>
@@ -7484,6 +7695,20 @@ export default function AdminDashboard() {
                     >
                       Categories & Hierarchy ({productCategories.length})
                     </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('brands')}
+                    >
+                      Brands
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('attributes')}
+                    >
+                      Attributes ({productAttributes.length})
+                    </button>
                     {trashItems.filter((i) => i.type === 'product').length > 0 && (
                       <button
                         type="button"
@@ -7937,17 +8162,42 @@ export default function AdminDashboard() {
                       <div className="cms-editor-card">
                         <div className="cms-editor-card-title">
                           <span>SPECIFICATIONS</span>
-                          <button
-                            type="button"
-                            className="cms-action-pill-btn"
-                            onClick={handleAddSpecRow}
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <line x1="12" y1="5" x2="12" y2="19" />
-                              <line x1="5" y1="12" x2="19" y2="12" />
-                            </svg>
-                            <span>ADD SPEC</span>
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {productAttributes.length > 0 && (
+                              <select
+                                className="cms-filter-dropdown-select"
+                                style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+                                value=""
+                                onChange={(e) => {
+                                  const selectedAttr = productAttributes.find((a) => a.id === e.target.value)
+                                  if (selectedAttr) {
+                                    setProdEditorSpecs((prev) => [
+                                      ...prev,
+                                      { name: selectedAttr.name, value: selectedAttr.terms[0] || '' }
+                                    ])
+                                  }
+                                }}
+                              >
+                                <option value="" disabled>+ Add from Attributes...</option>
+                                {productAttributes.map((attr) => (
+                                  <option key={attr.id} value={attr.id}>
+                                    {attr.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            <button
+                              type="button"
+                              className="cms-action-pill-btn"
+                              onClick={handleAddSpecRow}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                              </svg>
+                              <span>ADD SPEC</span>
+                            </button>
+                          </div>
                         </div>
 
                         {prodEditorSpecs.length === 0 ? (
@@ -7981,7 +8231,15 @@ export default function AdminDashboard() {
                                   placeholder="Spec Value (e.g. Kubota D1105 Diesel)"
                                   value={spec.value}
                                   onChange={(e) => handleUpdateSpecRow(index, 'value', e.target.value)}
+                                  list={`spec-terms-${index}`}
                                 />
+                                <datalist id={`spec-terms-${index}`}>
+                                  {productAttributes
+                                    .find((a) => a.name.toLowerCase() === spec.name.trim().toLowerCase())
+                                    ?.terms.map((t, idx) => (
+                                      <option key={idx} value={t} />
+                                    ))}
+                                </datalist>
                                 <button
                                   type="button"
                                   className="cms-spec-del-btn"
@@ -8291,6 +8549,13 @@ export default function AdminDashboard() {
                       onClick={() => setProductsSubView('brands')}
                     >
                       Brands
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('attributes')}
+                    >
+                      Attributes ({productAttributes.length})
                     </button>
                   </div>
 
@@ -8618,6 +8883,13 @@ export default function AdminDashboard() {
                     >
                       Brands
                     </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('attributes')}
+                    >
+                      Attributes ({productAttributes.length})
+                    </button>
                   </div>
                   <div className="cms-categories-grid">
                     <div className="cms-card">
@@ -8641,6 +8913,418 @@ export default function AdminDashboard() {
                         >
                           View TYPHON Products →
                         </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUBVIEW E: PRODUCT ATTRIBUTES MANAGEMENT */}
+              {productsSubView === 'attributes' && (
+                <div className="cms-categories-view-wrapper">
+                  {/* Top Breadcrumb Bar */}
+                  <div className="cms-view-breadcrumb-bar">
+                    <span>Dashboard</span>
+                    <span>›</span>
+                    <span>Products</span>
+                    <span>›</span>
+                    <span className="active">Attributes</span>
+                  </div>
+
+                  {/* Header Row */}
+                  <div className="cms-view-header">
+                    <div className="cms-view-title-group">
+                      <h1>Equipment & Product Attributes</h1>
+                      <p>
+                        Define machinery specifications, engine configurations, track systems, and option terms across your catalog.
+                      </p>
+                    </div>
+                    <div className="cms-taxonomy-counters">
+                      <div className="cms-tax-pill">
+                        <span>ATTRIBUTES</span>
+                        <strong>{productAttributes.length}</strong>
+                      </div>
+                      <div className="cms-tax-pill blue">
+                        <span>TOTAL TERMS</span>
+                        <strong>{productAttributes.reduce((acc, a) => acc + a.terms.length, 0)}</strong>
+                      </div>
+                      <div className="cms-tax-pill">
+                        <span>FILTERABLE</span>
+                        <strong>{productAttributes.filter((a) => a.isFilterable).length}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subnav row */}
+                  <div className="cms-articles-subnav">
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => {
+                        setProductsSubView('list')
+                        setProdCategoryFilter('all')
+                      }}
+                    >
+                      All Products ({products.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('categories')}
+                    >
+                      Categories ({productCategories.length})
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn"
+                      onClick={() => setProductsSubView('brands')}
+                    >
+                      Brands
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-subnav-btn active"
+                    >
+                      Attributes ({productAttributes.length})
+                    </button>
+                  </div>
+
+                  {/* 2-Column Attributes Grid */}
+                  <div className="cms-categories-grid">
+                    {/* LEFT CARD: Add / Update Attribute Form */}
+                    <div className="cms-card" id="cms-attr-form-anchor">
+                      <div className="cms-card-header" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                        <div className="cms-card-title">
+                          <span style={{ color: 'var(--cms-accent-blue)', fontSize: '1.2rem', fontWeight: 700 }}>
+                            {editingAttribute ? '✏️' : '+'}
+                          </span>
+                          <h3>{editingAttribute ? 'Update Attribute' : 'Add New Attribute'}</h3>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--cms-text-muted)' }}>
+                          {editingAttribute ? `Editing "${editingAttribute.name}"` : 'Add technical machinery specification or option attribute'}
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleSaveAttribute} style={{ padding: '0 20px 20px 20px' }}>
+                        <div className="cms-form-group" style={{ marginBottom: '14px' }}>
+                          <label className="cms-form-label">ATTRIBUTE NAME *</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="e.g. Engine Model, Track Type, Horsepower"
+                            value={attrFormName}
+                            onChange={(e) => {
+                              setAttrFormName(e.target.value)
+                              if (!editingAttribute && !attrFormSlug) {
+                                setAttrFormSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
+                              }
+                            }}
+                            required
+                          />
+                        </div>
+
+                        <div className="cms-form-group" style={{ marginBottom: '14px' }}>
+                          <label className="cms-form-label">SLUG (URL-FRIENDLY IDENTIFIER)</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="e.g. engine-model, track-type"
+                            value={attrFormSlug}
+                            onChange={(e) => setAttrFormSlug(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="cms-form-group" style={{ marginBottom: '14px' }}>
+                          <label className="cms-form-label">ATTRIBUTE DISPLAY TYPE</label>
+                          <select
+                            className="cms-filter-dropdown-select"
+                            style={{ width: '100%' }}
+                            value={attrFormType}
+                            onChange={(e) => setAttrFormType(e.target.value as any)}
+                          >
+                            <option value="select">Dropdown Select (Predefined options)</option>
+                            <option value="pills">Pills / Badges (Color swatches, HP, quick badges)</option>
+                            <option value="text">Text Specification (Custom string value)</option>
+                            <option value="number">Numeric Specification (Weight, dimensions)</option>
+                          </select>
+                        </div>
+
+                        <div className="cms-form-group" style={{ marginBottom: '14px' }}>
+                          <label className="cms-form-label">TERMS / VALUES (COMMA-SEPARATED)</label>
+                          <textarea
+                            className="cms-input-text"
+                            rows={3}
+                            placeholder="e.g. Kubota D1105 (25 HP), Kubota V1505 (24.8 HP), Yanmar 3TNV80"
+                            value={attrFormTerms}
+                            onChange={(e) => setAttrFormTerms(e.target.value)}
+                          />
+                          <span style={{ fontSize: '0.74rem', color: 'var(--cms-text-muted)', display: 'block', marginTop: '4px' }}>
+                            Separate multiple options with commas. You can also add more terms later using the quick-add buttons.
+                          </span>
+                        </div>
+
+                        <div className="cms-form-group" style={{ marginBottom: '14px' }}>
+                          <label className="cms-form-label">DESCRIPTION (INTERNAL / STORE NOTES)</label>
+                          <input
+                            type="text"
+                            className="cms-input-text"
+                            placeholder="e.g. Original factory engine power plant specs"
+                            value={attrFormDesc}
+                            onChange={(e) => setAttrFormDesc(e.target.value)}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '18px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--cms-text-primary)' }}>
+                            <input
+                              type="checkbox"
+                              checked={attrFormFilterable}
+                              onChange={(e) => setAttrFormFilterable(e.target.checked)}
+                            />
+                            <span>Enable as Store Filter (Visitors can filter machines by this attribute)</span>
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--cms-text-primary)' }}>
+                            <input
+                              type="checkbox"
+                              checked={attrFormRequired}
+                              onChange={(e) => setAttrFormRequired(e.target.checked)}
+                            />
+                            <span>Required on New Equipment (Must be filled when creating machines)</span>
+                          </label>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button
+                            type="submit"
+                            className="cms-btn cms-btn-primary"
+                            style={{ flex: 1 }}
+                          >
+                            {editingAttribute ? 'Save Changes' : '+ Add Attribute'}
+                          </button>
+                          {editingAttribute && (
+                            <button
+                              type="button"
+                              className="cms-btn-secondary"
+                              onClick={handleCancelEditAttribute}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                    </div>
+
+                    {/* RIGHT CARD: Attributes Table & Interactive Term Pills */}
+                    <div className="cms-card">
+                      <div className="cms-card-header" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                        <div className="cms-card-title">
+                          <h3>Active Attributes ({productAttributes.length})</h3>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="cms-action-pill-btn"
+                            style={{ fontSize: '0.78rem', padding: '5px 12px' }}
+                            onClick={handleResetDefaultAttributes}
+                            title="Reset to factory machinery attributes"
+                          >
+                            🔄 Reset Presets
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Search Filter Toolbar */}
+                      <div style={{ padding: '0 20px 14px 20px' }}>
+                        <div className="cms-filter-search-box" style={{ maxWidth: '100%' }}>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search attribute name, slug, or term..."
+                            value={attrSearch}
+                            onChange={(e) => setAttrSearch(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Attributes List */}
+                      <div style={{ padding: '0 20px 20px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {(() => {
+                          const filtered = productAttributes.filter((attr) => {
+                            if (!attrSearch) return true
+                            const q = attrSearch.toLowerCase()
+                            return (
+                              attr.name.toLowerCase().includes(q) ||
+                              attr.slug.toLowerCase().includes(q) ||
+                              attr.terms.some((t) => t.toLowerCase().includes(q))
+                            )
+                          })
+
+                          if (filtered.length === 0) {
+                            return (
+                              <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--cms-text-muted)' }}>
+                                <p style={{ margin: 0, fontSize: '0.92rem' }}>No attributes match "{attrSearch}".</p>
+                              </div>
+                            )
+                          }
+
+                          return filtered.map((attr) => (
+                            <div
+                              key={attr.id}
+                              style={{
+                                background: 'var(--cms-bg-surface)',
+                                border: '1px solid var(--cms-border)',
+                                borderRadius: '12px',
+                                padding: '16px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '10px'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <strong style={{ fontSize: '0.96rem', color: 'var(--cms-text-primary)' }}>
+                                    {attr.name}
+                                  </strong>
+                                  <span className="cms-sku-badge" style={{ fontSize: '0.74rem' }}>
+                                    {attr.slug}
+                                  </span>
+                                  <span
+                                    className="cms-category-pill"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      background: attr.type === 'pills' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(0, 102, 255, 0.1)',
+                                      color: attr.type === 'pills' ? '#059669' : '#0284c7'
+                                    }}
+                                  >
+                                    {attr.type.toUpperCase()}
+                                  </span>
+                                  {attr.isFilterable && (
+                                    <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 700 }}>
+                                      ✓ Filterable
+                                    </span>
+                                  )}
+                                  {attr.isRequired && (
+                                    <span style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 700 }}>
+                                      ★ Required
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    className="cms-action-pill-btn"
+                                    onClick={() => handleStartEditAttribute(attr)}
+                                    title="Edit attribute definition"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-action-pill-btn danger"
+                                    onClick={() => handleDeleteAttribute(attr.id)}
+                                    title="Delete attribute"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+
+                              {attr.description && (
+                                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--cms-text-muted)' }}>
+                                  {attr.description}
+                                </p>
+                              )}
+
+                              {/* Terms Pills & Quick Add */}
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--cms-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Configured Terms ({attr.terms.length})
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                  {attr.terms.map((term, tIdx) => (
+                                    <span
+                                      key={tIdx}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        padding: '4px 10px',
+                                        background: 'var(--cms-bg-card)',
+                                        border: '1px solid var(--cms-border)',
+                                        borderRadius: '8px',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--cms-text-primary)'
+                                      }}
+                                    >
+                                      <span>{term}</span>
+                                      <button
+                                        type="button"
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          padding: 0,
+                                          cursor: 'pointer',
+                                          color: 'var(--cms-text-muted)',
+                                          fontSize: '0.9rem',
+                                          lineHeight: 1
+                                        }}
+                                        onClick={() => handleRemoveTermFromAttribute(attr.id, term)}
+                                        title={`Remove "${term}"`}
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+
+                                  {/* Quick Term Add Mini Input */}
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <input
+                                      type="text"
+                                      placeholder="+ Add term..."
+                                      style={{
+                                        padding: '4px 8px',
+                                        fontSize: '0.78rem',
+                                        border: '1px dashed var(--cms-border)',
+                                        borderRadius: '6px',
+                                        background: 'var(--cms-bg-card)',
+                                        color: 'var(--cms-text-primary)',
+                                        width: '120px'
+                                      }}
+                                      value={quickTermInput[attr.id] || ''}
+                                      onChange={(e) =>
+                                        setQuickTermInput((prev) => ({ ...prev, [attr.id]: e.target.value }))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault()
+                                          handleAddTermToAttribute(attr.id, quickTermInput[attr.id] || '')
+                                        }
+                                      }}
+                                    />
+                                    {(quickTermInput[attr.id] || '').trim() && (
+                                      <button
+                                        type="button"
+                                        className="cms-btn-primary"
+                                        style={{ padding: '4px 8px', fontSize: '0.74rem' }}
+                                        onClick={() => handleAddTermToAttribute(attr.id, quickTermInput[attr.id] || '')}
+                                      >
+                                        Add
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -8743,16 +9427,27 @@ export default function AdminDashboard() {
                             {order.date}
                           </td>
                           <td style={{ textAlign: 'right' }}>
-                            <select
-                              className="cms-filter-dropdown-select"
-                              value={order.status}
-                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as any)}
-                            >
-                              <option value="Processing">Processing</option>
-                              <option value="Completed">Completed</option>
-                              <option value="Pending">Pending</option>
-                              <option value="Abandoned">Abandoned</option>
-                            </select>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+                              <select
+                                className="cms-filter-dropdown-select"
+                                value={order.status}
+                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as any)}
+                              >
+                                <option value="Processing">Processing</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Abandoned">Abandoned</option>
+                              </select>
+                              <button
+                                type="button"
+                                className="cms-action-pill-btn danger"
+                                style={{ padding: '4px 8px' }}
+                                onClick={() => handleDeleteOrder(order.id)}
+                                title="Delete Order"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )))}
