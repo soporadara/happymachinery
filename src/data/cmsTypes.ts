@@ -26,6 +26,12 @@ export interface AdminUser {
   lastLoginIp?: string
   failedAttempts: number
   lockoutUntil?: string
+  googleLinked?: boolean
+  googleEmail?: string
+  googleSub?: string
+  googleName?: string
+  googleAvatar?: string
+  googleLinkedAt?: string
 }
 
 export type SecurityEventType = 
@@ -40,6 +46,10 @@ export type SecurityEventType =
   | 'PASSWORD_CHANGED'
   | 'IP_BANNED'
   | 'IP_UNBANNED'
+  | 'DEVICE_BANNED'
+  | 'DEVICE_UNBANNED'
+  | 'GOOGLE_LINKED'
+  | 'GOOGLE_UNLINKED'
   | 'SETTINGS_UPDATED'
   | 'CONTENT_PUBLISHED'
   | 'CONTENT_DELETED'
@@ -63,6 +73,34 @@ export interface BannedIp {
   createdAt: string
   expiresAt?: string | null // null = permanent
   active: boolean
+  failedAttempts?: number
+}
+
+export interface BannedDevice {
+  id: string
+  deviceId: string
+  deviceSignature: string
+  deviceName: string
+  ip: string
+  reason: string
+  bannedBy: string
+  createdAt: string
+  expiresAt?: string | null // null = permanent
+  active: boolean
+  failedAttempts: number
+}
+
+export interface LoginActivityLog {
+  id: string
+  timestamp: string
+  method: 'password' | 'google'
+  identifier: string // username or email attempted
+  ip: string
+  deviceId: string
+  deviceName: string
+  status: 'success' | 'failed' | 'banned'
+  reason?: string
+  details?: string
 }
 
 export interface FailedLoginAttempt {
@@ -70,16 +108,21 @@ export interface FailedLoginAttempt {
   timestamp: string
   username: string
   ip: string
+  deviceId?: string
+  deviceName?: string
   userAgent: string
   reason: string
+  method?: 'password' | 'google'
 }
 
 export interface SecuritySettings {
-  maxFailedAttempts: number
+  maxFailedAttempts: number // Account lockout threshold
   lockoutWindowMinutes: number
   lockoutDurationMinutes: number
   sessionTimeoutMinutes: number
-  autoBanThreshold: number
+  autoBanThreshold: number // Failed attempts threshold to ban IP and Device (Default: 10)
+  autoBanDeviceEnabled?: boolean
+  autoBanDurationMinutes?: number
   enableIpWhitelisting: boolean
   whitelistedIps: string[]
   requirePasswordComplexity: boolean

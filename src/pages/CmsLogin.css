@@ -519,3 +519,196 @@
   }
 }
 
+/* ==============================================================================
+   Google SSO & Threat Defense Banned Guard Styles
+   ============================================================================== */
+.cms-auth-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 22px 0 16px;
+  position: relative;
+}
+
+.cms-auth-divider::before,
+.cms-auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cms-auth-divider span {
+  padding: 0 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.cms-google-auth-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.cms-google-native-slot {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+}
+
+.cms-google-native-slot:empty {
+  display: none;
+}
+
+.cms-google-sso-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 0.92rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 180ms ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.cms-google-sso-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.cms-google-sso-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cms-google-note {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.4;
+  max-width: 90%;
+}
+
+/* Banned State Card */
+.cms-banned-card {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1.5px solid rgba(239, 68, 68, 0.4);
+  border-radius: 24px;
+  padding: 36px 28px;
+  box-shadow: 0 20px 50px rgba(239, 68, 68, 0.18), 0 0 0 1px rgba(239, 68, 68, 0.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  text-align: center;
+}
+
+.cms-banned-shield-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1.5px solid rgba(239, 68, 68, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+}
+
+.cms-banned-shield-icon svg {
+  width: 32px;
+  height: 32px;
+  color: #ef4444;
+}
+
+.cms-banned-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f87171;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+
+.cms-banned-subtitle {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.cms-banned-details-box {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.cms-banned-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.84rem;
+}
+
+.cms-banned-detail-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cms-banned-detail-value {
+  color: #e2e8f0;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-all;
+}
+
+.cms-banned-detail-value.red {
+  color: #f87171;
+  font-weight: 750;
+}
+
+.cms-banned-code {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.cms-banned-help {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
+.cms-banned-actions {
+  display: flex;
+  gap: 10px;
+}
+

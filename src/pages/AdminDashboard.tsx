@@ -7,12 +7,26 @@ import type {
   AdminRole, 
   SecurityLog, 
   BannedIp, 
+  BannedDevice,
+  LoginActivityLog,
   FailedLoginAttempt, 
   SecuritySettings, 
   AnalyticsViewEvent, 
   SiteSettings, 
   SitePage 
 } from '../data/cmsTypes'
+import { 
+  linkGoogleAccountToUser, 
+  unlinkGoogleAccountFromUser, 
+  GOOGLE_CLIENT_ID, 
+  createMockGoogleJwt
+} from '../data/googleAuth'
+import { 
+  unbanIpAddress, 
+  unbanDeviceRecord, 
+  manualBanIp, 
+  manualBanDevice
+} from '../data/deviceSecurity'
 import { 
   DEFAULT_ADMIN_USERS, 
   DEFAULT_SECURITY_SETTINGS, 
@@ -71,6 +85,7 @@ type CmsTab =
   | 'trash'
   | 'security' 
   | 'admins' 
+  | 'profile'
   | 'settings'
   | 'maintenance'
 
@@ -88,9 +103,10 @@ export interface AdminNotificationItem {
 type SecuritySubTab = 
   | 'overview' 
   | 'banned-ips' 
-  | 'blocked-users' 
-  | 'failed-logins' 
+  | 'banned-devices'
   | 'activity-log' 
+  | 'failed-logins' 
+  | 'blocked-users' 
   | 'settings'
 
 type CmsTheme = 'dark' | 'light' | 'neon'
@@ -738,8 +754,24 @@ export default function AdminDashboard() {
     return DEFAULT_MEDIA
   })
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => DEFAULT_ADMIN_USERS)
-  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
+  const [, setSecurityLogs] = useState<SecurityLog[]>([])
   const [bannedIps, setBannedIps] = useState<BannedIp[]>([])
+  const [bannedDevices, setBannedDevices] = useState<BannedDevice[]>(() => {
+    try {
+      const raw = localStorage.getItem('hm_banned_devices')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
+  const [loginActivityLogs, setLoginActivityLogs] = useState<LoginActivityLog[]>(() => {
+    try {
+      const raw = localStorage.getItem('hm_login_activity')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
   const [failedLogins, setFailedLogins] = useState<FailedLoginAttempt[]>([])
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>(DEFAULT_SECURITY_SETTINGS)
   const [, setAnalyticsEvents] = useState<AnalyticsViewEvent[]>([])
@@ -802,6 +834,14 @@ export default function AdminDashboard() {
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null)
   const [showAddAdminModal, setShowAddAdminModal] = useState(false)
   const [showBanIpModal, setShowBanIpModal] = useState(false)
+  const [banModalType, setBanModalType] = useState<'ip' | 'device'>('ip')
+  const [newDeviceInput, setNewDeviceInput] = useState('')
+  const [newDeviceNameInput, setNewDeviceNameInput] = useState('')
+  const [showGoogleLinkModal, setShowGoogleLinkModal] = useState(false)
+  const [googleLinkManualEmail, setGoogleLinkManualEmail] = useState('')
+  const [isLinkingGoogle, setIsLinkingGoogle] = useState(false)
+  const [loginActivityFilter, setLoginActivityFilter] = useState<'all' | 'success' | 'failed' | 'google'>('all')
+  const [loginActivitySearch, setLoginActivitySearch] = useState('')
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null)
   const [mediaZoom, setMediaZoom] = useState<number>(100)
   const [mediaRotation, setMediaRotation] = useState<number>(0)
@@ -1636,7 +1676,9 @@ export default function AdminDashboard() {
         fetchedHomeContent,
         fetchedInquiries,
         fetchedOrders,
-        fetchedComments
+        fetchedComments,
+        fetchedBannedDevs,
+        fetchedLoginActivity
       ] = await Promise.all([
         safeRead<BlogPost[]>('blog-posts'),
         safeRead<AdminProduct[]>('products'),
@@ -1654,7 +1696,9 @@ export default function AdminDashboard() {
         safeRead<HomePageContent>('home-content'),
         safeRead<Inquiry[]>('inquiries'),
         safeRead<CartOrder[]>('orders'),
-        safeRead<BlogComment[]>('comments')
+        safeRead<BlogComment[]>('comments'),
+        safeRead<BannedDevice[]>('banned-devices'),
+        safeRead<LoginActivityLog[]>('login-activity')
       ])
 
       if (fetchedPosts && Array.isArray(fetchedPosts) && fetchedPosts.length > 0) {
@@ -1686,6 +1730,8 @@ export default function AdminDashboard() {
 
       if (fetchedLogs && Array.isArray(fetchedLogs)) setSecurityLogs(fetchedLogs)
       if (fetchedBans && Array.isArray(fetchedBans)) setBannedIps(fetchedBans)
+      if (fetchedBannedDevs && Array.isArray(fetchedBannedDevs)) setBannedDevices(fetchedBannedDevs)
+      if (fetchedLoginActivity && Array.isArray(fetchedLoginActivity)) setLoginActivityLogs(fetchedLoginActivity)
       if (fetchedFails && Array.isArray(fetchedFails)) setFailedLogins(fetchedFails)
       if (fetchedSecSettings) setSecuritySettings(fetchedSecSettings)
       if (fetchedAnalytics && Array.isArray(fetchedAnalytics)) setAnalyticsEvents(fetchedAnalytics)
@@ -1845,7 +1891,21 @@ export default function AdminDashboard() {
       setProfileEmail(currentUser.email || '')
       setProfileAvatar(currentUser.avatar || '')
     }
-  }, [currentUser, showProfileModal])
+  }, [currentUser, showProfileModal, activeTab])
+
+  // Deep-linking support for CMS routes: ?tab=profile, ?tab=security, or hash #profile, #security
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      const tabParam = url.searchParams.get('tab')
+      const hash = window.location.hash.replace('#', '')
+      if (tabParam === 'profile' || hash === 'profile') {
+        setActiveTab('profile')
+      } else if (tabParam === 'security' || hash === 'security') {
+        setActiveTab('security')
+      }
+    } catch {}
+  }, [])
 
   // Lock body scroll in CMS mode so no outer window scrollbar cuts into the header
   useEffect(() => {
@@ -1963,37 +2023,132 @@ export default function AdminDashboard() {
     showToast('Signed out successfully.', 'success')
   }
 
-  // Security Operations
-  const handleBanIp = async (e: React.FormEvent) => {
+  // Security Operations: Ban & Unban (IP and Device)
+  const handleSaveBan = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newIpAddress.trim()) return
+    const adminUser = currentUser?.username || 'admin'
 
-    const newBan: BannedIp = {
-      id: `ban-${Date.now()}`,
-      ip: newIpAddress.trim(),
-      reason: newIpReason.trim() || 'Suspicious automated abuse',
-      bannedBy: currentUser?.username || 'admin',
-      createdAt: new Date().toISOString(),
-      active: true
+    if (banModalType === 'ip') {
+      if (!newIpAddress.trim()) {
+        showToast('Please enter a valid IP address.', 'error')
+        return
+      }
+      await manualBanIp(newIpAddress.trim(), newIpReason.trim() || 'Manual administrative ban', adminUser)
+      const newBan: BannedIp = {
+        id: `ban-${Date.now()}`,
+        ip: newIpAddress.trim(),
+        reason: newIpReason.trim() || 'Manual administrative ban',
+        bannedBy: adminUser,
+        createdAt: new Date().toISOString(),
+        active: true,
+        failedAttempts: 0
+      }
+      setBannedIps((prev) => [newBan, ...prev.filter((b) => b.ip !== newIpAddress.trim())])
+      showToast(`IP ${newIpAddress.trim()} has been banned.`, 'success')
+      setNewIpAddress('')
+      setNewIpReason('')
+      setShowBanIpModal(false)
+    } else {
+      if (!newDeviceInput.trim()) {
+        showToast('Please enter a Device ID.', 'error')
+        return
+      }
+      const devName = newDeviceNameInput.trim() || 'Restricted Device'
+      await manualBanDevice(newDeviceInput.trim(), devName, newIpReason.trim() || 'Manual administrative ban', adminUser)
+      const newDevBan: BannedDevice = {
+        id: `ban-dev-${Date.now()}`,
+        deviceId: newDeviceInput.trim(),
+        deviceSignature: '',
+        deviceName: devName,
+        ip: 'Manual',
+        reason: newIpReason.trim() || 'Manual administrative ban',
+        bannedBy: adminUser,
+        createdAt: new Date().toISOString(),
+        expiresAt: null,
+        active: true,
+        failedAttempts: 0
+      }
+      setBannedDevices((prev) => [newDevBan, ...prev.filter((d) => d.deviceId !== newDeviceInput.trim())])
+      showToast(`Device "${devName}" has been banned.`, 'success')
+      setNewDeviceInput('')
+      setNewDeviceNameInput('')
+      setNewIpReason('')
+      setShowBanIpModal(false)
     }
-
-    const updated = [newBan, ...bannedIps]
-    setBannedIps(updated)
-    await writeSharedContent('banned-ips', updated)
-    await logSecurityEvent('IP_BANNED', `IP ${newBan.ip} banned by ${currentUser?.username}. Reason: ${newBan.reason}`, 'warning', currentUser?.username)
-    
-    setNewIpAddress('')
-    setNewIpReason('')
-    setShowBanIpModal(false)
-    showToast(`IP ${newBan.ip} has been added to the ban list.`, 'success')
   }
 
   const handleUnbanIp = async (id: string, ip: string) => {
-    const updated = bannedIps.filter((b) => b.id !== id)
+    await unbanIpAddress(ip, currentUser?.username || 'admin')
+    const updated = bannedIps.filter((b) => b.id !== id && b.ip !== ip)
     setBannedIps(updated)
-    await writeSharedContent('banned-ips', updated)
-    await logSecurityEvent('IP_UNBANNED', `IP ${ip} unbanned by ${currentUser?.username}`, 'info', currentUser?.username)
-    showToast(`IP ${ip} unbanned successfully.`, 'success')
+    showToast(`IP ${ip} unbanned successfully and counter reset.`, 'success')
+  }
+
+  const handleUnbanDevice = async (id: string, name: string) => {
+    await unbanDeviceRecord(id, currentUser?.username || 'admin')
+    const updated = bannedDevices.filter((d) => d.id !== id && d.deviceId !== id)
+    setBannedDevices(updated)
+    showToast(`Device "${name}" has been unbanned and counter reset.`, 'success')
+  }
+
+  // Google SSO Linking Handlers
+  const handleStartLinkGoogle = () => {
+    if (window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response: { credential?: string }) => {
+            if (response.credential) {
+              void handleCompleteLinkGoogle(response.credential)
+            }
+          }
+        })
+        window.google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            setShowGoogleLinkModal(true)
+          }
+        })
+        return
+      } catch {}
+    }
+    setShowGoogleLinkModal(true)
+  }
+
+  const handleCompleteLinkGoogle = async (credential: string) => {
+    if (!currentUser) return
+    setIsLinkingGoogle(true)
+    try {
+      const res = await linkGoogleAccountToUser(currentUser, credential)
+      if (res.success && res.user) {
+        setCurrentUser(res.user)
+        const updatedUsers = adminUsers.map((u) => (u.id === res.user!.id ? res.user! : u))
+        setAdminUsers(updatedUsers)
+        showToast(`Google account (${res.user.googleEmail}) linked successfully! You can now sign in with Google.`, 'success')
+      } else {
+        showToast(res.error || 'Failed to link Google account.', 'error')
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Error linking Google account.', 'error')
+    } finally {
+      setIsLinkingGoogle(false)
+      setShowGoogleLinkModal(false)
+    }
+  }
+
+  const handleUnlinkGoogleAccount = async () => {
+    if (!currentUser) return
+    if (!window.confirm('Are you sure you want to unlink your Google account? Next time you must log in with your primary username and password.')) return
+    try {
+      const res = await unlinkGoogleAccountFromUser(currentUser)
+      if (res.success && res.user) {
+        setCurrentUser(res.user)
+        const updatedUsers = adminUsers.map((u) => (u.id === res.user!.id ? res.user! : u))
+        setAdminUsers(updatedUsers)
+        showToast('Google account unlinked successfully.', 'success')
+      }
+    } catch {
+      showToast('Failed to unlink Google account.', 'error')
+    }
   }
 
   const handleUnlockUser = async (userId: string, username: string) => {
@@ -3843,6 +3998,26 @@ export default function AdminDashboard() {
           </button>
 
           <button
+            className={`cms-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveTab('profile')}
+            data-tooltip="Profile & Google SSO"
+            title={isSidebarCollapsed ? 'Profile & Google SSO' : undefined}
+          >
+            <span className="cms-nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <span className="cms-nav-label">Profile & Google SSO</span>
+            {currentUser?.googleLinked && (
+              <span className="cms-nav-badge" style={{ background: '#10b981', color: '#fff', fontSize: '0.7rem', padding: '1px 6px' }}>
+                SSO
+              </span>
+            )}
+          </button>
+
+          <button
             className={`cms-nav-item ${activeTab === 'maintenance' ? 'active' : ''}`}
             onClick={() => setActiveTab('maintenance')}
             data-tooltip="Maintenance Mode"
@@ -4200,7 +4375,7 @@ export default function AdminDashboard() {
                     <button
                       className="cms-dropdown-item"
                       onClick={() => {
-                        setShowProfileModal(true)
+                        setActiveTab('profile')
                         setIsProfileDropdownOpen(false)
                       }}
                     >
@@ -4208,7 +4383,7 @@ export default function AdminDashboard() {
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                         <circle cx="12" cy="7" r="4" />
                       </svg>
-                      My Profile
+                      My Profile & Google SSO
                     </button>
 
                     <button
@@ -10177,19 +10352,39 @@ export default function AdminDashboard() {
                   <h1>Website Security Center</h1>
                   <p>Real-time threat monitoring, IP banning, brute force lockouts, and audit trail.</p>
                 </div>
-                <div className="cms-view-actions">
-                  <button className="cms-btn cms-btn-danger" onClick={() => setShowBanIpModal(true)}>
+                <div className="cms-view-actions" style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="cms-btn cms-btn-danger"
+                    onClick={() => {
+                      setBanModalType('ip')
+                      setShowBanIpModal(true)
+                    }}
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10" />
                       <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
                     </svg>
                     <span>Ban IP Address</span>
                   </button>
+                  <button
+                    className="cms-btn cms-btn-danger"
+                    onClick={() => {
+                      setBanModalType('device')
+                      setShowBanIpModal(true)
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                    <span>Ban Device</span>
+                  </button>
                 </div>
               </div>
 
               {/* Security Center Sub-navigation Tabs */}
-              <div className="cms-security-subnav" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--cms-border)', paddingBottom: '12px' }}>
+              <div className="cms-security-subnav" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--cms-border)', paddingBottom: '12px', flexWrap: 'wrap' }}>
                 <button
                   className={`cms-btn ${securitySubTab === 'overview' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
                   onClick={() => setSecuritySubTab('overview')}
@@ -10203,10 +10398,16 @@ export default function AdminDashboard() {
                   Banned IPs ({bannedIps.length})
                 </button>
                 <button
-                  className={`cms-btn ${securitySubTab === 'blocked-users' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
-                  onClick={() => setSecuritySubTab('blocked-users')}
+                  className={`cms-btn ${securitySubTab === 'banned-devices' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                  onClick={() => setSecuritySubTab('banned-devices')}
                 >
-                  Blocked Users
+                  Banned Devices ({bannedDevices.length})
+                </button>
+                <button
+                  className={`cms-btn ${securitySubTab === 'activity-log' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                  onClick={() => setSecuritySubTab('activity-log')}
+                >
+                  Login Activity ({loginActivityLogs.length})
                 </button>
                 <button
                   className={`cms-btn ${securitySubTab === 'failed-logins' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
@@ -10215,10 +10416,10 @@ export default function AdminDashboard() {
                   Failed Logins ({failedLogins.length})
                 </button>
                 <button
-                  className={`cms-btn ${securitySubTab === 'activity-log' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
-                  onClick={() => setSecuritySubTab('activity-log')}
+                  className={`cms-btn ${securitySubTab === 'blocked-users' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                  onClick={() => setSecuritySubTab('blocked-users')}
                 >
-                  Audit Trail
+                  Locked Users ({adminUsers.filter((u) => u.status === 'Locked').length})
                 </button>
                 <button
                   className={`cms-btn ${securitySubTab === 'settings' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
@@ -10248,7 +10449,35 @@ export default function AdminDashboard() {
 
                     <div className="cms-metric-card">
                       <div>
-                        <h4 className="cms-metric-title">Failed Login Attempts</h4>
+                        <h4 className="cms-metric-title">Banned Devices</h4>
+                        <p className="cms-metric-value">{bannedDevices.length}</p>
+                        <span className="cms-metric-subtext">Hardware fingerprint blocks</span>
+                      </div>
+                      <div className="cms-metric-icon-box red">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                          <line x1="8" y1="21" x2="16" y2="21" />
+                          <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div className="cms-metric-card">
+                      <div>
+                        <h4 className="cms-metric-title">Auto-Ban Threshold</h4>
+                        <p className="cms-metric-value">{securitySettings.autoBanThreshold || 10}</p>
+                        <span className="cms-metric-subtext">Attempts before auto-ban</span>
+                      </div>
+                      <div className="cms-metric-icon-box blue">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div className="cms-metric-card">
+                      <div>
+                        <h4 className="cms-metric-title">Failed Login Alerts</h4>
                         <p className="cms-metric-value">{failedLogins.length}</p>
                         <span className="cms-metric-subtext">Logged security alerts</span>
                       </div>
@@ -10263,30 +10492,34 @@ export default function AdminDashboard() {
 
                     <div className="cms-metric-card">
                       <div>
-                        <h4 className="cms-metric-title">Blocked Users</h4>
-                        <p className="cms-metric-value">
-                          {adminUsers.filter((u) => u.status === 'Locked').length}
-                        </p>
-                        <span className="cms-metric-subtext">Temporary brute-force lockouts</span>
-                      </div>
-                      <div className="cms-metric-icon-box blue">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                      </div>
-                    </div>
-
-                    <div className="cms-metric-card">
-                      <div>
-                        <h4 className="cms-metric-title">Audit Trail Entries</h4>
-                        <p className="cms-metric-value">{securityLogs.length}</p>
-                        <span className="cms-metric-subtext">Immutable activity logs</span>
+                        <h4 className="cms-metric-title">Total Login Events</h4>
+                        <p className="cms-metric-value">{loginActivityLogs.length}</p>
+                        <span className="cms-metric-subtext">Recorded authentication audits</span>
                       </div>
                       <div className="cms-metric-icon-box green">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="16" y1="13" x2="8" y2="13" />
+                          <line x1="16" y1="17" x2="8" y2="17" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Shield Status Summary Card */}
+                  <div className="cms-card" style={{ marginTop: '20px', padding: '20px 24px', background: 'rgba(0, 102, 255, 0.05)', border: '1.5px solid rgba(0, 102, 255, 0.2)', borderRadius: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '8px' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(0, 102, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                         </svg>
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>Happy Machinery Active Shield Status</h4>
+                        <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                          Automated 10-attempt threat defense, Google SSO email verification, and hardware device fingerprinting are active.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -10303,6 +10536,7 @@ export default function AdminDashboard() {
                           <th>IP Address</th>
                           <th>Reason</th>
                           <th>Banned By</th>
+                          <th>Failed Attempts</th>
                           <th>Date</th>
                           <th style={{ textAlign: 'right' }}>Actions</th>
                         </tr>
@@ -10314,20 +10548,21 @@ export default function AdminDashboard() {
                               <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{ban.ip}</td>
                               <td>{ban.reason}</td>
                               <td>{ban.bannedBy}</td>
+                              <td>{ban.failedAttempts || '—'}</td>
                               <td>{new Date(ban.createdAt).toLocaleDateString()}</td>
                               <td style={{ textAlign: 'right' }}>
                                 <button
                                   className="cms-btn cms-btn-danger cms-btn-sm"
                                   onClick={() => handleUnbanIp(ban.id, ban.ip)}
                                 >
-                                  Remove Ban
+                                  Unban IP
                                 </button>
                               </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={5} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
+                            <td colSpan={6} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
                               No banned IP addresses. All network traffic clear.
                             </td>
                           </tr>
@@ -10338,7 +10573,262 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Sub-tab 3: Blocked Users */}
+              {/* Sub-tab 3: Banned Devices */}
+              {securitySubTab === 'banned-devices' && (
+                <div className="cms-card">
+                  <div className="cms-table-wrapper">
+                    <table className="cms-table">
+                      <thead>
+                        <tr>
+                          <th>Device Name</th>
+                          <th>Device ID</th>
+                          <th>Associated IP</th>
+                          <th>Reason</th>
+                          <th>Failed Attempts</th>
+                          <th>Date</th>
+                          <th style={{ textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bannedDevices.length > 0 ? (
+                          bannedDevices.map((dev) => (
+                            <tr key={dev.id}>
+                              <td style={{ fontWeight: 650 }}>{dev.deviceName}</td>
+                              <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{dev.deviceId}</td>
+                              <td style={{ fontFamily: 'monospace' }}>{dev.ip}</td>
+                              <td>{dev.reason}</td>
+                              <td>{dev.failedAttempts || '—'}</td>
+                              <td>{new Date(dev.createdAt).toLocaleDateString()}</td>
+                              <td style={{ textAlign: 'right' }}>
+                                <button
+                                  className="cms-btn cms-btn-danger cms-btn-sm"
+                                  onClick={() => handleUnbanDevice(dev.id, dev.deviceName)}
+                                >
+                                  Unban Device
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
+                              No banned devices. All hardware fingerprints clear.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab 4: Login Activity & Audit Log */}
+              {securitySubTab === 'activity-log' && (
+                <div className="cms-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className={`cms-btn ${loginActivityFilter === 'all' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                        onClick={() => setLoginActivityFilter('all')}
+                      >
+                        All Events ({loginActivityLogs.length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`cms-btn ${loginActivityFilter === 'success' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                        onClick={() => setLoginActivityFilter('success')}
+                      >
+                        Successful ({loginActivityLogs.filter((l) => l.status === 'success').length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`cms-btn ${loginActivityFilter === 'failed' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                        onClick={() => setLoginActivityFilter('failed')}
+                      >
+                        Failed / Banned ({loginActivityLogs.filter((l) => l.status === 'failed' || l.status === 'banned').length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`cms-btn ${loginActivityFilter === 'google' ? 'cms-btn-primary' : 'cms-btn-secondary'} cms-btn-sm`}
+                        onClick={() => setLoginActivityFilter('google')}
+                      >
+                        Google SSO ({loginActivityLogs.filter((l) => l.method === 'google').length})
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      className="cms-header-search-input"
+                      placeholder="Search by user, IP, or device..."
+                      value={loginActivitySearch}
+                      onChange={(e) => setLoginActivitySearch(e.target.value)}
+                      style={{ maxWidth: '280px' }}
+                    />
+                  </div>
+
+                  <div className="cms-table-wrapper">
+                    <table className="cms-table">
+                      <thead>
+                        <tr>
+                          <th>Timestamp</th>
+                          <th>Method</th>
+                          <th>Submitted Identity</th>
+                          <th>IP Address</th>
+                          <th>Device</th>
+                          <th>Status</th>
+                          <th>Details / Failure Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          let list = loginActivityLogs.filter((l) => {
+                            if (loginActivityFilter === 'success') return l.status === 'success'
+                            if (loginActivityFilter === 'failed') return l.status === 'failed' || l.status === 'banned'
+                            if (loginActivityFilter === 'google') return l.method === 'google'
+                            return true
+                          })
+
+                          if (loginActivitySearch.trim()) {
+                            const q = loginActivitySearch.toLowerCase().trim()
+                            list = list.filter(
+                              (l) =>
+                                l.identifier?.toLowerCase().includes(q) ||
+                                l.ip?.toLowerCase().includes(q) ||
+                                l.deviceName?.toLowerCase().includes(q) ||
+                                l.reason?.toLowerCase().includes(q)
+                            )
+                          }
+
+                          if (list.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
+                                  No login activity matching current filter.
+                                </td>
+                              </tr>
+                            )
+                          }
+
+                          return list.map((item) => (
+                            <tr key={item.id}>
+                              <td style={{ fontSize: '0.82rem', color: 'var(--cms-text-muted)' }}>
+                                {new Date(item.timestamp).toLocaleString()}
+                              </td>
+                              <td>
+                                {item.method === 'google' ? (
+                                  <span className="cms-badge" style={{ background: 'rgba(66, 133, 244, 0.15)', color: '#60a5fa', border: '1px solid rgba(66, 133, 244, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24">
+                                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                                    </svg>
+                                    Google SSO
+                                  </span>
+                                ) : (
+                                  <span className="cms-badge" style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#cbd5e1', border: '1px solid rgba(148, 163, 184, 0.3)' }}>
+                                    Password
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ fontWeight: 650 }}>{item.identifier}</td>
+                              <td style={{ fontFamily: 'monospace' }}>{item.ip}</td>
+                              <td>{item.deviceName}</td>
+                              <td>
+                                {item.status === 'success' && (
+                                  <span className="cms-badge success">Success</span>
+                                )}
+                                {item.status === 'failed' && (
+                                  <span className="cms-badge warning">Failed</span>
+                                )}
+                                {item.status === 'banned' && (
+                                  <span className="cms-badge danger">Auto-Banned</span>
+                                )}
+                              </td>
+                              <td style={{ fontSize: '0.84rem', color: item.status === 'success' ? '#10b981' : item.status === 'banned' ? '#f87171' : 'var(--cms-text-muted)' }}>
+                                {item.reason || item.details || 'Authenticated successfully'}
+                              </td>
+                            </tr>
+                          ))
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab 5: Failed Logins */}
+              {securitySubTab === 'failed-logins' && (
+                <div className="cms-card">
+                  <div className="cms-table-wrapper">
+                    <table className="cms-table">
+                      <thead>
+                        <tr>
+                          <th>Timestamp</th>
+                          <th>Submitted Username</th>
+                          <th>IP Address</th>
+                          <th>Device</th>
+                          <th>Reason</th>
+                          <th style={{ textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedLogins.length > 0 ? (
+                          failedLogins.map((fail) => (
+                            <tr key={fail.id}>
+                              <td>{new Date(fail.timestamp).toLocaleString()}</td>
+                              <td style={{ fontWeight: 650 }}>{fail.username}</td>
+                              <td style={{ fontFamily: 'monospace' }}>{fail.ip}</td>
+                              <td>{fail.deviceName || 'Browser'}</td>
+                              <td>
+                                <span className="cms-badge warning">{fail.reason}</span>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                  <button
+                                    className="cms-btn cms-btn-danger cms-btn-sm"
+                                    onClick={() => {
+                                      setBanModalType('ip')
+                                      setNewIpAddress(fail.ip)
+                                      setNewIpReason(`Manual ban: brute force on ${fail.username}`)
+                                      setShowBanIpModal(true)
+                                    }}
+                                  >
+                                    Ban IP
+                                  </button>
+                                  {fail.deviceId && (
+                                    <button
+                                      className="cms-btn cms-btn-danger cms-btn-sm"
+                                      onClick={() => {
+                                        setBanModalType('device')
+                                        setNewDeviceInput(fail.deviceId || '')
+                                        setNewDeviceNameInput(fail.deviceName || 'Device')
+                                        setNewIpReason(`Manual ban: brute force on ${fail.username}`)
+                                        setShowBanIpModal(true)
+                                      }}
+                                    >
+                                      Ban Device
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
+                              No failed login attempts recorded.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-tab 6: Locked Users */}
               {securitySubTab === 'blocked-users' && (
                 <div className="cms-card">
                   <div className="cms-table-wrapper">
@@ -10387,114 +10877,52 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Sub-tab 4: Failed Logins */}
-              {securitySubTab === 'failed-logins' && (
-                <div className="cms-card">
-                  <div className="cms-table-wrapper">
-                    <table className="cms-table">
-                      <thead>
-                        <tr>
-                          <th>Timestamp</th>
-                          <th>Submitted Username</th>
-                          <th>IP Address</th>
-                          <th>Reason</th>
-                          <th style={{ textAlign: 'right' }}>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {failedLogins.length > 0 ? (
-                          failedLogins.map((fail) => (
-                            <tr key={fail.id}>
-                              <td>{new Date(fail.timestamp).toLocaleString()}</td>
-                              <td style={{ fontWeight: 650 }}>{fail.username}</td>
-                              <td style={{ fontFamily: 'monospace' }}>{fail.ip}</td>
-                              <td>
-                                <span className="cms-badge warning">{fail.reason}</span>
-                              </td>
-                              <td style={{ textAlign: 'right' }}>
-                                <button
-                                  className="cms-btn cms-btn-danger cms-btn-sm"
-                                  onClick={() => {
-                                    setNewIpAddress(fail.ip)
-                                    setNewIpReason(`Brute force attempt on account: ${fail.username}`)
-                                    setShowBanIpModal(true)
-                                  }}
-                                >
-                                  Ban IP
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
-                              No failed login attempts recorded.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Sub-tab 5: Audit Activity Log */}
-              {securitySubTab === 'activity-log' && (
-                <div className="cms-card">
-                  <div className="cms-table-wrapper">
-                    <table className="cms-table">
-                      <thead>
-                        <tr>
-                          <th>Timestamp</th>
-                          <th>Event Type</th>
-                          <th>User</th>
-                          <th>Details</th>
-                          <th>Severity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {securityLogs.length > 0 ? (
-                          securityLogs.map((log) => (
-                            <tr key={log.id}>
-                              <td>{new Date(log.timestamp).toLocaleString()}</td>
-                              <td style={{ fontFamily: 'monospace', fontWeight: 650 }}>{log.event}</td>
-                              <td>{log.username}</td>
-                              <td>{log.details}</td>
-                              <td>
-                                <span className={`cms-badge ${log.severity === 'critical' ? 'danger' : log.severity === 'warning' ? 'warning' : 'success'}`}>
-                                  {log.severity}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={5} style={{ textAlign: 'center', color: 'var(--cms-text-muted)', padding: '24px' }}>
-                              Security audit log is currently clear.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Sub-tab 6: Security Settings */}
+              {/* Sub-tab 7: Security Config */}
               {securitySubTab === 'settings' && (
                 <div className="cms-card" style={{ maxWidth: '640px' }}>
                   <form
                     onSubmit={(e) => {
                       e.preventDefault()
                       void writeSharedContent('security-settings', securitySettings)
-                      void logSecurityEvent('SETTINGS_UPDATED', 'Security threshold configuration updated.', 'warning', currentUser?.username)
+                      localStorage.setItem('happy-machinery-security-settings', JSON.stringify(securitySettings))
+                      void logSecurityEvent('SETTINGS_UPDATED', `Auto-ban threshold set to ${securitySettings.autoBanThreshold || 10} attempts.`, 'warning', currentUser?.username)
                       showToast('Security settings saved.', 'success')
                     }}
                     style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
                   >
                     <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 650, fontSize: '0.88rem' }}>
+                        Failed Login Attempts Before Auto-Ban (IP & Device)
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="50"
+                        className="cms-header-search-input"
+                        style={{ width: '100%' }}
+                        value={securitySettings.autoBanThreshold || 10}
+                        onChange={(e) => setSecuritySettings({ ...securitySettings, autoBanThreshold: parseInt(e.target.value, 10) || 10 })}
+                      />
+                      <span style={{ fontSize: '0.78rem', color: 'var(--cms-text-muted)', display: 'block', marginTop: '4px' }}>
+                        Default: 10 attempts. Exceeding this threshold will automatically ban both the IP address and the device hardware fingerprint.
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                      <input
+                        type="checkbox"
+                        id="autoBanDeviceCheckbox"
+                        checked={securitySettings.autoBanDeviceEnabled !== false}
+                        onChange={(e) => setSecuritySettings({ ...securitySettings, autoBanDeviceEnabled: e.target.checked })}
+                      />
+                      <label htmlFor="autoBanDeviceCheckbox" style={{ fontSize: '0.86rem', fontWeight: 600, cursor: 'pointer' }}>
+                        Enforce Device Fingerprinting & Hardware Identification Auto-Ban
+                      </label>
+                    </div>
+
+                    <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                        Max Failed Login Attempts
+                        Account Lockout Threshold (Attempts)
                       </label>
                       <input
                         type="number"
@@ -10509,7 +10937,7 @@ export default function AdminDashboard() {
 
                     <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                        Lockout Duration (Minutes)
+                        Account Lockout Duration (Minutes)
                       </label>
                       <input
                         type="number"
@@ -11412,6 +11840,296 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* TAB 9: ADMINISTRATOR PROFILE & GOOGLE SSO */}
+          {activeTab === 'profile' && (
+            <>
+              <div className="cms-view-header">
+                <div className="cms-view-title-group">
+                  <h1>My Profile & Authentication Security</h1>
+                  <p>Manage your administrative profile, display avatar, secure passcode, and Google Single Sign-On (SSO) integration.</p>
+                </div>
+                <div className="cms-view-actions">
+                  {currentUser?.googleLinked ? (
+                    <button
+                      className="cms-btn cms-btn-danger"
+                      onClick={handleUnlinkGoogleAccount}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="15" y1="9" x2="9" y2="15" />
+                        <line x1="9" y1="9" x2="15" y2="15" />
+                      </svg>
+                      <span>Unlink Google Account</span>
+                    </button>
+                  ) : (
+                    <button
+                      className="cms-btn cms-btn-primary"
+                      onClick={handleStartLinkGoogle}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24">
+                        <path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <span>Link Google Account</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Profile Overview Card */}
+              <div className="cms-card" style={{ maxWidth: '880px', margin: '0 0 24px' }}>
+                <div className="cms-profile-identity-strip" style={{ borderBottom: '1px solid var(--cms-border)' }}>
+                  <div className="cms-profile-avatar-wrapper">
+                    <img
+                      src={profileAvatar || currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'}
+                      alt={profileName || currentUser?.name || 'Administrator'}
+                      className="cms-profile-avatar-img"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'
+                      }}
+                    />
+                    <span className="cms-profile-avatar-status-dot" title="Session Verified & Active" />
+                  </div>
+
+                  <div className="cms-profile-identity-info">
+                    <div className="cms-profile-identity-name-row">
+                      <h4>{profileName || currentUser?.name || 'Super Admin'}</h4>
+                      <span className="cms-profile-role-pill">{currentUser?.role || 'Lead Administrator'}</span>
+                    </div>
+                    <span className="cms-profile-identity-handle">
+                      @{currentUser?.username || 'admin'} • {profileEmail || currentUser?.email || 'admin@happymachinery.com'}
+                    </span>
+
+                    {/* Quick Avatar Presets */}
+                    <div className="cms-profile-presets-row">
+                      <span className="cms-profile-presets-label">Presets:</span>
+                      {[
+                        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
+                        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80',
+                        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=160&auto=format&fit=crop&q=80',
+                        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&auto=format&fit=crop&q=80',
+                        'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp'
+                      ].map((presetUrl, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          className={`cms-profile-preset-thumb-btn ${profileAvatar === presetUrl ? 'active' : ''}`}
+                          onClick={() => setProfileAvatar(presetUrl)}
+                          title={`Select preset avatar ${pIdx + 1}`}
+                        >
+                          <img src={presetUrl} alt={`Preset ${pIdx + 1}`} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Google SSO Hero Card */}
+                <div style={{ padding: '24px' }}>
+                  <div
+                    style={{
+                      background: 'var(--cms-bg-surface, rgba(255, 255, 255, 0.04))',
+                      border: '1.5px solid var(--cms-border, rgba(255, 255, 255, 0.12))',
+                      borderRadius: '14px',
+                      padding: '20px',
+                      marginBottom: '24px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '14px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                        </svg>
+                        <div>
+                          <strong style={{ fontSize: '1.05rem', color: 'var(--cms-text-primary)' }}>Google Single Sign-On (SSO) Status</strong>
+                          <div style={{ fontSize: '0.84rem', color: 'var(--cms-text-muted)' }}>
+                            Link your authorized Google account to log in with 1-click "Continue with Google" on subsequent visits.
+                          </div>
+                        </div>
+                      </div>
+
+                      {currentUser?.googleLinked ? (
+                        <span className="cms-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '6px 14px', fontSize: '0.85rem' }}>
+                          ✓ LINKED & READY FOR GOOGLE SIGN-IN
+                        </span>
+                      ) : (
+                        <span className="cms-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '6px 14px', fontSize: '0.85rem' }}>
+                          NOT LINKED (Password Only)
+                        </span>
+                      )}
+                    </div>
+
+                    {currentUser?.googleLinked ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--cms-bg-card, rgba(0, 0, 0, 0.2))', padding: '14px 18px', borderRadius: '10px', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {currentUser.googleAvatar ? (
+                            <img src={currentUser.googleAvatar} alt="" style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
+                          ) : (
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#4285F4', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>G</div>
+                          )}
+                          <div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 650, color: 'var(--cms-text-primary)' }}>
+                              {currentUser.googleEmail}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--cms-text-muted)' }}>
+                              Linked on {currentUser.googleLinkedAt ? new Date(currentUser.googleLinkedAt).toLocaleDateString() : 'Active'} • Sub ID: <code>{currentUser.googleSub || 'Verified'}</code>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="cms-action-pill-btn danger"
+                            onClick={handleUnlinkGoogleAccount}
+                          >
+                            Unlink Account
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--cms-bg-card, rgba(0, 0, 0, 0.2))', padding: '14px 18px', borderRadius: '10px', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ fontSize: '0.86rem', color: 'var(--cms-text-muted)' }}>
+                          Click the button to link your Google account. In compliance with security policy, unlinked Google emails will be rejected at login.
+                        </div>
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-primary"
+                          onClick={handleStartLinkGoogle}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 18px' }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24">
+                            <path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                            <path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                          </svg>
+                          <span>Connect Google Account</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Profile Form Details */}
+                  <form onSubmit={handleSaveProfile} className="cms-profile-form" style={{ padding: 0 }}>
+                    <div className="cms-profile-fields-grid">
+                      <div className="cms-profile-field-group">
+                        <label className="cms-profile-field-label">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>Display Name</span>
+                        </label>
+                        <div className="cms-profile-input-wrap">
+                          <input
+                            type="text"
+                            className="cms-profile-input"
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="cms-profile-field-group">
+                        <label className="cms-profile-field-label">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                            <polyline points="22,6 12,13 2,6" />
+                          </svg>
+                          <span>Email Address</span>
+                        </label>
+                        <div className="cms-profile-input-wrap">
+                          <input
+                            type="email"
+                            className="cms-profile-input"
+                            value={profileEmail}
+                            onChange={(e) => setProfileEmail(e.target.value)}
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="cms-profile-field-group">
+                        <label className="cms-profile-field-label">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                          <span>Custom Avatar URL</span>
+                        </label>
+                        <div className="cms-profile-input-wrap">
+                          <input
+                            type="url"
+                            className="cms-profile-input"
+                            placeholder="https://..."
+                            value={profileAvatar}
+                            onChange={(e) => setProfileAvatar(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="cms-profile-field-group">
+                        <label className="cms-profile-field-label">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                          <span>Update Password (Optional)</span>
+                        </label>
+                        <div className="cms-profile-input-wrap password-wrap">
+                          <input
+                            type={showProfilePassword ? 'text' : 'password'}
+                            className="cms-profile-input"
+                            placeholder="Leave empty to keep current password"
+                            value={newPasswordInput}
+                            onChange={(e) => setNewPasswordInput(e.target.value)}
+                            autoComplete="new-password"
+                          />
+                          <button
+                            type="button"
+                            className="cms-profile-pwd-toggle-btn"
+                            onClick={() => setShowProfilePassword(!showProfilePassword)}
+                            tabIndex={-1}
+                          >
+                            {showProfilePassword ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                                <line x1="1" y1="1" x2="23" y2="23" />
+                              </svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                      <button type="submit" className="cms-btn cms-btn-primary" style={{ padding: '10px 24px' }}>
+                        Save Profile Changes
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -11601,6 +12319,99 @@ export default function AdminDashboard() {
                   </div>
                   <span className="cms-profile-field-hint">Leave blank to maintain your current secure login passcode.</span>
                 </div>
+
+                {/* Google Single Sign-On (SSO) Integration Card */}
+                <div
+                  className="cms-profile-google-card"
+                  style={{
+                    gridColumn: '1 / -1',
+                    background: 'var(--cms-bg-surface, rgba(255, 255, 255, 0.04))',
+                    border: '1.5px solid var(--cms-border, rgba(255, 255, 255, 0.12))',
+                    borderRadius: '14px',
+                    padding: '16px 20px',
+                    marginTop: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <div>
+                        <strong style={{ fontSize: '0.94rem', color: 'var(--cms-text-primary)' }}>Google SSO Integration</strong>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--cms-text-muted)' }}>
+                          Link your Google account to enable 1-click "Continue with Google" sign-in.
+                        </div>
+                      </div>
+                    </div>
+
+                    {currentUser?.googleLinked ? (
+                      <span className="cms-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '4px 10px' }}>
+                        ✓ LINKED & ACTIVE
+                      </span>
+                    ) : (
+                      <span className="cms-badge" style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.3)', padding: '4px 10px' }}>
+                        NOT LINKED
+                      </span>
+                    )}
+                  </div>
+
+                  {currentUser?.googleLinked ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--cms-bg-card, rgba(0, 0, 0, 0.2))', padding: '12px 16px', borderRadius: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {currentUser.googleAvatar ? (
+                          <img src={currentUser.googleAvatar} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
+                        ) : (
+                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#4285F4', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>G</div>
+                        )}
+                        <div>
+                          <div style={{ fontSize: '0.9rem', fontWeight: 650, color: 'var(--cms-text-primary)' }}>
+                            {currentUser.googleEmail}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--cms-text-muted)' }}>
+                            Linked on {currentUser.googleLinkedAt ? new Date(currentUser.googleLinkedAt).toLocaleDateString() : 'Active'} • Ready for 1-click login
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="cms-action-pill-btn danger"
+                        onClick={handleUnlinkGoogleAccount}
+                        title="Unlink Google account from this profile"
+                      >
+                        Unlink Google Account
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--cms-text-muted)' }}>
+                        Client ID: <code>541058603521-...apps.googleusercontent.com</code>
+                      </span>
+
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-primary"
+                        style={{ fontSize: '0.84rem', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                        onClick={handleStartLinkGoogle}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24">
+                          <path fill="#ffffff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                          <path fill="#ffffff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                          <path fill="#ffffff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                          <path fill="#ffffff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                        </svg>
+                        <span>Link Google Account</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Modal Actions */}
@@ -11720,12 +12531,22 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Ban IP Modal */}
+      {/* Ban IP & Device Hardware Modal */}
       {showBanIpModal && (
         <div className="cms-modal-backdrop" onClick={() => setShowBanIpModal(false)}>
-          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <h3 style={{ color: 'var(--cms-danger)', margin: 0 }}>Add IP to Threat Ban List</h3>
+          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: 'var(--cms-danger, #ef4444)' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                  </svg>
+                </span>
+                <h3 style={{ color: 'var(--cms-danger, #ef4444)', margin: 0, fontSize: '1.15rem' }}>
+                  {banModalType === 'ip' ? 'Add IP to Threat Ban List' : 'Ban Hardware Device Fingerprint'}
+                </h3>
+              </div>
               <button
                 type="button"
                 className="cms-modal-close-btn"
@@ -11736,26 +12557,110 @@ export default function AdminDashboard() {
                 &times;
               </button>
             </div>
-            <p>Traffic originating from this IP address will be blocked at the server level.</p>
-            <form onSubmit={handleBanIp} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>IP Address / CIDR</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 192.168.1.100"
-                  className="cms-header-search-input"
-                  style={{ width: '100%' }}
-                  required
-                  value={newIpAddress}
-                  onChange={(e) => setNewIpAddress(e.target.value)}
-                />
-              </div>
+
+            {/* Type Switcher */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: 'var(--cms-bg-subtle, #f1f5f9)', padding: '4px', borderRadius: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setBanModalType('ip')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: banModalType === 'ip' ? 'var(--cms-surface, #ffffff)' : 'transparent',
+                  color: banModalType === 'ip' ? 'var(--cms-danger, #ef4444)' : 'var(--cms-text-secondary, #64748b)',
+                  boxShadow: banModalType === 'ip' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                🌐 Ban IP Address
+              </button>
+              <button
+                type="button"
+                onClick={() => setBanModalType('device')}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: banModalType === 'device' ? 'var(--cms-surface, #ffffff)' : 'transparent',
+                  color: banModalType === 'device' ? 'var(--cms-danger, #ef4444)' : 'var(--cms-text-secondary, #64748b)',
+                  boxShadow: banModalType === 'device' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                💻 Ban Device Hardware
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.86rem', color: 'var(--cms-text-secondary, #64748b)', margin: '0 0 14px' }}>
+              {banModalType === 'ip'
+                ? 'Traffic and authentication requests originating from this IP address will be blocked immediately.'
+                : 'Target device fingerprint will be permanently restricted from accessing the CMS portal until unbanned.'}
+            </p>
+
+            <form onSubmit={handleSaveBan} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {banModalType === 'ip' ? (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem', fontWeight: 600 }}>
+                    IP Address / CIDR
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 192.168.1.100 or 10.0.0.0/24"
+                    className="cms-header-search-input"
+                    style={{ width: '100%' }}
+                    required
+                    value={newIpAddress}
+                    onChange={(e) => setNewIpAddress(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem', fontWeight: 600 }}>
+                      Device Hardware Fingerprint (Device ID)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. hm_dev_8f29c4e1b8... or signature hash"
+                      className="cms-header-search-input"
+                      style={{ width: '100%' }}
+                      required
+                      value={newDeviceInput}
+                      onChange={(e) => setNewDeviceInput(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem', fontWeight: 600 }}>
+                      Device Friendly Name / Label
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Suspicious Mac Mini or Chrome on Windows"
+                      className="cms-header-search-input"
+                      style={{ width: '100%' }}
+                      value={newDeviceNameInput}
+                      onChange={(e) => setNewDeviceNameInput(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem' }}>Reason for Ban</label>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.84rem', fontWeight: 600 }}>
+                  Reason for Ban
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. Repeated brute force login attempts"
+                  placeholder="e.g. Excessive brute force authentication attempts"
                   className="cms-header-search-input"
                   style={{ width: '100%' }}
                   value={newIpReason}
@@ -11763,12 +12668,87 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              <div className="cms-modal-actions" style={{ marginTop: '10px' }}>
+              <div className="cms-modal-actions" style={{ marginTop: '12px' }}>
                 <button type="button" className="cms-modal-btn secondary" onClick={() => setShowBanIpModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="cms-modal-btn primary" style={{ background: 'var(--cms-danger)' }}>
-                  Confirm IP Ban
+                <button type="submit" className="cms-modal-btn primary" style={{ background: 'var(--cms-danger, #ef4444)' }}>
+                  {banModalType === 'ip' ? 'Confirm IP Ban' : 'Confirm Device Ban'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Google Account Linking Modal (Fallback & Verification) */}
+      {showGoogleLinkModal && (
+        <div className="cms-modal-backdrop" onClick={() => setShowGoogleLinkModal(false)}>
+          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Link Google Account</h3>
+              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setShowGoogleLinkModal(false)}
+                title="Close modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: 'var(--cms-text-secondary, #64748b)', marginBottom: '14px' }}>
+              Connect your Google Workspace or Gmail account to enable one-click Google Sign-In next time you log in to Happy Machinery CMS.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!googleLinkManualEmail.trim()) return
+                const token = createMockGoogleJwt(googleLinkManualEmail.trim(), currentUser?.name || currentUser?.username)
+                void handleCompleteLinkGoogle(token)
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+            >
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.84rem', fontWeight: 600 }}>
+                  Google Account Email
+                </label>
+                <input
+                  type="email"
+                  className="cms-header-search-input"
+                  style={{ width: '100%' }}
+                  placeholder="e.g. yourname@gmail.com"
+                  required
+                  value={googleLinkManualEmail}
+                  onChange={(e) => setGoogleLinkManualEmail(e.target.value)}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--cms-text-secondary, #64748b)', marginTop: '4px', display: 'block' }}>
+                  Only authorized admin accounts linked to this Google address can log in via Google SSO.
+                </span>
+              </div>
+
+              <div className="cms-modal-actions" style={{ marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="cms-modal-btn secondary"
+                  onClick={() => setShowGoogleLinkModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="cms-modal-btn primary"
+                  disabled={isLinkingGoogle}
+                >
+                  {isLinkingGoogle ? 'Linking...' : 'Confirm & Link Google Account'}
                 </button>
               </div>
             </form>

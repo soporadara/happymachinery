@@ -106,6 +106,8 @@ function AppContent({
           <Route path="/faq" element={<Faq />} />
           <Route path="/cookie-policy" element={<Navigate to="/privacy-policy#cookies" replace />} />
           <Route path="/hm-ops-7f3a9c2e8b41" element={<Navigate to={ADMIN_PATH} replace />} />
+          <Route path="/profile" element={<Navigate to={`${ADMIN_PATH}?tab=profile`} replace />} />
+          <Route path="/security" element={<Navigate to={`${ADMIN_PATH}?tab=security`} replace />} />
           <Route path={ADMIN_PATH} element={<AdminDashboard />} />
         </Routes>
       </main>

@@ -18,6 +18,8 @@ $allowedKeys = [
     'admin-sessions',
     'security-logs',
     'banned-ips',
+    'banned-devices',
+    'login-activity',
     'failed-logins',
     'security-settings',
     'analytics-events',
@@ -38,6 +40,8 @@ $protectedReadKeys = [
     'admin-sessions',
     'security-logs',
     'banned-ips',
+    'banned-devices',
+    'login-activity',
     'failed-logins',
     'security-settings',
     'analytics-events',
@@ -50,7 +54,8 @@ $publicAppendKeys = [
     'inquiries',
     'comments',
     'cart-activity',
-    'failed-logins'
+    'failed-logins',
+    'login-activity'
 ];
 
 $storageDirectory = dirname(__DIR__, 2) . '/happy-machinery-storage';

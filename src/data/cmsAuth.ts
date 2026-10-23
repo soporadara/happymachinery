@@ -2,9 +2,10 @@
  * Happy Machinery - Secure CMS Authentication & Role-Based Access Control
  */
 
-import type { AdminUser, AdminRole, SecurityLog, SecuritySettings, FailedLoginAttempt } from './cmsTypes'
+import type { AdminUser, AdminRole, SecurityLog, SecuritySettings } from './cmsTypes'
 import { readSharedContent, writeSharedContent, appendSharedContent } from './sharedContentStorage'
 import { DEFAULT_ADMIN_USERS, DEFAULT_SECURITY_SETTINGS } from './cmsDefaults'
+import { checkBanStatus, recordFailedLoginAttempt, recordSuccessfulLogin } from './deviceSecurity'
 
 const AUTH_STORAGE_KEY = 'hm_admin_session'
 const AUTH_TOKEN_KEY = 'hm_admin_token'
@@ -68,7 +69,17 @@ export const authenticateUser = async (
   usernameInput: string,
   passwordInput: string,
   rememberMe: boolean = false
-): Promise<{ success: boolean; user?: AdminUser; error?: string; lockoutMinutes?: number }> => {
+): Promise<{ success: boolean; user?: AdminUser; error?: string; lockoutMinutes?: number; isBanned?: boolean }> => {
+  // Pre-authentication: Check IP and Device Ban Status
+  const banStatus = await checkBanStatus()
+  if (banStatus.isBanned) {
+    return {
+      success: false,
+      isBanned: true,
+      error: `Access Blocked: Your ${banStatus.type === 'both' ? 'IP address and Device' : banStatus.type?.toUpperCase()} is banned by Happy Machinery Shield Security Policy. Reason: ${banStatus.reason || 'Exceeded maximum failed login attempts'}. Contact administrator to unban.`
+    }
+  }
+
   const username = usernameInput.trim().toLowerCase()
   const password = passwordInput.trim()
 
@@ -152,18 +163,19 @@ export const authenticateUser = async (
   const isValidPassword = password === 'admin123' || password === 'admin' || password === 'R@fel1802$$' || (user?.passwordHash && user.passwordHash === password)
 
   if (!user || !isValidPassword) {
-    const failedLog: FailedLoginAttempt = {
-      id: `fail-${now}`,
-      timestamp: new Date().toISOString(),
-      username: username || 'unknown',
-      ip: '127.0.0.1',
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
-      reason: !user ? 'Account not found' : 'Invalid credentials'
-    }
+    const attemptResult = await recordFailedLoginAttempt(
+      username || 'unknown',
+      'password',
+      !user ? 'Account not found' : 'Invalid credentials'
+    )
 
-    try {
-      await appendSharedContent<FailedLoginAttempt>('failed-logins', failedLog)
-    } catch {}
+    if (attemptResult.isBanned) {
+      return {
+        success: false,
+        isBanned: true,
+        error: `Access Blocked: Your IP address and Device have been banned due to exceeding ${attemptResult.threshold} failed login attempts. Contact an administrator to unban.`
+      }
+    }
 
     if (user) {
       user.failedAttempts = (user.failedAttempts || 0) + 1
@@ -187,7 +199,7 @@ export const authenticateUser = async (
     await logSecurityEvent('LOGIN_FAILED', `Failed login attempt for username: ${username}`, 'warning', username)
     return {
       success: false,
-      error: 'Invalid username or password. Please verify your credentials.'
+      error: `Invalid username or password. Please verify your credentials. (${attemptResult.remainingAttempts} attempts remaining before IP/device ban)`
     }
   }
 
@@ -198,6 +210,7 @@ export const authenticateUser = async (
   user.status = 'Active'
 
   await writeSharedContent('admin-users', users)
+  await recordSuccessfulLogin(user.username, 'password')
   await logSecurityEvent('LOGIN_SUCCESS', `Administrator ${user.username} logged in successfully.`, 'info', user.username)
 
   const sessionDurationMs = rememberMe 
@@ -247,3 +260,5 @@ export const checkPermission = (userRole: AdminRole, requiredRole: AdminRole): b
   }
   return (roleWeights[userRole] || 0) >= (roleWeights[requiredRole] || 0)
 }
+
+export { authenticateWithGoogleCredential } from './googleAuth'

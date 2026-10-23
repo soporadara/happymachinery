@@ -30,6 +30,8 @@ const sharedContentApi = () => {
     'admin-users',
     'security-logs',
     'banned-ips',
+    'banned-devices',
+    'login-activity',
     'failed-logins',
     'security-settings',
     'analytics-events',
@@ -50,6 +52,8 @@ const sharedContentApi = () => {
     'admin-sessions',
     'security-logs',
     'banned-ips',
+    'banned-devices',
+    'login-activity',
     'failed-logins',
     'security-settings',
     'analytics-events',
@@ -61,7 +65,8 @@ const sharedContentApi = () => {
     'inquiries',
     'comments',
     'cart-activity',
-    'failed-logins'
+    'failed-logins',
+    'login-activity'
   ]
 
   return {
