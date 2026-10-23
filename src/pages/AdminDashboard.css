@@ -11316,6 +11316,173 @@ html.dark .cms-kpi-card.red .cms-kpi-icon-circle {
 .cms-vib-media-wrapper:hover {
   background: rgba(37, 99, 235, 0.04);
 }
+/* ==============================================================================
+   ADMINISTRATOR PROFILE & IDENTITY STRIP (Desktop & Responsive)
+   ============================================================================== */
+.cms-profile-identity-strip {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 24px;
+  background: var(--cms-bg-card, #ffffff);
+  border-radius: 14px 14px 0 0;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.cms-profile-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+}
+
+.cms-profile-avatar-img {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #2563eb;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.22);
+  display: block;
+  background: var(--cms-bg-surface, #f1f5f9);
+}
+
+.cms-profile-avatar-status-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2.5px solid var(--cms-bg-card, #ffffff);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  display: block;
+}
+
+.cms-profile-identity-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cms-profile-identity-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cms-profile-identity-name-row h4 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--cms-text-primary, #0f172a);
+  letter-spacing: -0.01em;
+}
+
+.cms-profile-role-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  border-radius: 20px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cms-profile-identity-handle {
+  font-size: 0.85rem;
+  color: var(--cms-text-muted, #64748b);
+  word-break: break-all;
+}
+
+.cms-profile-presets-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.cms-profile-presets-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cms-text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.cms-profile-preset-thumb-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 2.5px solid transparent;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--cms-bg-surface, #e2e8f0);
+  transition: all 160ms cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.cms-profile-preset-thumb-btn:hover {
+  transform: scale(1.15);
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.cms-profile-preset-thumb-btn.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  transform: scale(1.08);
+}
+
+.cms-profile-preset-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.cms-profile-card-body {
+  padding: 24px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.cms-profile-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .cms-profile-fields-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .cms-profile-card-body {
+    padding: 16px 14px !important;
+  }
+}
 
 .cms-profile-field-group {
   display: flex;
@@ -11445,6 +11612,33 @@ html.dark .cms-kpi-card.red .cms-kpi-icon-circle {
 :root:not(.cms-theme-light) .cms-modal-dropzone {
   background: #060b14 !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+:root:not(.cms-theme-light) .cms-profile-identity-strip {
+  background: #0f1d35 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:root:not(.cms-theme-light) .cms-profile-avatar-status-dot {
+  border-color: #0f1d35 !important;
+}
+
+:root:not(.cms-theme-light) .cms-profile-role-pill {
+  background: rgba(59, 130, 246, 0.2) !important;
+  color: #60a5fa !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+:root:not(.cms-theme-light) .cms-profile-identity-name-row h4 {
+  color: #f8fafc !important;
+}
+
+:root:not(.cms-theme-light) .cms-profile-identity-handle {
+  color: #94a3b8 !important;
+}
+
+:root:not(.cms-theme-light) .cms-profile-preset-thumb-btn {
+  background: #142544 !important;
 }
 
 /* ==============================================================================
