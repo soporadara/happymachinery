@@ -155,65 +155,7 @@ function PrecisionProductStage({
 
 export default function V900Showcase() {
   const [activeTab, setActiveTab] = useState<'both' | 'engine' | 'track'>('both')
-  const [engineMode, setEngineMode] = useState<'diagram' | '3d'>('3d')
   const [activeCallout, setActiveCallout] = useState<string | null>(null)
-  const [customModelUrl, setCustomModelUrl] = useState<string | null>(null)
-  const [uploadToast, setUploadToast] = useState<string | null>(null)
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const objectUrl = URL.createObjectURL(file)
-    setCustomModelUrl(objectUrl)
-    setUploadToast(`Loaded ${file.name}! Saving...`)
-
-    try {
-      const buffer = await file.arrayBuffer()
-      const res = await fetch('/api/save-3d-model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: buffer
-      })
-      if (res.ok) {
-        setUploadToast(`✔ ${file.name} saved permanently!`)
-        setTimeout(() => setUploadToast(null), 4000)
-      }
-    } catch {
-      setUploadToast(`✔ Loaded in 3D viewer!`)
-      setTimeout(() => setUploadToast(null), 4000)
-    }
-  }
-
-  // 1. Kubota D1105 (25 HP) Engine - Exact Points Calibrated to Product Image
-  const engineCallouts: AccurateCallout[] = [
-    {
-      id: 'eng-fan',
-      title: 'Cooling Fan',
-      subtitle: 'Multi-Blade Thermal Cooling',
-      // Centroid of white fan blades: X=66.2%, Y=36.4%
-      target: { x: 66.2, y: 36.4 },
-      origin: { x: 74, y: 16 },
-      lineStart: { x: 74, y: 22 }
-    },
-    {
-      id: 'eng-block',
-      title: '25 HP Kubota Block',
-      subtitle: '3-Cylinder Diesel Engine',
-      // Exact center of the 25 HP engine block: X=48.0%, Y=52.0%
-      target: { x: 48.0, y: 52.0 },
-      origin: { x: 5, y: 36 },
-      lineStart: { x: 26, y: 40 }
-    },
-    {
-      id: 'eng-flywheel',
-      title: 'Flywheel Output',
-      subtitle: 'Direct Hydraulic Power Flange',
-      // Center of left flywheel rim: X=33.0%, Y=52.0%
-      target: { x: 33.0, y: 52.0 },
-      origin: { x: 5, y: 68 },
-      lineStart: { x: 26, y: 68 }
-    }
-  ]
 
   // Triangular Track Undercarriage - Exact Points Calibrated to Product Image
   const trackCallouts: AccurateCallout[] = [
@@ -293,124 +235,51 @@ export default function V900Showcase() {
         {(activeTab === 'both' || activeTab === 'engine') && (
           <div id="v900-engine" className="v900-core-block">
             <div className="v900-core-grid">
-              {/* Left / Visual: Interactive Precision Diagram OR 3D Model View */}
+              {/* Left / Visual: 3D Interactive Model View */}
               <div className="v900-core-visual">
-                {/* Engine View Mode Switcher */}
-                <div className="v900-engine-mode-bar" role="tablist" aria-label="Engine Visual Mode">
-                  <button
-                    type="button"
-                    className={`v900-engine-mode-btn ${engineMode === 'diagram' ? 'active' : ''}`}
-                    onClick={() => setEngineMode('diagram')}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <span>Blueprint Diagram</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`v900-engine-mode-btn ${engineMode === '3d' ? 'active' : ''}`}
-                    onClick={() => setEngineMode('3d')}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                      <line x1="12" y1="22.08" x2="12" y2="12" />
-                    </svg>
-                    <span>3D Model (Interactive)</span>
-                  </button>
-                </div>
-
-                {engineMode === 'diagram' ? (
-                  <PrecisionProductStage
-                    imageSrc="/images/v900/v900-kubota-d1105-engine.webp"
-                    imageAlt="Kubota D1105 25 HP compact diesel engine"
-                    imageTitle="Kubota D1105 25 HP Engine"
-                    sysId="KUBOTA-25HP"
-                    callouts={engineCallouts}
-                    activeCallout={activeCallout}
-                    onHoverCallout={setActiveCallout}
-                  />
-                ) : (
-                  <div className="v900-3d-model-card">
-                    {/* Top Status Tag */}
-                    <div className="v900-3d-card-top-tag">
-                      <span className="v900-3d-radar-pulse" />
-                      <span>3D INTERACTIVE ENGINE • ROTATE 360°</span>
-                    </div>
-
-                    <model-viewer
-                      src={customModelUrl || "/models/kubota-d1105.glb"}
-                      alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
-                      auto-rotate
-                      auto-rotate-delay="300"
-                      rotation-per-second="25deg"
-                      camera-controls
-                      touch-action="pan-y"
-                      shadow-intensity="1.5"
-                      shadow-softness="0.5"
-                      exposure="1.0"
-                      poster="/images/v900/v900-kubota-d1105-engine.webp"
-                      loading="eager"
-                      reveal="auto"
-                      className="v900-model-viewer-elem"
-                    >
-                      <div slot="poster" className="v900-3d-loading-poster">
-                        <img
-                          src="/images/v900/v900-kubota-d1105-engine.webp"
-                          alt="Kubota D1105 Engine"
-                          className="v900-3d-preview-img"
-                        />
-                        <div className="v900-3d-loading-spinner">
-                          <span className="v900-spinner-ring" />
-                          <span>Loading 3D Engine...</span>
-                        </div>
-                      </div>
-                    </model-viewer>
-
-                    {/* Bottom Action / Hint Bar */}
-                    <div className="v900-3d-bottom-bar">
-                      <span className="v900-3d-hint-text">
-                        🖱️ Drag to rotate 360° • Scroll to zoom
-                      </span>
-
-                      <div className="v900-3d-actions-group">
-                        <label className="v900-3d-upload-btn" title="Upload exported GLB file directly from Meshy">
-                          <input type="file" accept=".glb,.gltf" onChange={handleFileUpload} style={{ display: 'none' }} />
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="17 8 12 3 7 8" />
-                            <line x1="12" y1="3" x2="12" y2="15" />
-                          </svg>
-                          <span>Import Meshy .glb</span>
-                        </label>
-
-                        <a
-                          href="https://www.meshy.ai/3d-models/f249cbd6-7e0d-40cf-a4a2-9d99b2c5ba66?utm_medium=referral-program&utm_source=meshy&utm_content=2RJKFJ&share_type=3d-models"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="v900-3d-link-mini"
-                          title="Open full model on Meshy.ai"
-                        >
-                          <span>Open in Meshy</span>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                            <polyline points="15 3 21 3 21 9" />
-                            <line x1="10" y1="14" x2="21" y2="3" />
-                          </svg>
-                        </a>
-                      </div>
-                    </div>
-
-                    {uploadToast && (
-                      <div className="v900-3d-toast-float">
-                        <span>{uploadToast}</span>
-                      </div>
-                    )}
+                <div className="v900-3d-model-card">
+                  {/* Top Status Tag */}
+                  <div className="v900-3d-card-top-tag">
+                    <span className="v900-3d-radar-pulse" />
+                    <span>3D INTERACTIVE ENGINE • ROTATE 360°</span>
                   </div>
-                )}
+
+                  <model-viewer
+                    src="/models/engine_3d.glb"
+                    alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
+                    auto-rotate
+                    auto-rotate-delay="300"
+                    rotation-per-second="25deg"
+                    camera-controls
+                    touch-action="pan-y"
+                    shadow-intensity="1.5"
+                    shadow-softness="0.5"
+                    exposure="1.0"
+                    poster="/images/v900/v900-kubota-d1105-engine.webp"
+                    loading="eager"
+                    reveal="auto"
+                    className="v900-model-viewer-elem"
+                  >
+                    <div slot="poster" className="v900-3d-loading-poster">
+                      <img
+                        src="/images/v900/v900-kubota-d1105-engine.webp"
+                        alt="Kubota D1105 Engine"
+                        className="v900-3d-preview-img"
+                      />
+                      <div className="v900-3d-loading-spinner">
+                        <span className="v900-spinner-ring" />
+                        <span>Loading 3D Engine...</span>
+                      </div>
+                    </div>
+                  </model-viewer>
+
+                  {/* Bottom Hint Bar */}
+                  <div className="v900-3d-bottom-bar" style={{ justifyContent: 'center' }}>
+                    <span className="v900-3d-hint-text">
+                      🖱️ Drag to rotate 360° • Scroll to zoom
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Right / Content: Concise & Punchy ("dont too much detail") */}

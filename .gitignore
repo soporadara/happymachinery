@@ -16,4 +16,6 @@ backups/
 *.key
 *.pem
 *.crt
+/engine_3d.glb
+/public/engine_3d.glb
 
