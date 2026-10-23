@@ -1227,6 +1227,7 @@
 .v900-products-section {
   width: min(1180px, calc(100% - 40px));
   margin: 64px auto;
+  scroll-margin-top: 90px;
 }
 
 .section-header {

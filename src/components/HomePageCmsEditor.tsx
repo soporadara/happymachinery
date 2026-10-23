@@ -965,6 +965,20 @@ export default function HomePageCmsEditor({
                     }
                   />
                 </div>
+                <div className="home-cms-field">
+                  <label>Button URL</label>
+                  <input
+                    type="text"
+                    value={content.forkShowcase.btnUrl || ''}
+                    placeholder="/contact"
+                    onChange={(e) =>
+                      onChange({
+                        ...content,
+                        forkShowcase: { ...content.forkShowcase, btnUrl: e.target.value }
+                      })
+                    }
+                  />
+                </div>
               </div>
 
               <div className="home-cms-field">

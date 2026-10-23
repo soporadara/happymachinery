@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { appendSharedContent } from '../data/sharedContentStorage'
 import PageBanner from '../components/PageBanner'
 import './ContactUs.css'
 
 export default function ContactUs() {
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [])
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',

@@ -125,6 +125,47 @@ function AppContent({
   )
 }
 
+function ScrollToTop() {
+  const { pathname, search, hash } = useLocation()
+
+  useEffect(() => {
+    if (hash) {
+      const elementId = hash.replace(/^#/, '')
+      const scrollToTarget = () => {
+        const el = document.getElementById(elementId)
+        if (el) {
+          const headerOffset = 90
+          const elementPosition = el.getBoundingClientRect().top
+          const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+          window.scrollTo({
+            top: Math.max(0, offsetPosition),
+            behavior: 'smooth'
+          })
+          return true
+        }
+        return false
+      }
+
+      if (!scrollToTarget()) {
+        const t1 = setTimeout(scrollToTarget, 60)
+        const t2 = setTimeout(scrollToTarget, 220)
+        return () => {
+          clearTimeout(t1)
+          clearTimeout(t2)
+        }
+      }
+    } else {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'instant'
+      })
+    }
+  }, [pathname, search, hash])
+
+  return null
+}
+
 function App() {
   const [theme, setTheme] = useState<Theme>(() => {
     const savedTheme = localStorage.getItem('happy-theme') || localStorage.getItem('nova-theme')
@@ -227,6 +268,7 @@ function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       <AppContent
         theme={theme}
         toggleTheme={toggleTheme}

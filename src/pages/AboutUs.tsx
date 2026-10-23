@@ -1,7 +1,12 @@
+import { useEffect } from 'react'
 import PageBanner from '../components/PageBanner'
 import './AboutUs.css'
 
 export default function AboutUs() {
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [])
+
   return (
     <div className="page about-page">
       <PageBanner

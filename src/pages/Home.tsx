@@ -16,6 +16,58 @@ const extractYouTubeId = (url: string): string => {
   return match ? match[1] : url.replace(/[^a-zA-Z0-9_-]/g, '')
 }
 
+function ActionButton({
+  url,
+  className,
+  children
+}: {
+  url?: string
+  className?: string
+  children: React.ReactNode
+}) {
+  if (!url) return null
+
+  // Hash anchor link on current page
+  if (url.startsWith('#')) {
+    const handleClick = (e: React.MouseEvent) => {
+      e.preventDefault()
+      const elementId = url.replace(/^#/, '')
+      const el = document.getElementById(elementId)
+      if (el) {
+        const headerOffset = 90
+        const elementPosition = el.getBoundingClientRect().top
+        const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+        window.scrollTo({
+          top: Math.max(0, offsetPosition),
+          behavior: 'smooth'
+        })
+        window.history.pushState(null, '', url)
+      }
+    }
+    return (
+      <a href={url} className={className} onClick={handleClick}>
+        {children}
+      </a>
+    )
+  }
+
+  // External URLs
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className={className}>
+        {children}
+      </a>
+    )
+  }
+
+  // Internal Router links (e.g. /contact, /store, /about)
+  return (
+    <Link to={url} className={className}>
+      {children}
+    </Link>
+  )
+}
+
 export default function Home() {
   const [content, setContent] = useState<HomePageContent>(DEFAULT_HOME_CONTENT)
   const [forkColor, setForkColor] = useState('red')
@@ -247,12 +299,12 @@ export default function Home() {
             </h1>
             <p className="hero-desc">{content.hero.description}</p>
             <div className="hero-buttons">
-              <a href={content.hero.primaryBtnUrl} className="btn btn-primary">
+              <ActionButton url={content.hero.primaryBtnUrl} className="btn btn-primary">
                 {content.hero.primaryBtnText}
-              </a>
-              <Link to={content.hero.secondaryBtnUrl} className="btn btn-secondary">
+              </ActionButton>
+              <ActionButton url={content.hero.secondaryBtnUrl} className="btn btn-secondary">
                 {content.hero.secondaryBtnText}
-              </Link>
+              </ActionButton>
             </div>
             <div className="hero-stats" aria-label="Machine highlights">
               {content.hero.highlights.map((h, i) => (
@@ -307,9 +359,9 @@ export default function Home() {
                 <strong>{content.promo.nowPriceText}</strong>
                 <span className="v900-promo-original">{content.promo.originalPriceText}</span>
               </div>
-              <a href={content.promo.buttonUrl} className="v900-promo-button">
+              <ActionButton url={content.promo.buttonUrl} className="v900-promo-button">
                 {content.promo.buttonText} <span aria-hidden="true">→</span>
-              </a>
+              </ActionButton>
             </div>
 
             <div className="v900-promo-visual">
@@ -579,9 +631,9 @@ export default function Home() {
               </ul>
 
               <div className="fork-action">
-                <Link to={content.forkShowcase.btnUrl} className="btn btn-primary">
+                <ActionButton url={content.forkShowcase.btnUrl} className="btn btn-primary">
                   {content.forkShowcase.btnText}
-                </Link>
+                </ActionButton>
               </div>
             </div>
           </div>
@@ -679,9 +731,9 @@ export default function Home() {
                 ))}
               </div>
 
-              <Link to={content.performance.ctaUrl} className="performance-cta">
+              <ActionButton url={content.performance.ctaUrl} className="performance-cta">
                 {content.performance.ctaText} <span aria-hidden="true">→</span>
-              </Link>
+              </ActionButton>
             </div>
 
             <div className="performance-stage">
@@ -724,9 +776,9 @@ export default function Home() {
               <p className="eyebrow">{content.faq.eyebrow}</p>
               <h2 id="faq-title">{content.faq.title}</h2>
               <p>{content.faq.description}</p>
-              <Link to={content.faq.contactLinkUrl} className="faq-contact-link">
+              <ActionButton url={content.faq.contactLinkUrl} className="faq-contact-link">
                 {content.faq.contactPromptText} <span>{content.faq.contactLinkText}</span>
-              </Link>
+              </ActionButton>
             </div>
 
             <div className="faq-list">
@@ -800,7 +852,7 @@ export default function Home() {
               </ol>
 
               <div className="delivery-actions">
-                <Link to={content.delivery.btnUrl} className="btn btn-primary">{content.delivery.btnText}</Link>
+                <ActionButton url={content.delivery.btnUrl} className="btn btn-primary">{content.delivery.btnText}</ActionButton>
                 <span>{content.delivery.note}</span>
               </div>
             </div>
@@ -1019,7 +1071,7 @@ export default function Home() {
 
             <div className="feedback-bottom">
               <span><strong>{content.feedback.bottomPrompt}</strong></span>
-              <Link to={content.feedback.bottomLinkUrl}>{content.feedback.bottomLinkText}</Link>
+              <ActionButton url={content.feedback.bottomLinkUrl}>{content.feedback.bottomLinkText}</ActionButton>
             </div>
           </div>
         </section>
@@ -1035,8 +1087,8 @@ export default function Home() {
                 <p className="cta-strip-sub">{content.ctaStrip.subtitle}</p>
               </div>
               <div className="cta-row">
-                <Link to={content.ctaStrip.primaryBtnUrl} className="btn btn-primary">{content.ctaStrip.primaryBtnText}</Link>
-                <Link to={content.ctaStrip.secondaryBtnUrl} className="btn btn-ghost">{content.ctaStrip.secondaryBtnText}</Link>
+                <ActionButton url={content.ctaStrip.primaryBtnUrl} className="btn btn-primary">{content.ctaStrip.primaryBtnText}</ActionButton>
+                <ActionButton url={content.ctaStrip.secondaryBtnUrl} className="btn btn-ghost">{content.ctaStrip.secondaryBtnText}</ActionButton>
               </div>
             </div>
           </div>
