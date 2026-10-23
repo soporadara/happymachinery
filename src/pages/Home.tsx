@@ -693,11 +693,6 @@ export default function Home() {
                 ))}
               </ul>
 
-              <div className="fork-action">
-                <ActionButton url={content.forkShowcase.btnUrl} className="btn btn-primary">
-                  {content.forkShowcase.btnText}
-                </ActionButton>
-              </div>
             </div>
           </div>
         </section>
@@ -794,9 +789,6 @@ export default function Home() {
                 ))}
               </div>
 
-              <ActionButton url={content.performance.ctaUrl} className="performance-cta">
-                {content.performance.ctaText} <span aria-hidden="true">→</span>
-              </ActionButton>
             </div>
 
             <div className="performance-stage">

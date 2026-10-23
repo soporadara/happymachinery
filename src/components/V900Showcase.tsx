@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import './V900Showcase.css'
 
 interface AccurateCallout {
@@ -321,11 +320,6 @@ export default function V900Showcase() {
                   </div>
                 </div>
 
-                <div className="v900-core-actions">
-                  <Link to="/contact" className="btn-core-primary">
-                    Inquire About Kubota Engine →
-                  </Link>
-                </div>
               </div>
             </div>
           </div>
@@ -389,11 +383,6 @@ export default function V900Showcase() {
                   </div>
                 </div>
 
-                <div className="v900-core-actions">
-                  <Link to="/contact" className="btn-core-primary">
-                    Inquire About Track System →
-                  </Link>
-                </div>
               </div>
 
               {/* Right / Visual: Image with Exact Arrows */}

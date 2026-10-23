@@ -288,8 +288,8 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
       { icon: '⚡', title: 'Quick-Tach Mounting', desc: 'Universal quick-attach system allows quick changeovers from bucket to forks in under 2 minutes.' },
       { icon: '🛡️', title: 'Integrated Spill Guard', desc: 'High-strength safety backrest prevents sliding materials from slipping backwards, ensuring safe operations.' }
     ],
-    btnText: 'Inquire About Package Deals',
-    btnUrl: '/contact'
+    btnText: '',
+    btnUrl: ''
   },
   why: {
     visible: true,
@@ -350,8 +350,8 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     eyebrow: 'Performance in Action',
     title: 'See what the V900 can do.',
     lead: 'Real machine. Real terrain. Watch the V900 turn compact dimensions, hydraulic power, and tracked stability into productive work.',
-    ctaText: 'Request full specifications →',
-    ctaUrl: '/contact',
+    ctaText: '',
+    ctaUrl: '',
     videos: [
       {
         src: '/videos/v900-lift-performance.mp4',

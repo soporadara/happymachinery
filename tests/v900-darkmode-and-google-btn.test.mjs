@@ -101,3 +101,22 @@ test('5. Delivery section explicitly mentions and highlights 48 contiguous U.S. 
   assert.ok(homeCss.includes('.app-shell.dark .delivery-region-pill'), 'Home.css must style delivery-region-pill for dark mode')
 })
 
+test('6. Redundant inquiry CTA buttons are completely removed from V900 showcase and Home sections', () => {
+  const v900Path = path.join(projectRoot, 'src/components/V900Showcase.tsx')
+  const homePath = path.join(projectRoot, 'src/pages/Home.tsx')
+  const homeContentPath = path.join(projectRoot, 'src/data/homeContent.ts')
+
+  const v900Tsx = fs.readFileSync(v900Path, 'utf8')
+  const homeTsx = fs.readFileSync(homePath, 'utf8')
+  const homeContent = fs.readFileSync(homeContentPath, 'utf8')
+
+  // Kubota & Track buttons removed
+  assert.ok(!v900Tsx.includes('Inquire About Kubota Engine'), 'Must remove Inquire About Kubota Engine button')
+  assert.ok(!v900Tsx.includes('Inquire About Track System'), 'Must remove Inquire About Track System button')
+
+  // Package deals & Specs buttons removed from JSX
+  assert.ok(!homeTsx.includes('fork-action'), 'Must remove fork-action button container from Home.tsx')
+  assert.ok(!homeTsx.includes('performance-cta'), 'Must remove performance-cta button from Home.tsx')
+  assert.ok(!homeContent.includes("'Inquire About Package Deals'"), 'Must remove Inquire About Package Deals default text')
+})
+
