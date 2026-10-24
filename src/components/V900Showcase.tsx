@@ -238,37 +238,23 @@ export default function V900Showcase() {
               {/* Left / Visual: 3D Interactive Model View */}
               <div className="v900-core-visual">
                 <div className="v900-3d-model-card">
-                  {/* Top Status Tag */}
-                  <div className="v900-3d-card-top-tag">
-                    <span className="v900-3d-radar-pulse" />
-                    <span>3D INTERACTIVE ENGINE • ROTATE 360°</span>
-                  </div>
-
                   <model-viewer
                     src="/models/engine_3d.glb"
                     alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
                     auto-rotate
-                    auto-rotate-delay="300"
+                    auto-rotate-delay="0"
                     rotation-per-second="25deg"
                     camera-controls
                     touch-action="pan-y"
                     shadow-intensity="1.5"
                     shadow-softness="0.5"
                     exposure="1.0"
-                    poster="/images/v900/v900-kubota-d1105-engine.webp"
                     loading="eager"
                     reveal="auto"
                     className="v900-model-viewer-elem"
                   >
                     <div slot="progress-bar" style={{ display: 'none' }} />
                   </model-viewer>
-
-                  {/* Bottom Hint Bar */}
-                  <div className="v900-3d-bottom-bar" style={{ justifyContent: 'center' }}>
-                    <span className="v900-3d-hint-text">
-                      🖱️ Drag to rotate 360° • Scroll to zoom
-                    </span>
-                  </div>
                 </div>
               </div>
 
