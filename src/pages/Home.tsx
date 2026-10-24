@@ -339,20 +339,23 @@ export default function Home() {
       {/* 1. Premium Hero Section */}
       {content.hero.visible !== false && (
         <section className="hero">
-          <video
-            key={content.hero.videoUrl}
-            className="hero-background-media"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            poster={content.hero.posterUrl}
-            aria-hidden="true"
-          >
-            <source src={content.hero.videoUrl} type="video/mp4" />
-          </video>
-          <div className="hero-overlay"></div>
+          {/* Desktop ambient background video (screens > 760px) */}
+          <div className="hero-desktop-media" aria-hidden="true">
+            <video
+              key={content.hero.videoUrl}
+              className="hero-background-media"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster={content.hero.posterUrl}
+            >
+              <source src={content.hero.videoUrl} type="video/mp4" />
+            </video>
+            <div className="hero-overlay"></div>
+          </div>
+
           <div className="hero-content">
             <p className="eyebrow-accent">{content.hero.eyebrow}</p>
             <h1 aria-label={`${content.hero.titleRed} ${content.hero.titleYellow} ${content.hero.titleBlue}`}>
@@ -360,6 +363,27 @@ export default function Home() {
               <span className="hero-title-part hero-title-yellow">{content.hero.titleYellow}</span>{' '}
               <span className="hero-title-part hero-title-blue">{content.hero.titleBlue}</span>
             </h1>
+
+            {/* Mobile Dedicated Landscape Video Frame (screens <= 760px) */}
+            <div className="hero-mobile-landscape-frame">
+              <video
+                key={`mobile-${content.hero.videoUrl}`}
+                className="hero-mobile-landscape-video"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                poster={content.hero.posterUrl}
+              >
+                <source src={content.hero.videoUrl} type="video/mp4" />
+              </video>
+              <div className="hero-mobile-video-badge">
+                <span className="hero-live-pulse"></span>
+                TYPHON V900 in Action
+              </div>
+            </div>
+
             <p className="hero-desc">{content.hero.description}</p>
             <div className="hero-buttons">
               <ActionButton url={content.hero.primaryBtnUrl} className="btn btn-primary">
