@@ -5,7 +5,6 @@
 /* Fluid responsive section containers for all displays (Mobile to 34" Ultrawide) */
 .features-overview,
 .specifications-section,
-.performance-section,
 .testimonials-section,
 .faq-section,
 .fleet-section,
@@ -13,12 +12,20 @@
 .v900-cta-banner {
   width: min(100% - 32px, var(--site-max-width, 1200px)) !important;
   max-width: var(--site-max-width, 1200px) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.performance-section {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 
 @media (min-width: 1024px) {
   .features-overview,
   .specifications-section,
-  .performance-section,
   .testimonials-section,
   .faq-section,
   .fleet-section,
@@ -31,7 +38,6 @@
 @media (min-width: 1600px) {
   .features-overview,
   .specifications-section,
-  .performance-section,
   .testimonials-section,
   .faq-section,
   .fleet-section,
@@ -44,7 +50,6 @@
 @media (min-width: 2100px) {
   .features-overview,
   .specifications-section,
-  .performance-section,
   .testimonials-section,
   .faq-section,
   .fleet-section,
@@ -1194,14 +1199,24 @@
   }
 
   .v900-promo-visual {
-    min-height: 235px;
-    margin: 0 12px 12px;
-    border-radius: 16px;
+    min-height: 250px;
+    margin: 0 12px 14px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .v900-promo-visual img {
-    width: 106%;
-    max-height: 220px;
+    position: relative;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: 96%;
+    max-width: 360px;
+    max-height: 210px;
+    object-fit: contain;
+    margin: 32px auto 8px;
   }
 
   .v900-promo-color-label {

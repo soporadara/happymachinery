@@ -889,7 +889,18 @@ body.dark .v900-spinner-ring {
 
 @media (max-width: 768px) {
   .v900-deep-dive-section {
-    padding: 3.5rem 0;
+    padding: 3rem 0;
+  }
+
+  .v900-3d-model-card {
+    min-height: 340px;
+    max-width: 100%;
+    border-radius: 20px;
+  }
+
+  model-viewer,
+  .v900-model-viewer-elem {
+    min-height: 340px;
   }
 
   .v900-specs-strip {
@@ -906,6 +917,19 @@ body.dark .v900-spinner-ring {
 @media (max-width: 480px) {
   .v900-container {
     padding: 0 1rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .v900-3d-model-card {
+    min-height: 300px;
+    border-radius: 18px;
+  }
+
+  model-viewer,
+  .v900-model-viewer-elem {
+    min-height: 300px;
   }
 
   .v900-section-nav {

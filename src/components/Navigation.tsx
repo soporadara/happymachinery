@@ -115,17 +115,6 @@ export default function Navigation({
           />
         </NavLink>
 
-        <button
-          className="menu-toggle"
-          type="button"
-          aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          aria-expanded={isMenuOpen}
-          aria-controls="primary-navigation"
-          onClick={() => setIsMenuOpen((current) => !current)}
-        >
-          <span></span><span></span><span></span>
-        </button>
-
         <ul id="primary-navigation" className={`nav-menu${isMenuOpen ? ' is-open' : ''}`}>
           {links.map((link) => (
             <li className="nav-item" key={link.to}>
@@ -269,6 +258,17 @@ export default function Navigation({
                 <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
               </svg>
             )}
+          </button>
+
+          <button
+            className="menu-toggle"
+            type="button"
+            aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={isMenuOpen}
+            aria-controls="primary-navigation"
+            onClick={() => setIsMenuOpen((current) => !current)}
+          >
+            <span></span><span></span><span></span>
           </button>
         </div>
       </div>
