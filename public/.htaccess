@@ -33,9 +33,14 @@
     Header set Expires 0
   </FilesMatch>
 
-  # Content-hashed Vite assets can be cached safely
-  <FilesMatch "\.(css|js|webp|png|jpg|mp4|m4v)$">
+  # Content-hashed Vite assets and media can be cached safely
+  <FilesMatch "\.(css|js|webp|png|jpg|mp4|m4v|glb|gltf)$">
     Header set Cache-Control "public, max-age=2592000"
   </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType model/gltf-binary .glb
+  AddType model/gltf+json .gltf
 </IfModule>
 

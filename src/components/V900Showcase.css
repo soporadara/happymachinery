@@ -349,6 +349,9 @@ model-viewer,
   height: 100%;
   min-height: 440px;
   --poster-color: transparent;
+  --progress-bar-color: transparent !important;
+  --progress-bar-height: 0px !important;
+  --progress-mask: transparent !important;
   outline: none;
   background: transparent;
   cursor: grab;
@@ -361,46 +364,29 @@ model-viewer:active,
   cursor: grabbing;
 }
 
-.v900-3d-loading-poster {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.12) 0%, transparent 68%),
-    linear-gradient(rgba(0, 102, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 102, 255, 0.05) 1px, transparent 1px);
-  background-size: 100% 100%, 28px 28px, 28px 28px;
-  z-index: 10;
+/* Strictly hide any progress bar or loading indicators */
+model-viewer::part(default-progress-bar),
+.v900-model-viewer-elem::part(default-progress-bar),
+model-viewer::part(default-progress-mask),
+.v900-model-viewer-elem::part(default-progress-mask),
+model-viewer::part(progress-bar),
+.v900-model-viewer-elem::part(progress-bar) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  height: 0px !important;
+  width: 0px !important;
+  border: 0 !important;
 }
 
-.v900-3d-loading-spinner {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 1rem;
-  padding: 0.4rem 0.9rem;
-  background: rgba(0, 102, 255, 0.08);
-  border: 1px solid rgba(0, 102, 255, 0.2);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #0066ff;
-}
-
+.v900-3d-loading-poster,
+.v900-3d-loading-spinner,
 .v900-spinner-ring {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(0, 102, 255, 0.2);
-  border-top-color: #0066ff;
-  border-radius: 50%;
-  animation: v900Spin 0.8s linear infinite;
-}
-
-@keyframes v900Spin {
-  to { transform: rotate(360deg); }
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  height: 0px !important;
+  width: 0px !important;
 }
 
 .v900-3d-bottom-bar {

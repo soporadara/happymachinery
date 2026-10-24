@@ -260,17 +260,7 @@ export default function V900Showcase() {
                     reveal="auto"
                     className="v900-model-viewer-elem"
                   >
-                    <div slot="poster" className="v900-3d-loading-poster">
-                      <img
-                        src="/images/v900/v900-kubota-d1105-engine.webp"
-                        alt="Kubota D1105 Engine"
-                        className="v900-3d-preview-img"
-                      />
-                      <div className="v900-3d-loading-spinner">
-                        <span className="v900-spinner-ring" />
-                        <span>Loading 3D Engine...</span>
-                      </div>
-                    </div>
+                    <div slot="progress-bar" style={{ display: 'none' }} />
                   </model-viewer>
 
                   {/* Bottom Hint Bar */}
