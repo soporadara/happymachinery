@@ -97,7 +97,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                   fontWeight: 600
                 }}
               >
-                View Ecwid Cart &rarr;
+                View Cart &rarr;
               </a>
             </div>
           </div>

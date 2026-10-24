@@ -61,7 +61,7 @@ export default function CartDrawer({
                 className="checkout-btn"
                 style={{ display: 'inline-block', marginTop: '14px', textAlign: 'center', cursor: 'pointer' }}
               >
-                Open Ecwid Store & Cart &rarr;
+                Open Store & Cart &rarr;
               </button>
             </div>
           ) : (
@@ -105,7 +105,7 @@ export default function CartDrawer({
               <span className="total-price">${totalPrice.toLocaleString()}</span>
             </div>
             <button className="checkout-btn" onClick={onCheckout}>
-              Checkout via Ecwid &rarr;
+              Proceed to Checkout &rarr;
             </button>
           </div>
         )}
