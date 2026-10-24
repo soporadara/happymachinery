@@ -239,7 +239,7 @@ export default function V900Showcase() {
               <div className="v900-core-visual">
                 <div className="v900-3d-model-card">
                   <model-viewer
-                    src="/models/engine_3d.glb"
+                    src="/models/kubota-d1105.glb"
                     alt="Kubota D1105 (25 HP) Engine 3D Interactive Model"
                     auto-rotate
                     auto-rotate-delay="0"

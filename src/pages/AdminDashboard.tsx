@@ -4098,13 +4098,32 @@ export default function AdminDashboard() {
 
             {/* Pill Search Input */}
             <div className="cms-header-pill-search">
+              <svg className="cms-header-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
               <input
                 type="text"
                 className="cms-pill-search-input"
-                placeholder="Search articles, guides, categories..."
+                placeholder="Search products, blog posts, inquiries..."
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.target.value)}
               />
+              {globalSearch ? (
+                <button
+                  type="button"
+                  className="cms-search-clear-btn"
+                  onClick={() => setGlobalSearch('')}
+                  title="Clear search"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              ) : (
+                <kbd className="cms-search-kbd" title="Search Shortcut">⌘K</kbd>
+              )}
             </div>
           </div>
 

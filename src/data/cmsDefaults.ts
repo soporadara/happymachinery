@@ -52,7 +52,7 @@ export const DEFAULT_ADMIN_USERS: AdminUser[] = [
     googleEmail: 'soporadara@kiuq.com',
     role: 'Super Administrator',
     status: 'Active',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80',
+    avatar: '/images/about-team-1.png',
     createdAt: '2026-01-15T08:00:00Z',
     failedAttempts: 0,
     passwordHash: 'R@fel1802$$'
