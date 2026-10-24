@@ -211,3 +211,25 @@
     gap: 20px;
   }
 }
+
+@media (max-width: 640px) {
+  .checkout-hero {
+    padding: 34px 16px;
+  }
+
+  .checkout-hero h1 {
+    font-size: 1.6rem;
+  }
+
+  .checkout-layout-grid {
+    padding: 0 12px;
+    margin-top: 18px;
+    gap: 16px;
+  }
+
+  .cart-summary-card,
+  .store-checkout-card {
+    padding: 16px 14px;
+    border-radius: 14px;
+  }
+}

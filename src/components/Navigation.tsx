@@ -68,15 +68,20 @@ export default function Navigation({
       )
     : []
 
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null)
+
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!searchQuery.trim()) return
     setIsSearchOpen(false)
+    setIsMobileSearchOpen(false)
     navigate(`/store?search=${encodeURIComponent(searchQuery.trim())}`)
   }
 
   const openProduct = (productId: number) => {
     setIsSearchOpen(false)
+    setIsMobileSearchOpen(false)
     navigate(getV900ProductPath(productId))
   }
 
@@ -84,7 +89,23 @@ export default function Navigation({
     setIsMenuOpen(false)
     setIsSearchOpen(false)
     setIsSearchFocused(false)
+    setIsMobileSearchOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (isMobileSearchOpen) {
+      setIsMenuOpen(false)
+      setTimeout(() => {
+        mobileSearchInputRef.current?.focus()
+      }, 60)
+    }
+  }, [isMobileSearchOpen])
+
+  useEffect(() => {
+    if (isMenuOpen) {
+      setIsMobileSearchOpen(false)
+    }
+  }, [isMenuOpen])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -129,8 +150,9 @@ export default function Navigation({
         </ul>
 
         <div className="nav-actions">
+          {/* Desktop Search (screens > 760px) */}
           <form
-            className={`header-search${isSearchFocused ? ' is-focused' : ''}`}
+            className={`header-search desktop-only-search${isSearchFocused ? ' is-focused' : ''}`}
             role="search"
             onSubmit={handleSearchSubmit}
             onFocus={() => {
@@ -217,6 +239,27 @@ export default function Navigation({
             )}
           </form>
 
+          {/* Mobile Search Toggle Button (screens <= 760px) */}
+          <button
+            className={`mobile-search-toggle${isMobileSearchOpen ? ' active' : ''}`}
+            type="button"
+            onClick={() => setIsMobileSearchOpen((prev) => !prev)}
+            aria-label={isMobileSearchOpen ? 'Close search' : 'Open product search'}
+            aria-expanded={isMobileSearchOpen}
+          >
+            {isMobileSearchOpen ? (
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="m20 20-4-4"></path>
+              </svg>
+            )}
+          </button>
+
           <button
             className={`cart-toggle${isCartBumping ? ' cart-bump' : ''}`}
             type="button"
@@ -272,6 +315,109 @@ export default function Navigation({
           </button>
         </div>
       </div>
+
+      {/* Mobile Dedicated Search Panel */}
+      {isMobileSearchOpen && (
+        <div className="mobile-search-panel">
+          <div className="mobile-search-inner">
+            <form className="mobile-search-form" onSubmit={handleSearchSubmit}>
+              <div className="mobile-search-input-box">
+                <svg className="mobile-search-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <path d="m20 20-4-4"></path>
+                </svg>
+                <input
+                  ref={mobileSearchInputRef}
+                  type="search"
+                  placeholder="Search V900 loaders, attachments..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    onSearchChange(e.target.value)
+                  }}
+                  aria-label="Search products"
+                  autoComplete="off"
+                  autoFocus
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    className="mobile-search-clear"
+                    onClick={() => {
+                      onSearchChange('')
+                      mobileSearchInputRef.current?.focus()
+                    }}
+                    aria-label="Clear search input"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                className="mobile-search-cancel-btn"
+                onClick={() => {
+                  setIsMobileSearchOpen(false)
+                  onSearchChange('')
+                }}
+              >
+                Cancel
+              </button>
+            </form>
+
+            {normalizedQuery ? (
+              <div className="mobile-search-results">
+                {searchResults.length > 0 ? (
+                  <div className="mobile-search-results-list">
+                    {searchResults.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        className="mobile-search-card"
+                        onClick={() => openProduct(product.id)}
+                      >
+                        <div className="mobile-search-card-thumb">
+                          <img src={product.image} alt={product.name} />
+                        </div>
+                        <div className="mobile-search-card-details">
+                          <span className="mobile-search-card-badge">{product.category}</span>
+                          <h4 className="mobile-search-card-name">{product.name}</h4>
+                          <span className="mobile-search-card-cta">View Machine Specs →</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mobile-search-empty-state">
+                    <p>No matching V900 products found for “{searchQuery.trim()}”.</p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="mobile-search-view-all-button"
+                  onClick={() => {
+                    setIsMobileSearchOpen(false)
+                    navigate(`/store?search=${encodeURIComponent(searchQuery.trim())}`)
+                  }}
+                >
+                  Search full store catalog for “{searchQuery.trim()}” →
+                </button>
+              </div>
+            ) : (
+              <div className="mobile-search-suggestions">
+                <span className="mobile-search-suggestions-title">Quick Search</span>
+                <div className="mobile-search-chips">
+                  <button type="button" onClick={() => onSearchChange('Yellow')}>V900 Yellow</button>
+                  <button type="button" onClick={() => onSearchChange('Cobalt Blue')}>Cobalt Blue</button>
+                  <button type="button" onClick={() => onSearchChange('Crimson Red')}>Crimson Red</button>
+                  <button type="button" onClick={() => onSearchChange('Kubota D1105')}>Kubota Engine</button>
+                  <button type="button" onClick={() => onSearchChange('Fork')}>Pallet Fork</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   )
 }
