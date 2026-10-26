@@ -13,7 +13,9 @@ export const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
   autoBanThreshold: 10,
   enableIpWhitelisting: false,
   whitelistedIps: ['127.0.0.1', '::1'],
-  requirePasswordComplexity: true
+  requirePasswordComplexity: true,
+  autoSignOutEnabled: false,
+  autoSignOutSeconds: 300
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -38,8 +40,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     text: 'Nationwide Delivery Available on All Skid Steer V900 Models',
     linkText: 'Explore Catalog',
     linkUrl: '/store'
-  },
-  maintenanceMode: false
+  }
 }
 
 export const DEFAULT_ADMIN_USERS: AdminUser[] = [
@@ -52,7 +53,7 @@ export const DEFAULT_ADMIN_USERS: AdminUser[] = [
     googleEmail: 'soporadara@kiuq.com',
     role: 'Super Administrator',
     status: 'Active',
-    avatar: '/images/about-team-1.png',
+    avatar: 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg',
     createdAt: '2026-01-15T08:00:00Z',
     failedAttempts: 0,
     passwordHash: 'R@fel1802$$'

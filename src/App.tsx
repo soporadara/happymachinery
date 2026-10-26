@@ -19,8 +19,6 @@ import TermsOfService from './pages/TermsOfService'
 import Faq from './pages/Faq'
 import { recordCartActivity } from './data/cartActivity'
 import { usePageTracking } from './data/analyticsTracker'
-import { getMaintenanceConfig, isRouteUnderMaintenance, type MaintenanceConfig } from './data/maintenanceConfig'
-import MaintenanceSplash from './components/MaintenanceSplash'
 import './App.css'
 
 type Theme = 'light' | 'dark'
@@ -44,36 +42,11 @@ function AppContent({
   const isAdminPage = location.pathname === ADMIN_PATH || location.pathname === '/hm-ops-7f3a9c2e8b41'
   const totalCartCount = cartItems.reduce((acc: number, item: any) => acc + item.quantity, 0)
 
-  // Maintenance Guardian State & Real-time Synchronization
-  const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>(() => getMaintenanceConfig())
-
   useEffect(() => {
-    const handleUpdate = () => {
-      setMaintenanceConfig(getMaintenanceConfig())
-    }
-    window.addEventListener('hm-maintenance-updated', handleUpdate)
-    window.addEventListener('storage', handleUpdate)
-    return () => {
-      window.removeEventListener('hm-maintenance-updated', handleUpdate)
-      window.removeEventListener('storage', handleUpdate)
-    }
+    try {
+      localStorage.removeItem('hm_cms_maintenance_config')
+    } catch {}
   }, [])
-
-  // Check if current user is an authenticated admin who can bypass maintenance
-  const hasAdminSession = Boolean(
-    localStorage.getItem('hm_cms_session') ||
-    localStorage.getItem('hm_admin_logged_in') ||
-    localStorage.getItem('currentUser')
-  )
-
-  const isUnderMaintenance =
-    !isAdminPage &&
-    !hasAdminSession &&
-    isRouteUnderMaintenance(location.pathname, maintenanceConfig)
-
-  if (isUnderMaintenance) {
-    return <MaintenanceSplash config={maintenanceConfig} />
-  }
 
   return (
     <div className={`app-shell ${theme} ${isAdminPage ? 'admin-console-mode' : ''}`}>

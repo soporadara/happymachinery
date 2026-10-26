@@ -126,6 +126,8 @@ export interface SecuritySettings {
   enableIpWhitelisting: boolean
   whitelistedIps: string[]
   requirePasswordComplexity: boolean
+  autoSignOutEnabled?: boolean
+  autoSignOutSeconds?: number
 }
 
 export interface AnalyticsViewEvent {
@@ -165,7 +167,6 @@ export interface SiteSettings {
     linkText?: string
     linkUrl?: string
   }
-  maintenanceMode: boolean
 }
 
 export interface CustomCtaButton {

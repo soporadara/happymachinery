@@ -58,7 +58,6 @@ import TopBlogsManager from '../components/TopBlogsManager'
 import TiptapEditor from '../components/Editor/TiptapEditor'
 import { renderMarkdownToReact } from './Blog'
 import { convertContentToHtml } from '../utils/editorContentHelper'
-import { getMaintenanceConfig, saveMaintenanceConfig } from '../data/maintenanceConfig'
 import { cacheSiteSettings, updateBrowserFavicon } from '../data/siteBranding'
 import './AdminDashboard.css'
 
@@ -88,7 +87,6 @@ type CmsTab =
   | 'admins' 
   | 'profile'
   | 'settings'
-  | 'maintenance'
 
 export interface AdminNotificationItem {
   id: string
@@ -111,6 +109,8 @@ type SecuritySubTab =
   | 'settings'
 
 type CmsTheme = 'dark' | 'light' | 'neon'
+
+export const DEFAULT_SUPERADMIN_AVATAR = 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
 
 export interface VisualBlock {
   id: string
@@ -544,7 +544,17 @@ export default function AdminDashboard() {
       }
     }
     const session = getStoredSession()
-    return session?.user || null
+    if (session?.user) {
+      const TARGET_AVATAR = 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
+      if (!session.user.avatar || session.user.avatar.includes('about-team-1.png')) {
+        session.user.avatar = TARGET_AVATAR
+        try {
+          localStorage.setItem('hm_admin_session', JSON.stringify(session))
+        } catch {}
+      }
+      return session.user
+    }
+    return null
   })
 
   // Theme State
@@ -629,7 +639,7 @@ export default function AdminDashboard() {
         timestamp: Date.now() - 24 * 3600 * 1000,
         read: true,
         type: 'system',
-        targetTab: 'maintenance'
+        targetTab: 'settings'
       }
     ]
   })
@@ -775,6 +785,30 @@ export default function AdminDashboard() {
   })
   const [failedLogins, setFailedLogins] = useState<FailedLoginAttempt[]>([])
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>(DEFAULT_SECURITY_SETTINGS)
+  // Auto Sign-Out Inactivity Security Settings & State
+  const [autoSignOutEnabled, setAutoSignOutEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('hm_auto_sign_out_enabled')
+      if (saved !== null) return saved === 'true'
+    } catch {}
+    return false // Default: false ("Sign in forever" until user turns it on)
+  })
+
+  const [autoSignOutSeconds, setAutoSignOutSeconds] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('hm_auto_sign_out_seconds')
+      const val = saved ? parseInt(saved, 10) : NaN
+      if (!isNaN(val) && val > 0) return val
+    } catch {}
+    return 300 // Default: 300 seconds (5 minutes) when enabled
+  })
+
+  const [isAutoSignOutModalOpen, setIsAutoSignOutModalOpen] = useState(false)
+  const [tempAutoSignOutEnabled, setTempAutoSignOutEnabled] = useState(autoSignOutEnabled)
+  const [tempAutoSignOutSeconds, setTempAutoSignOutSeconds] = useState(autoSignOutSeconds)
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(autoSignOutSeconds)
+  const [showSignOutWarning, setShowSignOutWarning] = useState<boolean>(false)
+  const lastActivityRef = useRef<number>(Date.now())
   const [, setAnalyticsEvents] = useState<AnalyticsViewEvent[]>([])
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS)
   const logoFileInputRef = useRef<HTMLInputElement>(null)
@@ -1297,13 +1331,18 @@ export default function AdminDashboard() {
   const [editorStatus, setEditorStatus] = useState<'Published' | 'Draft' | 'Scheduled'>('Draft')
   const [editorCoverImage, setEditorCoverImage] = useState('')
   const [editorCoverAlt, setEditorCoverAlt] = useState('')
+  // Featured Cover Image Media Library & Upload States
+  const [isCoverMediaModalOpen, setIsCoverMediaModalOpen] = useState(false)
+  const [coverMediaSearch, setCoverMediaSearch] = useState('')
+  const [coverMediaFolder, setCoverMediaFolder] = useState<string>('all')
+  const [selectedCoverMedia, setSelectedCoverMedia] = useState<MediaItem | null>(null)
+  const [isUploadingCover, setIsUploadingCover] = useState(false)
+  const coverFileInputRef = useRef<HTMLInputElement>(null)
+  const coverModalFileInputRef = useRef<HTMLInputElement>(null)
   const [editorVideoUrl, setEditorVideoUrl] = useState('')
   const [editorSeoTitle, setEditorSeoTitle] = useState('')
   const [editorSeoDesc, setEditorSeoDesc] = useState('')
   const [editorScheduledAt, setEditorScheduledAt] = useState('')
-  const [editorBreaking, setEditorBreaking] = useState(false)
-  const [editorBreakingUntil, setEditorBreakingUntil] = useState('')
-  const [breakingMode, setBreakingMode] = useState<'forever' | 'until_date'>('forever')
 
   // Rich WYSIWYG & Media Editor States (Matches Image 2)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1394,15 +1433,6 @@ export default function AdminDashboard() {
   const [profileAvatar, setProfileAvatar] = useState('')
   const [newPasswordInput, setNewPasswordInput] = useState('')
   const [showProfilePassword, setShowProfilePassword] = useState(false)
-
-  // Maintenance Mode States (Screenshot 5)
-  const [maintenanceGlobal, setMaintenanceGlobal] = useState(() => getMaintenanceConfig().global)
-  const [maintenanceTitle, setMaintenanceTitle] = useState(() => getMaintenanceConfig().title)
-  const [maintenanceMessage, setMaintenanceMessage] = useState(() => getMaintenanceConfig().message)
-  const [maintenanceEta, setMaintenanceEta] = useState(() => getMaintenanceConfig().eta || '')
-  const [maintenanceProgress, setMaintenanceProgress] = useState(() => getMaintenanceConfig().progress)
-  const [maintenanceRoutes, setMaintenanceRoutes] = useState<string[]>(() => getMaintenanceConfig().routes)
-  const [newCustomRoute, setNewCustomRoute] = useState('')
 
   // Media Library Enhanced States & Folder Tree Navigation (File Manager-KiuQ)
   interface MediaFolderItem {
@@ -1730,8 +1760,24 @@ export default function AdminDashboard() {
         setMediaList((prev) => (prev.length > 0 ? prev : DEFAULT_MEDIA))
       }
 
+      const TARGET_AVATAR = 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
       if (fetchedUsers && Array.isArray(fetchedUsers) && fetchedUsers.length > 0) {
-        setAdminUsers(fetchedUsers)
+        const normalizedUsers = fetchedUsers.map((u) => {
+          if ((u.username === 'admin' || u.email === 'soporadara@kiuq.com') && (!u.avatar || u.avatar.includes('about-team-1.png'))) {
+            return { ...u, avatar: TARGET_AVATAR }
+          }
+          return u
+        })
+        setAdminUsers(normalizedUsers)
+        const selfMatch = normalizedUsers.find((u) => u.username === currentUser?.username || u.email === currentUser?.email)
+        if (selfMatch && selfMatch.avatar) {
+          setCurrentUser(selfMatch)
+          const session = getStoredSession()
+          if (session) {
+            session.user = selfMatch
+            try { localStorage.setItem('hm_admin_session', JSON.stringify(session)) } catch {}
+          }
+        }
       } else {
         setAdminUsers((prev) => (prev.length > 0 ? prev : DEFAULT_ADMIN_USERS))
       }
@@ -1741,7 +1787,18 @@ export default function AdminDashboard() {
       if (fetchedBannedDevs && Array.isArray(fetchedBannedDevs)) setBannedDevices(fetchedBannedDevs)
       if (fetchedLoginActivity && Array.isArray(fetchedLoginActivity)) setLoginActivityLogs(fetchedLoginActivity)
       if (fetchedFails && Array.isArray(fetchedFails)) setFailedLogins(fetchedFails)
-      if (fetchedSecSettings) setSecuritySettings(fetchedSecSettings)
+      if (fetchedSecSettings) {
+        setSecuritySettings(fetchedSecSettings)
+        if (typeof fetchedSecSettings.autoSignOutEnabled === 'boolean') {
+          setAutoSignOutEnabled(fetchedSecSettings.autoSignOutEnabled)
+          setTempAutoSignOutEnabled(fetchedSecSettings.autoSignOutEnabled)
+        }
+        if (typeof fetchedSecSettings.autoSignOutSeconds === 'number' && fetchedSecSettings.autoSignOutSeconds > 0) {
+          setAutoSignOutSeconds(fetchedSecSettings.autoSignOutSeconds)
+          setTempAutoSignOutSeconds(fetchedSecSettings.autoSignOutSeconds)
+          setSecondsRemaining(fetchedSecSettings.autoSignOutSeconds)
+        }
+      }
       if (fetchedAnalytics && Array.isArray(fetchedAnalytics)) setAnalyticsEvents(fetchedAnalytics)
       if (fetchedSiteSettings) {
         const normalized: SiteSettings = {
@@ -1897,7 +1954,10 @@ export default function AdminDashboard() {
     if (currentUser) {
       setProfileName(currentUser.name || '')
       setProfileEmail(currentUser.email || '')
-      setProfileAvatar(currentUser.avatar || '')
+      const userAvatar = currentUser.avatar && !currentUser.avatar.includes('about-team-1.png')
+        ? currentUser.avatar
+        : DEFAULT_SUPERADMIN_AVATAR
+      setProfileAvatar(userAvatar)
     }
   }, [currentUser, showProfileModal, activeTab])
 
@@ -2030,6 +2090,146 @@ export default function AdminDashboard() {
     setIsProfileDropdownOpen(false)
     showToast('Signed out successfully.', 'success')
   }
+
+  // Auto Sign-Out Implementation for CMS Inactivity Timeout
+  const executeAutoSignOut = async () => {
+    setShowSignOutWarning(false)
+    setIsAutoSignOutModalOpen(false)
+
+    const session = getStoredSession()
+    const token = session?.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('hm_admin_token') : '') || ''
+
+    if (currentUser) {
+      await logSecurityEvent(
+        'LOGOUT',
+        `Auto Sign-Out triggered: Inactivity exceeded ${autoSignOutSeconds} seconds threshold for CMS security policy.`,
+        'warning',
+        currentUser.username
+      )
+    }
+
+    if (token) {
+      try {
+        const existingSessions = (await readSharedContent<Array<{ token: string; user: AdminUser; expiresAt: number }>>('admin-sessions')) || []
+        const updated = existingSessions.filter((s) => s.token !== token)
+        await writeSharedContent('admin-sessions', updated)
+      } catch {}
+
+      try {
+        fetch('/api/content.php?action=logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ token })
+        }).catch(() => {})
+      } catch {}
+    }
+
+    try {
+      fetch('/happymachinery/Media_Library/medialibrary.php?logout=1', {
+        method: 'GET',
+        credentials: 'include'
+      }).catch(() => {})
+    } catch {}
+
+    clearStoredSession()
+    if (typeof document !== 'undefined') {
+      document.cookie = 'hm_cms_token=; path=/; max-age=0; SameSite=Lax'
+    }
+    try {
+      localStorage.setItem('hm_auto_logout_msg', `🔒 Security Auto Sign-Out: You were signed out after ${autoSignOutSeconds} seconds of inactivity.`)
+    } catch {}
+
+    setCurrentUser(null)
+    setIsProfileDropdownOpen(false)
+    showToast(`Security Auto Sign-Out: Session timed out after ${autoSignOutSeconds}s of inactivity.`, 'warning')
+  }
+
+  const handleSaveAutoSignOut = async (enabled: boolean, seconds: number) => {
+    const validSeconds = Math.max(5, Math.min(86400, Number(seconds) || 60))
+    setAutoSignOutEnabled(enabled)
+    setAutoSignOutSeconds(validSeconds)
+    setTempAutoSignOutEnabled(enabled)
+    setTempAutoSignOutSeconds(validSeconds)
+    setSecondsRemaining(validSeconds)
+    lastActivityRef.current = Date.now()
+
+    try {
+      localStorage.setItem('hm_auto_sign_out_enabled', String(enabled))
+      localStorage.setItem('hm_auto_sign_out_seconds', String(validSeconds))
+    } catch {}
+
+    const updatedSettings: SecuritySettings = {
+      ...securitySettings,
+      autoSignOutEnabled: enabled,
+      autoSignOutSeconds: validSeconds
+    }
+    setSecuritySettings(updatedSettings)
+    await writeSharedContent('security-settings', updatedSettings).catch(() => {})
+
+    await logSecurityEvent(
+      'SETTINGS_UPDATED',
+      enabled 
+        ? `Auto Sign-Out policy updated: Inactivity timeout set to ${validSeconds} seconds.` 
+        : 'Auto Sign-Out policy updated: Sign in forever enabled (inactivity timeout disabled).',
+      'info',
+      currentUser?.username || 'admin'
+    )
+
+    showToast(
+      enabled 
+        ? `Auto Sign-Out active: Will sign out after ${validSeconds}s of idle time.` 
+        : 'Auto Sign-Out turned off: You will stay signed in forever.',
+      'success'
+    )
+    setIsAutoSignOutModalOpen(false)
+  }
+
+  // User Inactivity Tracking for Auto Sign-Out
+  useEffect(() => {
+    const handleUserActivity = () => {
+      lastActivityRef.current = Date.now()
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click']
+    events.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }))
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, handleUserActivity))
+    }
+  }, [])
+
+  // Auto Sign-Out Countdown Loop
+  useEffect(() => {
+    if (!currentUser || !autoSignOutEnabled) {
+      setShowSignOutWarning(false)
+      return
+    }
+
+    lastActivityRef.current = Date.now()
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - lastActivityRef.current) / 1000)
+      const remaining = Math.max(0, autoSignOutSeconds - elapsed)
+      setSecondsRemaining(remaining)
+
+      const warningThreshold = Math.min(15, Math.max(5, Math.floor(autoSignOutSeconds / 2)))
+      if (remaining <= warningThreshold && remaining > 0) {
+        setShowSignOutWarning(true)
+      } else if (remaining > warningThreshold) {
+        setShowSignOutWarning(false)
+      }
+
+      if (remaining <= 0) {
+        clearInterval(interval)
+        void executeAutoSignOut()
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [currentUser, autoSignOutEnabled, autoSignOutSeconds])
 
   // Security Operations: Ban & Unban (IP and Device)
   const handleSaveBan = async (e: React.FormEvent) => {
@@ -2277,13 +2477,17 @@ export default function AdminDashboard() {
     e.preventDefault()
     if (!currentUser) return
 
+    const chosenAvatar = profileAvatar && !profileAvatar.includes('about-team-1.png')
+      ? profileAvatar.trim()
+      : (currentUser.avatar && !currentUser.avatar.includes('about-team-1.png') ? currentUser.avatar : DEFAULT_SUPERADMIN_AVATAR)
+
     const updatedUsers = adminUsers.map((u) => {
       if (u.id === currentUser.id) {
         return {
           ...u,
           name: profileName || u.name,
           email: profileEmail || u.email,
-          avatar: profileAvatar || u.avatar,
+          avatar: chosenAvatar,
           passwordHash: newPasswordInput.trim() ? newPasswordInput.trim() : u.passwordHash
         }
       }
@@ -2297,7 +2501,10 @@ export default function AdminDashboard() {
       const session = getStoredSession()
       if (session) {
         session.user = updatedSelf
-        localStorage.setItem('hm_admin_session', JSON.stringify(session))
+        try {
+          localStorage.setItem('hm_admin_session', JSON.stringify(session))
+          sessionStorage.setItem('hm_admin_session', JSON.stringify(session))
+        } catch {}
       }
     }
 
@@ -2329,9 +2536,6 @@ export default function AdminDashboard() {
     setEditorSeoTitle('')
     setEditorSeoDesc('')
     setEditorScheduledAt('')
-    setEditorBreaking(false)
-    setEditorBreakingUntil('')
-    setBreakingMode('forever')
     setAssignedSeries('None (Standalone Article)')
     setArticlesSubView('editor')
   }
@@ -2355,9 +2559,6 @@ export default function AdminDashboard() {
     setEditorSeoTitle(post.title)
     setEditorSeoDesc(post.excerpt)
     setEditorScheduledAt((post as any).scheduled_at || '')
-    setEditorBreaking(Boolean((post as any).is_breaking))
-    setEditorBreakingUntil((post as any).breaking_until || '')
-    setBreakingMode((post as any).breaking_until ? 'until_date' : 'forever')
     setArticlesSubView('editor')
   }
 
@@ -2399,6 +2600,50 @@ export default function AdminDashboard() {
       setModalUploadStatus('')
       showToast(err.message || 'Failed to upload image', 'error')
     }
+  }
+
+  const handleUploadCoverFile = async (file: File) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file (PNG, JPG, WebP, GIF, SVG).', 'error')
+      return
+    }
+    setIsUploadingCover(true)
+    try {
+      showToast(`Optimizing and converting "${file.name}" to 100% WebP...`, 'info' as any)
+      const res = await processImageToWebP(file)
+      const cleanTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ').trim()
+      const newMedia: MediaItem = {
+        id: `media-${Date.now()}`,
+        title: cleanTitle || 'Cover Image',
+        url: res.dataUrl,
+        dateAdded: new Date().toISOString().split('T')[0],
+        size: res.webpSize,
+        folder: 'features'
+      }
+      const updated = [newMedia, ...mediaList]
+      setMediaList(updated)
+      await writeSharedContent('media-library', updated)
+      setEditorCoverImage(res.dataUrl)
+      if (!editorCoverAlt.trim()) {
+        setEditorCoverAlt(cleanTitle)
+      }
+      setIsCoverMediaModalOpen(false)
+      showToast(`Cover image set and saved to Media Library!`, 'success')
+    } catch (err: any) {
+      showToast(err.message || 'Failed to process cover image', 'error')
+    } finally {
+      setIsUploadingCover(false)
+    }
+  }
+
+  const handleSelectCoverFromLibrary = (media: MediaItem) => {
+    setEditorCoverImage(media.url)
+    if (!editorCoverAlt.trim()) {
+      setEditorCoverAlt(media.title)
+    }
+    setIsCoverMediaModalOpen(false)
+    showToast(`Cover image set from Media Library: "${media.title}"`, 'success')
   }
 
   const handleInsertLinkIntoSection = () => {
@@ -4024,21 +4269,6 @@ export default function AdminDashboard() {
             )}
           </button>
 
-          <button
-            className={`cms-nav-item ${activeTab === 'maintenance' ? 'active' : ''}`}
-            onClick={() => setActiveTab('maintenance')}
-            data-tooltip="Maintenance Mode"
-            title={isSidebarCollapsed ? 'Maintenance Mode' : undefined}
-          >
-            <span className="cms-nav-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-              </svg>
-            </span>
-            <span className="cms-nav-label">Maintenance</span>
-            {maintenanceGlobal && <span className="cms-nav-badge danger">ON</span>}
-          </button>
-
         </nav>
 
         {/* Sidebar Footer User Card */}
@@ -4051,10 +4281,10 @@ export default function AdminDashboard() {
           >
             <div className="cms-avatar-badge">
               <img
-                src={currentUser.avatar || 'https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp'}
+                src={currentUser.avatar || DEFAULT_SUPERADMIN_AVATAR}
                 alt={currentUser.name}
                 className="cms-avatar-img"
-                onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
+                onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_SUPERADMIN_AVATAR }}
               />
               <span className="cms-avatar-status-dot"></span>
             </div>
@@ -4179,6 +4409,29 @@ export default function AdminDashboard() {
               <span>Live Site</span>
               <span style={{ fontSize: '13px', marginLeft: '2px' }}>↗</span>
             </a>
+
+            {/* Auto Sign-Out Security Quick Pill Button */}
+            <button
+              type="button"
+              className={`cms-auto-signout-pill ${autoSignOutEnabled ? 'active-timer' : 'disabled-forever'}`}
+              onClick={() => {
+                setTempAutoSignOutEnabled(autoSignOutEnabled)
+                setTempAutoSignOutSeconds(autoSignOutSeconds)
+                setIsAutoSignOutModalOpen(true)
+              }}
+              title={autoSignOutEnabled 
+                ? `Auto Sign-Out: Active (${autoSignOutSeconds}s timeout, ${secondsRemaining}s remaining idle). Click to configure.` 
+                : 'Auto Sign-Out: Disabled (Signed in forever). Click to configure.'}
+            >
+              <span className="cms-auto-signout-dot" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <polyline points="12 8 12 12 14 14" />
+              </svg>
+              <span>
+                {autoSignOutEnabled ? `Auto Sign-Out: ${autoSignOutSeconds}s` : 'Sign In: Forever'}
+              </span>
+            </button>
 
             {/* Notification Bell Dropdown Container */}
             <div className="cms-notification-menu-container" ref={notificationRef}>
@@ -4366,9 +4619,10 @@ export default function AdminDashboard() {
               >
                 <div className="cms-avatar-badge">
                   <img
-                    src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80'}
+                    src={currentUser.avatar || DEFAULT_SUPERADMIN_AVATAR}
                     alt={currentUser.name}
                     className="cms-avatar-img"
+                    onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_SUPERADMIN_AVATAR }}
                   />
                   <span className="cms-avatar-status-dot"></span>
                 </div>
@@ -4386,9 +4640,10 @@ export default function AdminDashboard() {
                 <div className="cms-profile-dropdown" onClick={(e) => e.stopPropagation()}>
                   <div className="cms-dropdown-user-header">
                     <img
-                      src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80'}
+                      src={currentUser.avatar || DEFAULT_SUPERADMIN_AVATAR}
                       alt={currentUser.name}
                       style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
+                      onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_SUPERADMIN_AVATAR }}
                     />
                     <div className="cms-dropdown-user-details">
                       <span className="cms-dropdown-display-name">{currentUser.name}</span>
@@ -4425,6 +4680,22 @@ export default function AdminDashboard() {
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                       </svg>
                       Account & Security Settings
+                    </button>
+
+                    <button
+                      className="cms-dropdown-item"
+                      onClick={() => {
+                        setTempAutoSignOutEnabled(autoSignOutEnabled)
+                        setTempAutoSignOutSeconds(autoSignOutSeconds)
+                        setIsAutoSignOutModalOpen(true)
+                        setIsProfileDropdownOpen(false)
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <polyline points="12 8 12 12 14 14" />
+                      </svg>
+                      Auto Sign-Out ({autoSignOutEnabled ? `${autoSignOutSeconds}s` : 'Forever'})
                     </button>
 
                     <button
@@ -4990,16 +5261,17 @@ export default function AdminDashboard() {
                       <button
                         type="button"
                         className="cms-quick-action-btn"
-                        onClick={() => setActiveTab('maintenance')}
+                        onClick={() => setActiveTab('settings')}
                       >
                         <div className="cms-qa-icon" style={{ background: '#f1f5f9', color: '#07182e' }}>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                           </svg>
                         </div>
                         <div className="cms-qa-text">
-                          <strong>Maintenance</strong>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>System status</span>
+                          <strong>Settings</strong>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--cms-text-muted)' }}>Site preferences</span>
                         </div>
                       </button>
                     </div>
@@ -5090,7 +5362,7 @@ export default function AdminDashboard() {
                     <div className="cms-editor-main-col">
                       {/* Card 1: Article Title & Slug (Matches Screenshot 2 & 5) */}
                       <div className="cms-editor-card cms-title-slug-card">
-                        <label className="cms-editor-eyebrow">ARTICLE TITLE</label>
+                        <label className="cms-editor-eyebrow">Article Title</label>
                         <input
                           type="text"
                           className="cms-raf-title-input"
@@ -5125,7 +5397,7 @@ export default function AdminDashboard() {
                       <div className="cms-editor-card cms-article-content-card">
                         <div className="cms-editor-card-header-row" style={{ paddingBottom: '12px', borderBottom: '1px solid var(--cms-border, #e2e8f0)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <label className="cms-editor-eyebrow" style={{ margin: 0 }}>ARTICLE BODY</label>
+                            <label className="cms-editor-eyebrow" style={{ margin: 0 }}>Article Content</label>
                             <span className="cms-wysiwyg-badge">
                               {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : editorMode === 'code' ? 'Markdown Source' : 'Live Reader Preview'}
                             </span>
@@ -5294,28 +5566,41 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Right Inspector Column (Matches Rafelblog Screenshot 2) */}
+                    {/* Right Inspector Column - Organized, Clean Order */}
                     <div className="cms-editor-sidebar-col">
-                      {/* Card 1: Publishing Status & Breaking Alert */}
+                      {/* Card 1: Publishing Status */}
                       <div className="cms-editor-card">
-                        <h3 className="cms-card-subhead">Publishing</h3>
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <div className="cms-card-header-left">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--cms-text-secondary, #64748b)' }}>
+                              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                            </svg>
+                            <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                              Publishing
+                            </h3>
+                          </div>
+                          <span className={`cms-status-header-pill ${editorStatus === 'Published' ? 'status-published' : editorStatus === 'Scheduled' ? 'status-scheduled' : 'status-draft'}`} style={{ fontSize: '10.5px', padding: '2px 8px' }}>
+                            {editorStatus === 'Published' ? 'Public' : editorStatus}
+                          </span>
+                        </div>
                         
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                           <div>
-                            <label className="cms-field-label-sm">STATUS</label>
+                            <label className="cms-field-label-sm">Visibility Status</label>
                             <select
                               className="cms-editor-select"
                               value={editorStatus}
                               onChange={(e) => setEditorStatus(e.target.value as any)}
                             >
-                              <option value="Draft">Draft</option>
-                              <option value="Published">Public (Published)</option>
-                              <option value="Scheduled">Scheduled</option>
+                              <option value="Draft">Draft (Private / Work in Progress)</option>
+                              <option value="Published">Public (Published &amp; Live)</option>
+                              <option value="Scheduled">Scheduled (Auto-Publish Later)</option>
                             </select>
                           </div>
 
                           {editorStatus === 'Scheduled' && (
                             <div className="cms-scheduled-box animate-in">
-                              <label className="cms-field-label-sm" style={{ color: '#b45309' }}>Schedule Date & Time</label>
+                              <label className="cms-field-label-sm" style={{ color: '#b45309' }}>Schedule Date &amp; Time</label>
                               <input
                                 type="datetime-local"
                                 value={editorScheduledAt}
@@ -5326,149 +5611,158 @@ export default function AdminDashboard() {
                             </div>
                           )}
 
-                          {/* Breaking Alert Toggle (Exact match to Screenshot 2) */}
-                          <div className={`cms-breaking-alert-box ${editorBreaking ? 'active' : ''}`}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span className={`cms-pulse-indicator ${editorBreaking ? 'pulsing' : ''}`}></span>
-                                <div>
-                                  <strong className="cms-breaking-title">BREAKING ALERT</strong>
-                                  <span className="cms-breaking-desc">Slides in homepage breaking ticker</span>
-                                </div>
-                              </div>
-                              <label className="cms-ios-switch">
-                                <input
-                                  type="checkbox"
-                                  checked={editorBreaking}
-                                  onChange={(e) => setEditorBreaking(e.target.checked)}
-                                />
-                                <span className="cms-switch-slider"></span>
-                              </label>
-                            </div>
-
-                            {editorBreaking && (
-                              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '8px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={() => { setBreakingMode('forever'); setEditorBreakingUntil(''); }}
-                                    className={`cms-mode-pill-btn ${breakingMode === 'forever' ? 'active' : ''}`}
-                                  >
-                                    ● Always
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setBreakingMode('until_date');
-                                      if (!editorBreakingUntil) {
-                                        const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
-                                        setEditorBreakingUntil(d.toISOString().slice(0, 16));
-                                      }
-                                    }}
-                                    className={`cms-mode-pill-btn ${breakingMode === 'until_date' ? 'active' : ''}`}
-                                  >
-                                    📅 Until Date
-                                  </button>
-                                </div>
-                                {breakingMode === 'until_date' && (
-                                  <input
-                                    type="datetime-local"
-                                    value={editorBreakingUntil}
-                                    onChange={(e) => setEditorBreakingUntil(e.target.value)}
-                                    className="cms-editor-select"
-                                    style={{ fontSize: '11.5px', padding: '6px 8px' }}
-                                  />
-                                )}
-                              </div>
-                            )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', fontSize: '11px', color: 'var(--cms-text-muted, #94a3b8)' }}>
+                            <span>Author: {editingArticle?.author || 'Happy Machinery'}</span>
+                            <span>{editingArticle ? `ID #${editingArticle.id}` : 'Draft'}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Card 2: Classification & Category */}
+                      {/* Card 2: Featured Cover Image (Directly Under Publishing) */}
                       <div className="cms-editor-card">
-                        <label className="cms-field-label-sm">CATEGORY</label>
-                        <select
-                          className="cms-editor-select"
-                          value={editorCategory}
-                          onChange={(e) => setEditorCategory(e.target.value)}
-                        >
-                          {blogCategories.map((c) => (
-                            <option key={c.name} value={c.name}>{c.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Card 4: Topic Cluster & Series Manager (Screenshot 2) */}
-                      <div className="cms-editor-card cms-topic-cluster-card">
-                        <div className="cms-topic-cluster-header">
-                          <div className="cms-topic-cluster-icon">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
-                              <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                              <polyline points="2 17 12 22 22 17" />
-                              <polyline points="2 12 12 17 22 12" />
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <div className="cms-card-header-left">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--cms-text-secondary, #64748b)' }}>
+                              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                              <circle cx="9" cy="9" r="2" />
+                              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                             </svg>
+                            <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                              Featured Cover Image
+                            </h3>
                           </div>
-                          <div className="cms-topic-cluster-text">
-                            <h4>TOPIC CLUSTER & PLAYLIST MANAGER</h4>
-                            <p>Group articles into Pillar and Sub-Blog series for readers</p>
-                          </div>
-                          <button
-                            type="button"
-                            className="cms-btn-new-series"
-                            onClick={() => showToast("Create Topic Series dialog opened.", "success")}
-                          >
-                            + New Series
-                          </button>
-                        </div>
-                        <div className="cms-topic-cluster-body">
-                          <label className="cms-field-label-sm">Assigned Series / Playlist</label>
-                          <select
-                            className="cms-editor-select"
-                            value={assignedSeries}
-                            onChange={(e) => setAssignedSeries(e.target.value)}
-                          >
-                            <option value="None (Standalone Article)">None (Standalone Article)</option>
-                            <option value="Mini Skid Steer Operations & Safety Guide">Mini Skid Steer Operations & Safety Guide</option>
-                            <option value="Hydraulic System Maintenance & Troubleshooting">Hydraulic System Maintenance & Troubleshooting</option>
-                            <option value="Jobsite Productivity & Attachment Selection">Jobsite Productivity & Attachment Selection</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Card 5: Excerpt (Clean Right Sidebar Card matching Screenshot 2) */}
-                      <div className="cms-editor-card">
-                        <label className="cms-editor-eyebrow">EXCERPT</label>
-                        <textarea
-                          rows={3}
-                          className="cms-editor-textarea"
-                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
-                          value={editorExcerpt}
-                          maxLength={300}
-                          onChange={(e) => setEditorExcerpt(e.target.value)}
-                        />
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', fontSize: '11px', color: '#64748b' }}>
-                          <span>🕒 Revisions count: 5</span>
-                          <span>{editorExcerpt.length}/300 chars</span>
-                        </div>
-                      </div>
-
-                      {/* Card 6: Featured Cover Image (Exact Rafelblog UI) */}
-                      <div className="cms-editor-card">
-                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
-                          <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
-                            Featured Cover Image
-                          </h3>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8' }}>
-                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                            <circle cx="9" cy="9" r="2" />
-                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                          </svg>
+                          {editorCoverImage && (
+                            <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 650 }}>
+                              Active Cover
+                            </span>
+                          )}
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {/* Hidden file input for direct computer/device upload */}
+                          <input
+                            ref={coverFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadCoverFile(e.target.files[0])
+                                e.target.value = ''
+                              }
+                            }}
+                          />
+
+                          {/* Quick Action Buttons: Upload File or Choose from Media Library */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => coverFileInputRef.current?.click()}
+                              disabled={isUploadingCover}
+                              className="cms-cover-action-btn upload"
+                              title="Upload an image file directly from your computer"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                              </svg>
+                              <span>{isUploadingCover ? 'Uploading...' : 'Upload File'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = mediaList.find((m) => m.url === editorCoverImage)
+                                if (current) setSelectedCoverMedia(current)
+                                setIsCoverMediaModalOpen(true)
+                              }}
+                              className="cms-cover-action-btn library"
+                              title="Browse and pick an image from your Media Library"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                              </svg>
+                              <span>Media Library</span>
+                            </button>
+                          </div>
+
+                          {/* Drag & Drop zone OR Rich Preview */}
+                          {editorCoverImage ? (
+                            <div className="cms-cover-preview-wrapper group">
+                              <img
+                                src={editorCoverImage}
+                                alt={editorCoverAlt || "Cover preview"}
+                                className="cms-cover-preview-img"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.opacity = '0.5'
+                                }}
+                              />
+                              <div className="cms-cover-preview-overlay">
+                                <button
+                                  type="button"
+                                  onClick={() => coverFileInputRef.current?.click()}
+                                  className="cms-cover-overlay-btn"
+                                  title="Replace with new upload"
+                                >
+                                  Replace
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = mediaList.find((m) => m.url === editorCoverImage)
+                                    if (current) setSelectedCoverMedia(current)
+                                    setIsCoverMediaModalOpen(true)
+                                  }}
+                                  className="cms-cover-overlay-btn"
+                                  title="Select different image from library"
+                                >
+                                  Library
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditorCoverImage('')
+                                    setEditorCoverAlt('')
+                                  }}
+                                  className="cms-cover-remove-btn"
+                                  title="Remove cover image"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className="cms-cover-dropzone"
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={(e) => {
+                                e.preventDefault()
+                                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                                  handleUploadCoverFile(e.dataTransfer.files[0])
+                                }
+                              }}
+                              onClick={() => coverFileInputRef.current?.click()}
+                              title="Click to browse or drop an image file here"
+                            >
+                              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ color: '#94a3b8' }}>
+                                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                                <circle cx="9" cy="9" r="2" />
+                                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                              </svg>
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--cms-text-secondary, #475569)' }}>
+                                Drag &amp; drop or click to upload
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--cms-text-muted, #94a3b8)' }}>
+                                Auto-compressed to WebP &amp; saved to library
+                              </span>
+                            </div>
+                          )}
+
                           <div>
-                            <label className="cms-field-label-sm" style={{ marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
+                            <label className="cms-field-label-sm" style={{ marginBottom: '5px' }}>
                               Image URL
                             </label>
                             <input
@@ -5480,35 +5774,14 @@ export default function AdminDashboard() {
                             />
                           </div>
 
-                          {editorCoverImage && (
-                            <div className="cms-cover-preview-wrapper">
-                              <img
-                                src={editorCoverImage}
-                                alt={editorCoverAlt || "Cover preview"}
-                                className="cms-cover-preview-img"
-                                onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).style.opacity = '0.5'
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setEditorCoverImage('')}
-                                className="cms-cover-remove-btn"
-                                title="Remove cover image"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          )}
-
                           <div>
-                            <label className="cms-field-label-sm" style={{ marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
-                              Image Alt Description
+                            <label className="cms-field-label-sm" style={{ marginBottom: '5px' }}>
+                              Alt Description (SEO &amp; Accessibility)
                             </label>
                             <input
                               type="text"
                               className="cms-editor-input-sm"
-                              placeholder="e.g. Modern web developer desk setup with laptop displaying domain and hostin..."
+                              placeholder="e.g. Modern excavator loading gravel on highway construction site"
                               value={editorCoverAlt}
                               onChange={(e) => setEditorCoverAlt(e.target.value)}
                             />
@@ -5516,19 +5789,110 @@ export default function AdminDashboard() {
                         </div>
                       </div>
 
-                      {/* Card 7: Attached Video (Optional - Matches Rafelblog) */}
+                      {/* Card 3: Organization & Series (Unified Taxonomy) */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <div className="cms-card-header-left">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2">
+                              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                              <polyline points="2 17 12 22 22 17" />
+                              <polyline points="2 12 12 17 22 12" />
+                            </svg>
+                            <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                              Organization &amp; Taxonomy
+                            </h3>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <div>
+                            <label className="cms-field-label-sm">Primary Category</label>
+                            <select
+                              className="cms-editor-select"
+                              value={editorCategory}
+                              onChange={(e) => setEditorCategory(e.target.value)}
+                            >
+                              {blogCategories.map((c) => (
+                                <option key={c.name} value={c.name}>{c.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <label className="cms-field-label-sm" style={{ margin: 0 }}>Topic Series / Playlist</label>
+                              <button
+                                type="button"
+                                className="cms-btn-new-series-inline"
+                                onClick={() => showToast("Topic Series manager: select an existing series or manage pillars.", "success")}
+                              >
+                                + New Series
+                              </button>
+                            </div>
+                            <select
+                              className="cms-editor-select"
+                              value={assignedSeries}
+                              onChange={(e) => setAssignedSeries(e.target.value)}
+                            >
+                              <option value="None (Standalone Article)">None (Standalone Article)</option>
+                              <option value="Mini Skid Steer Operations & Safety Guide">Mini Skid Steer Operations & Safety Guide</option>
+                              <option value="Hydraulic System Maintenance & Troubleshooting">Hydraulic System Maintenance & Troubleshooting</option>
+                              <option value="Jobsite Productivity & Attachment Selection">Jobsite Productivity & Attachment Selection</option>
+                            </select>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: 'var(--cms-text-muted, #94a3b8)', lineHeight: 1.4 }}>
+                              Groups articles into Pillar and Sub-Blog series for readers.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card 4: Article Excerpt */}
                       <div className="cms-editor-card">
                         <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
-                          <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
-                            Attached Video (Optional)
-                          </h3>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
-                            <polygon points="23 7 16 12 23 17 23 7" />
-                            <rect width="14" height="14" x="1" y="5" rx="2" ry="2" />
-                          </svg>
+                          <div className="cms-card-header-left">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--cms-text-secondary, #64748b)' }}>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <line x1="16" y1="13" x2="8" y2="13" />
+                              <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                            <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                              Article Excerpt
+                            </h3>
+                          </div>
+                          <span style={{ fontSize: '11px', color: editorExcerpt.length > 250 ? '#ea580c' : 'var(--cms-text-muted, #64748b)' }}>
+                            {editorExcerpt.length} / 300
+                          </span>
+                        </div>
+                        <textarea
+                          rows={3}
+                          className="cms-editor-textarea"
+                          placeholder="A concise, engaging 1-2 sentence preview shown on category cards, homepage feeds, and SEO snippets..."
+                          value={editorExcerpt}
+                          maxLength={300}
+                          onChange={(e) => setEditorExcerpt(e.target.value)}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px', fontSize: '11px', color: 'var(--cms-text-muted, #94a3b8)' }}>
+                          <span>Used for card previews &amp; social teasers</span>
+                          <span>{editorExcerpt.trim() ? editorExcerpt.trim().split(/\s+/).length : 0} words</span>
+                        </div>
+                      </div>
+
+                      {/* Card 5: Attached Video (Optional) */}
+                      <div className="cms-editor-card">
+                        <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
+                          <div className="cms-card-header-left">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                              <polygon points="23 7 16 12 23 17 23 7" />
+                              <rect width="14" height="14" x="1" y="5" rx="2" ry="2" />
+                            </svg>
+                            <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                              Attached Video (Optional)
+                            </h3>
+                          </div>
                         </div>
                         <p style={{ fontSize: '11px', color: 'var(--cms-text-muted, #94a3b8)', margin: '0 0 10px 0', lineHeight: 1.45 }}>
-                          YouTube or Facebook video URL. When provided, an interactive video player is displayed at the top of the blog article.
+                          YouTube or Vimeo video URL. Displays a responsive video player at the top of the blog article.
                         </p>
                         <input
                           type="url"
@@ -5539,7 +5903,7 @@ export default function AdminDashboard() {
                         />
                         {editorVideoUrl && (
                           <div style={{ marginTop: '10px' }}>
-                            <p style={{ fontSize: '10px', fontWeight: 750, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--cms-text-muted, #94a3b8)', marginBottom: '6px' }}>
+                            <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--cms-text-muted, #94a3b8)', marginBottom: '6px' }}>
                               Live Player Preview
                             </p>
                             <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', paddingBottom: '56.25%', height: 0, background: '#000', border: '1px solid var(--cms-border, #e2e8f0)' }}>
@@ -5555,54 +5919,93 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      {/* Card 8: SEO & Social Meta */}
+                      {/* Card 6: SEO & Social Meta (with Google SERP Preview) */}
                       <div className="cms-editor-card">
                         <div className="cms-editor-card-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--cms-border, #f1f5f9)' }}>
-                          <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
-                            SEO & Social Meta
-                          </h3>
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <line x1="2" y1="12" x2="22" y2="12" />
-                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                          </svg>
+                          <div className="cms-card-header-left">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <h3 className="cms-card-subhead" style={{ margin: 0, padding: 0, border: 'none' }}>
+                              SEO &amp; Search Engine Meta
+                            </h3>
+                          </div>
+                          <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 650 }}>
+                            Google Ready
+                          </span>
                         </div>
-                        <label className="cms-field-label-sm" style={{ marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
-                          Meta Title
-                        </label>
-                        <input
-                          type="text"
-                          className="cms-editor-input-sm"
-                          placeholder="Page meta title (defaults to article title)..."
-                          value={editorSeoTitle}
-                          onChange={(e) => setEditorSeoTitle(e.target.value)}
-                        />
-                        <label className="cms-field-label-sm" style={{ marginTop: '10px', marginBottom: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--cms-text-secondary, #475569)' }}>
-                          Meta Description
-                        </label>
-                        <textarea
-                          rows={2}
-                          className="cms-editor-textarea"
-                          placeholder="Search engine snippet (recommended 150-160 characters)..."
-                          value={editorSeoDesc}
-                          onChange={(e) => setEditorSeoDesc(e.target.value)}
-                        />
+                        
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <label className="cms-field-label-sm" style={{ margin: 0 }}>Meta Title</label>
+                            <span style={{ fontSize: '10.5px', color: 'var(--cms-text-muted, #94a3b8)' }}>
+                              {(editorSeoTitle || editorTitle).length} / 60
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            className="cms-editor-input-sm"
+                            placeholder="Page meta title (defaults to article title)..."
+                            value={editorSeoTitle}
+                            maxLength={70}
+                            onChange={(e) => setEditorSeoTitle(e.target.value)}
+                          />
+                        </div>
+
+                        <div style={{ marginTop: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <label className="cms-field-label-sm" style={{ margin: 0 }}>Meta Description</label>
+                            <span style={{ fontSize: '10.5px', color: (editorSeoDesc || editorExcerpt).length > 160 ? '#ea580c' : 'var(--cms-text-muted, #94a3b8)' }}>
+                              {(editorSeoDesc || editorExcerpt).length} / 160
+                            </span>
+                          </div>
+                          <textarea
+                            rows={2}
+                            className="cms-editor-textarea"
+                            placeholder="Search engine snippet (recommended 140-160 characters)..."
+                            value={editorSeoDesc}
+                            maxLength={200}
+                            onChange={(e) => setEditorSeoDesc(e.target.value)}
+                          />
+                        </div>
+
+                        {/* Live Google Search Result Simulation */}
+                        <div className="cms-serp-preview-card">
+                          <span className="cms-serp-url">
+                            happymachinery.com › blog › {editorSlug || 'article-title'}
+                          </span>
+                          <h4 className="cms-serp-title">
+                            {editorSeoTitle || editorTitle || 'Article Title - Happy Machinery'}
+                          </h4>
+                          <p className="cms-serp-desc">
+                            {editorSeoDesc || editorExcerpt || 'Read our in-depth machinery guides, maintenance tips, and industry insights at Happy Machinery.'}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Danger Zone: Move to Trash */}
+                      {/* Card 7: Danger Zone (Move to Trash) */}
                       {editingArticle && (
-                        <div style={{ paddingTop: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveArticleToTrash(editingArticle)}
-                            className="cms-trash-danger-btn"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                            <span>Move to Trash</span>
-                          </button>
+                        <div className="cms-editor-card" style={{ border: '1px dashed #fca5a5', background: 'rgba(254, 242, 242, 0.4)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                              <strong style={{ fontSize: '12px', color: '#b91c1c', display: 'block' }}>Danger Zone</strong>
+                              <span style={{ fontSize: '11px', color: '#7f1d1d' }}>Move this article to trash bin</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveArticleToTrash(editingArticle)}
+                              className="cms-trash-danger-btn"
+                              style={{ width: 'auto', padding: '6px 14px' }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              </svg>
+                              <span>Move to Trash</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -5713,6 +6116,238 @@ export default function AdminDashboard() {
                           >
                             Insert Link
                           </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cover Image Media Library Picker Modal */}
+                  {isCoverMediaModalOpen && (
+                    <div className="cms-modal-backdrop" onClick={() => setIsCoverMediaModalOpen(false)}>
+                      <div className="cms-cover-picker-dialog" onClick={(e) => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="cms-cover-picker-header">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div className="cms-cover-picker-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                <circle cx="8.5" cy="8.5" r="1.5" />
+                                <polyline points="21 15 16 10 5 21" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: '15.5px', fontWeight: 700, color: 'var(--cms-text, #0f172a)' }}>
+                                Choose Cover Image from Media Library
+                              </h3>
+                              <p style={{ margin: 0, fontSize: '12px', color: 'var(--cms-text-muted, #64748b)' }}>
+                                Select an image from your library or upload a new photo directly
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="cms-modal-close-btn"
+                            onClick={() => setIsCoverMediaModalOpen(false)}
+                            title="Close modal"
+                          >
+                            &times;
+                          </button>
+                        </div>
+
+                        {/* Filter & Upload Toolbar */}
+                        <div className="cms-cover-picker-toolbar">
+                          <div className="cms-cover-picker-search">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="11" cy="11" r="8" />
+                              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                              type="text"
+                              placeholder="Filter by title or filename..."
+                              value={coverMediaSearch}
+                              onChange={(e) => setCoverMediaSearch(e.target.value)}
+                              autoFocus
+                            />
+                            {coverMediaSearch && (
+                              <button type="button" onClick={() => setCoverMediaSearch('')}>&times;</button>
+                            )}
+                          </div>
+
+                          <div className="cms-cover-picker-folders">
+                            {[
+                              { id: 'all', label: 'All', count: mediaList.length },
+                              { id: 'galleries', label: 'Galleries', count: mediaList.filter(m => (m.folder || 'galleries') === 'galleries').length },
+                              { id: 'features', label: 'Features', count: mediaList.filter(m => m.folder === 'features').length },
+                              { id: 'profileimg', label: 'Profile', count: mediaList.filter(m => m.folder === 'profileimg').length }
+                            ].map((f) => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                className={`cms-cover-folder-pill ${coverMediaFolder === f.id ? 'active' : ''}`}
+                                onClick={() => setCoverMediaFolder(f.id)}
+                              >
+                                <span>{f.label}</span>
+                                <span className="cms-pill-badge">{f.count}</span>
+                              </button>
+                            ))}
+                          </div>
+
+                          <input
+                            ref={coverModalFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadCoverFile(e.target.files[0])
+                                e.target.value = ''
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="cms-cover-modal-upload-btn"
+                            onClick={() => coverModalFileInputRef.current?.click()}
+                            disabled={isUploadingCover}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="17 8 12 3 7 8" />
+                              <line x1="12" y1="3" x2="12" y2="15" />
+                            </svg>
+                            <span>{isUploadingCover ? 'Uploading...' : 'Upload Device Image'}</span>
+                          </button>
+                        </div>
+
+                        {/* Media Grid */}
+                        <div className="cms-cover-picker-grid">
+                          {(() => {
+                            const filtered = mediaList.filter((m) => {
+                              if (coverMediaFolder !== 'all') {
+                                const f = m.folder || 'galleries'
+                                if (f !== coverMediaFolder) return false
+                              }
+                              if (coverMediaSearch.trim()) {
+                                const q = coverMediaSearch.toLowerCase()
+                                const matchTitle = m.title.toLowerCase().includes(q)
+                                const matchUrl = m.url.toLowerCase().includes(q)
+                                if (!matchTitle && !matchUrl) return false
+                              }
+                              return true
+                            })
+
+                            if (filtered.length === 0) {
+                              return (
+                                <div className="cms-cover-picker-empty">
+                                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <circle cx="8.5" cy="8.5" r="1.5" />
+                                    <polyline points="21 15 16 10 5 21" />
+                                  </svg>
+                                  <p>No images found matching your filter.</p>
+                                  <button
+                                    type="button"
+                                    className="cms-cover-modal-upload-btn"
+                                    onClick={() => coverModalFileInputRef.current?.click()}
+                                  >
+                                    Upload an image now
+                                  </button>
+                                </div>
+                              )
+                            }
+
+                            return filtered.map((item) => {
+                              const isSelected = selectedCoverMedia?.id === item.id || (!selectedCoverMedia && editorCoverImage === item.url)
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={`cms-cover-grid-item ${isSelected ? 'selected' : ''}`}
+                                  onClick={() => setSelectedCoverMedia(item)}
+                                  onDoubleClick={() => handleSelectCoverFromLibrary(item)}
+                                  title={`${item.title} (Double-click to set as cover)`}
+                                >
+                                  <div className="cms-cover-item-thumb">
+                                    <img
+                                      src={item.url}
+                                      alt={item.title}
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLImageElement).style.opacity = '0.4'
+                                      }}
+                                    />
+                                    {isSelected && (
+                                      <div className="cms-cover-selected-badge">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                          <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                    <span className="cms-cover-item-folder">
+                                      {item.folder || 'galleries'}
+                                    </span>
+                                  </div>
+                                  <div className="cms-cover-item-info">
+                                    <span className="cms-cover-item-title" title={item.title}>
+                                      {item.title}
+                                    </span>
+                                    <span className="cms-cover-item-size">{item.size || 'WebP'}</span>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          })()}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="cms-cover-picker-footer">
+                          <div className="cms-cover-picker-selected-info">
+                            {selectedCoverMedia ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <img
+                                  src={selectedCoverMedia.url}
+                                  alt={selectedCoverMedia.title}
+                                  style={{ width: '38px', height: '38px', objectFit: 'cover', borderRadius: '7px', border: '1px solid #cbd5e1' }}
+                                />
+                                <div style={{ minWidth: 0 }}>
+                                  <strong style={{ display: 'block', fontSize: '12px', color: 'var(--cms-text, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '320px' }}>
+                                    {selectedCoverMedia.title}
+                                  </strong>
+                                  <span style={{ fontSize: '11px', color: 'var(--cms-text-muted, #64748b)' }}>
+                                    {selectedCoverMedia.size || 'WebP'} • {selectedCoverMedia.folder || 'galleries'}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '12px', color: 'var(--cms-text-muted, #94a3b8)' }}>
+                                Click an image to select it, or double-click to set as cover immediately.
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <button
+                              type="button"
+                              className="cms-cover-picker-btn-cancel"
+                              onClick={() => setIsCoverMediaModalOpen(false)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-cover-picker-btn-confirm"
+                              disabled={!selectedCoverMedia}
+                              onClick={() => {
+                                if (selectedCoverMedia) {
+                                  handleSelectCoverFromLibrary(selectedCoverMedia)
+                                }
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              <span>Set as Cover Image</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -10909,16 +11544,25 @@ export default function AdminDashboard() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault()
-                      void writeSharedContent('security-settings', securitySettings)
-                      localStorage.setItem('happy-machinery-security-settings', JSON.stringify(securitySettings))
-                      void logSecurityEvent('SETTINGS_UPDATED', `Auto-ban threshold set to ${securitySettings.autoBanThreshold || 10} attempts.`, 'warning', currentUser?.username)
+                      const toSave = {
+                        ...securitySettings,
+                        autoSignOutEnabled,
+                        autoSignOutSeconds
+                      }
+                      void writeSharedContent('security-settings', toSave)
+                      localStorage.setItem('happy-machinery-security-settings', JSON.stringify(toSave))
+                      try {
+                        localStorage.setItem('hm_auto_sign_out_enabled', String(autoSignOutEnabled))
+                        localStorage.setItem('hm_auto_sign_out_seconds', String(autoSignOutSeconds))
+                      } catch {}
+                      void logSecurityEvent('SETTINGS_UPDATED', `Security settings updated: Auto sign-out ${autoSignOutEnabled ? `${autoSignOutSeconds}s` : 'disabled (sign in forever)'}.`, 'info', currentUser?.username)
                       showToast('Security settings saved.', 'success')
                     }}
                     style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
                   >
                     <div>
                       <label style={{ display: 'block', marginBottom: '6px', fontWeight: 650, fontSize: '0.88rem' }}>
-                        Failed Login Attempts Before Auto-Ban (IP & Device)
+                        Failed Login Attempts Before Auto-Ban (IP &amp; Device)
                       </label>
                       <input
                         type="number"
@@ -10942,7 +11586,7 @@ export default function AdminDashboard() {
                         onChange={(e) => setSecuritySettings({ ...securitySettings, autoBanDeviceEnabled: e.target.checked })}
                       />
                       <label htmlFor="autoBanDeviceCheckbox" style={{ fontSize: '0.86rem', fontWeight: 600, cursor: 'pointer' }}>
-                        Enforce Device Fingerprinting & Hardware Identification Auto-Ban
+                        Enforce Device Fingerprinting &amp; Hardware Identification Auto-Ban
                       </label>
                     </div>
 
@@ -10976,19 +11620,126 @@ export default function AdminDashboard() {
                       />
                     </div>
 
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.88rem' }}>
-                        Session Idle Timeout (Minutes)
-                      </label>
-                      <input
-                        type="number"
-                        min="15"
-                        max="720"
-                        className="cms-header-search-input"
-                        style={{ width: '100%' }}
-                        value={securitySettings.sessionTimeoutMinutes}
-                        onChange={(e) => setSecuritySettings({ ...securitySettings, sessionTimeoutMinutes: parseInt(e.target.value, 10) || 120 })}
-                      />
+                    {/* Auto Sign-Out Inactivity Security Settings (Seconds / Sign in Forever) */}
+                    <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--cms-bg-subtle, #f8fafc)', border: '1px solid var(--cms-border, #e2e8f0)', marginTop: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: autoSignOutEnabled ? '#fee2e2' : '#dcfce7', color: autoSignOutEnabled ? '#dc2626' : '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                              <polyline points="12 8 12 12 14 14" />
+                            </svg>
+                          </div>
+                          <div>
+                            <strong style={{ fontSize: '0.92rem', color: 'var(--cms-text-primary, #0f172a)' }}>
+                              Auto Sign-Out Security Policy
+                            </strong>
+                            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--cms-text-muted, #64748b)' }}>
+                              Auto-sign out when inactive or turn off to sign in forever
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Toggle Switch */}
+                        <label className="cms-switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={autoSignOutEnabled}
+                            onChange={(e) => {
+                              const enabled = e.target.checked
+                              setAutoSignOutEnabled(enabled)
+                              setTempAutoSignOutEnabled(enabled)
+                              try { localStorage.setItem('hm_auto_sign_out_enabled', String(enabled)) } catch {}
+                              setSecuritySettings((prev) => ({ ...prev, autoSignOutEnabled: enabled }))
+                            }}
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                          />
+                          <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: autoSignOutEnabled ? '#dc2626' : '#cbd5e1', borderRadius: '34px', transition: '0.2s' }}>
+                            <span style={{ position: 'absolute', content: '', height: '20px', width: '20px', left: autoSignOutEnabled ? '23px' : '3px', bottom: '3px', background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                          </span>
+                        </label>
+                      </div>
+
+                      <div style={{ marginTop: '12px' }}>
+                        {autoSignOutEnabled ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                <label style={{ fontSize: '0.84rem', fontWeight: 650, color: 'var(--cms-text-primary)' }}>
+                                  Inactivity Timeout (Set in Seconds)
+                                </label>
+                                <span style={{ fontSize: '0.76rem', color: '#dc2626', fontWeight: 700 }}>
+                                  Active: {secondsRemaining}s idle countdown
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                  type="number"
+                                  min="5"
+                                  max="86400"
+                                  className="cms-header-search-input"
+                                  style={{ flex: 1, fontWeight: 700 }}
+                                  value={autoSignOutSeconds}
+                                  onChange={(e) => {
+                                    const val = Math.max(5, Math.min(86400, parseInt(e.target.value, 10) || 60))
+                                    setAutoSignOutSeconds(val)
+                                    setTempAutoSignOutSeconds(val)
+                                    setSecondsRemaining(val)
+                                    try { localStorage.setItem('hm_auto_sign_out_seconds', String(val)) } catch {}
+                                    setSecuritySettings((prev) => ({ ...prev, autoSignOutSeconds: val }))
+                                  }}
+                                />
+                                <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--cms-text-muted)' }}>seconds</span>
+                              </div>
+                            </div>
+
+                            {/* Preset Buttons */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                              {[
+                                { label: '15s (Test)', sec: 15 },
+                                { label: '30s', sec: 30 },
+                                { label: '60s (1m)', sec: 60 },
+                                { label: '300s (5m)', sec: 300 },
+                                { label: '900s (15m)', sec: 900 },
+                                { label: '1800s (30m)', sec: 1800 },
+                                { label: '3600s (1h)', sec: 3600 },
+                              ].map((preset) => (
+                                <button
+                                  key={preset.sec}
+                                  type="button"
+                                  className={`cms-action-btn-modern ${autoSignOutSeconds === preset.sec ? 'edit' : ''}`}
+                                  style={{ fontSize: '11px', padding: '3px 8px' }}
+                                  onClick={() => {
+                                    setAutoSignOutSeconds(preset.sec)
+                                    setTempAutoSignOutSeconds(preset.sec)
+                                    setSecondsRemaining(preset.sec)
+                                    try { localStorage.setItem('hm_auto_sign_out_seconds', String(preset.sec)) } catch {}
+                                    setSecuritySettings((prev) => ({ ...prev, autoSignOutSeconds: preset.sec }))
+                                  }}
+                                >
+                                  {preset.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.78rem', color: 'var(--cms-text-muted)' }}>
+                              🛡️ When idle without keyboard/mouse interaction for {autoSignOutSeconds} seconds, CMS will auto sign-out for security.
+                            </p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(22, 163, 74, 0.08)', border: '1px solid rgba(22, 163, 74, 0.25)' }}>
+                            <span style={{ fontSize: '16px' }}>♾️</span>
+                            <div>
+                              <strong style={{ fontSize: '0.84rem', color: '#15803d', display: 'block' }}>
+                                Sign In Forever Mode Active
+                              </strong>
+                              <span style={{ fontSize: '0.76rem', color: '#166534' }}>
+                                Auto sign-out is turned OFF. Your session will stay signed in indefinitely without inactivity timeouts.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <button type="submit" className="cms-btn cms-btn-primary" style={{ marginTop: '10px' }}>
@@ -11514,360 +12265,7 @@ export default function AdminDashboard() {
             </>
           )}
 
-          {/* TAB 9: MAINTENANCE MODE (SCREENSHOT 5) */}
-          {activeTab === 'maintenance' && (
-            <div className="cms-maintenance-view-content">
-              {/* Header with Status Indicator & Save Button */}
-              <div className="cms-maint-header-row">
-                <div className="cms-maint-header-left">
-                  <span className="cms-maint-tag">SYSTEM AVAILABILITY</span>
-                  <div className="cms-maint-title-row">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--cms-accent-blue)" strokeWidth="2">
-                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                    </svg>
-                    <h1>Maintenance Mode</h1>
-                  </div>
-                  <p className="cms-maint-description">
-                    Control website availability for all readers or targeted URLs. Authenticated admins always bypass maintenance.
-                  </p>
-                </div>
-
-                <div className="cms-maint-header-actions">
-                  <div className={`cms-maint-status-badge ${maintenanceGlobal ? 'warning' : 'healthy'}`}>
-                    <span className="cms-status-indicator-dot" />
-                    <span>{maintenanceGlobal ? 'Maintenance Mode Active' : 'All Systems Operational'}</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    onClick={() => {
-                      saveMaintenanceConfig({
-                        global: maintenanceGlobal,
-                        title: maintenanceTitle,
-                        message: maintenanceMessage,
-                        eta: maintenanceEta,
-                        progress: maintenanceProgress,
-                        routes: maintenanceRoutes
-                      })
-                      showToast('Maintenance settings saved & published to all pages successfully!', 'success')
-                    }}
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                      <polyline points="17 21 17 13 7 13 7 21" />
-                      <polyline points="7 3 7 8 15 8" />
-                    </svg>
-                    <span>Save Settings</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Global Maintenance Card with Toggle */}
-              <div className="cms-card cms-global-maintenance-card">
-                <div className="cms-global-maint-left">
-                  <div className="cms-global-maint-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="2" y1="12" x2="22" y2="12" />
-                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                    </svg>
-                  </div>
-                  <div className="cms-global-maint-text">
-                    <strong>Global Maintenance</strong>
-                    <p>
-                      {maintenanceGlobal
-                        ? 'Website is locked to public visitors. Admins maintain full access.'
-                        : 'The entire public website is live and open to visitors.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="cms-global-maint-switch-wrap">
-                  <span className={`cms-maint-state-label ${maintenanceGlobal ? 'danger' : 'success'}`}>
-                    {maintenanceGlobal ? 'ON (MAINTENANCE)' : 'OFF (LIVE)'}
-                  </span>
-                  <label className="cms-maint-switch">
-                    <input
-                      type="checkbox"
-                      checked={maintenanceGlobal}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked
-                        setMaintenanceGlobal(isChecked)
-                        saveMaintenanceConfig({
-                          global: isChecked,
-                          title: maintenanceTitle,
-                          message: maintenanceMessage,
-                          eta: maintenanceEta,
-                          progress: maintenanceProgress,
-                          routes: maintenanceRoutes
-                        })
-                        showToast(
-                          isChecked
-                            ? 'Global Maintenance activated for all pages.'
-                            : 'Global Maintenance deactivated. All pages are Live!',
-                          isChecked ? 'warning' : 'success'
-                        )
-                      }}
-                    />
-                    <span className="cms-maint-slider" />
-                  </label>
-                </div>
-              </div>
-
-              {/* 2-Column Maintenance Grid: Left Form Content | Right Routes & Live Preview */}
-              <div className="cms-maint-2col-grid">
-                {/* Left Column: Maintenance Page Display Content */}
-                <div className="cms-card cms-maint-display-card">
-                  <div className="cms-card-header-row">
-                    <div className="cms-header-title-flex">
-                      <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                          <line x1="12" y1="9" x2="12" y2="13" />
-                          <line x1="12" y1="17" x2="12.01" y2="17" />
-                        </svg>
-                      </span>
-                      <h3>MAINTENANCE PAGE DISPLAY CONTENT</h3>
-                    </div>
-                  </div>
-
-                  <div className="cms-maint-form-group">
-                    <label>SPLASH PAGE TITLE</label>
-                    <input
-                      type="text"
-                      className="cms-maint-input"
-                      value={maintenanceTitle}
-                      onChange={(e) => setMaintenanceTitle(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="cms-maint-form-group">
-                    <label>VISITOR NOTICE MESSAGE</label>
-                    <textarea
-                      rows={3}
-                      className="cms-maint-textarea"
-                      value={maintenanceMessage}
-                      onChange={(e) => setMaintenanceMessage(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="cms-maint-form-group">
-                    <label>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        <span>ESTIMATED COMPLETION TIME (OPTIONAL)</span>
-                      </span>
-                    </label>
-                    <input
-                      type="datetime-local"
-                      className="cms-maint-input"
-                      value={maintenanceEta}
-                      onChange={(e) => setMaintenanceEta(e.target.value)}
-                    />
-                    <small className="cms-field-hint">
-                      Enables an interactive countdown timer on the visitor maintenance splash screen.
-                    </small>
-                  </div>
-
-                  <div className="cms-maint-form-group">
-                    <div className="cms-progress-label-row">
-                      <label>📈 UPGRADE PROGRESS PERCENTAGE ({maintenanceProgress}%)</label>
-                      <span className="cms-progress-stage-badge">
-                        {maintenanceProgress >= 90 ? '90% · Final Stage' : `${maintenanceProgress}% · In Progress`}
-                      </span>
-                    </div>
-
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={maintenanceProgress}
-                      onChange={(e) => setMaintenanceProgress(Number(e.target.value))}
-                      className="cms-maint-slider-range"
-                    />
-
-                    <div className="cms-progress-presets">
-                      <span style={{ fontSize: '0.76rem', color: 'var(--cms-text-muted)' }}>Presets:</span>
-                      {[10, 25, 50, 75, 88, 95, 100].map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          className={`cms-preset-pill ${maintenanceProgress === val ? 'active' : ''}`}
-                          onClick={() => setMaintenanceProgress(val)}
-                        >
-                          {val}%
-                        </button>
-                      ))}
-                    </div>
-                    <small className="cms-field-hint">
-                      Adjust the maintenance progress displayed to visitors from 10% to 100%.
-                    </small>
-                  </div>
-                </div>
-
-                {/* Right Column: Per-Page Target Routes + Live Preview */}
-                <div className="cms-maint-right-col">
-                  {/* Per-Page Target Routes Card */}
-                  <div className="cms-card cms-maint-routes-card">
-                    <div className="cms-card-header-row">
-                      <div className="cms-header-title-flex">
-                        <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                          </svg>
-                        </span>
-                        <h3>PER-PAGE TARGET ROUTES</h3>
-                      </div>
-                    </div>
-
-                    <p className="cms-routes-desc">
-                      Lock down specific pages or paths without closing the whole publication. Supports wildcard routes like <code>/equipment/*</code>.
-                    </p>
-
-                    <div className="cms-quick-select-routes">
-                      <span className="cms-quick-label">QUICK SELECT</span>
-                      <div className="cms-quick-pills-wrap">
-                        {[
-                          { label: 'Home', path: '/' },
-                          { label: 'All Articles', path: '/blog/*' },
-                          { label: 'All Equipment', path: '/products/*' },
-                          { label: 'Search', path: '/search' },
-                          { label: 'About', path: '/about' },
-                          { label: 'Contact', path: '/contact' },
-                          { label: 'Terms', path: '/terms-of-service' },
-                          { label: 'Privacy', path: '/privacy-policy' }
-                        ].map((r) => {
-                          const isSelected = maintenanceRoutes.includes(r.path)
-                          return (
-                            <button
-                              key={r.path}
-                              type="button"
-                              className={`cms-route-pill ${isSelected ? 'selected' : ''}`}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setMaintenanceRoutes(maintenanceRoutes.filter((x) => x !== r.path))
-                                } else {
-                                  setMaintenanceRoutes([...maintenanceRoutes, r.path])
-                                }
-                              }}
-                            >
-                              <span>{r.label}</span>
-                              <span className="cms-rp-path">{r.path}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="cms-add-custom-route-row">
-                      <span className="cms-quick-label">ADD CUSTOM PATH</span>
-                      <div className="cms-add-route-input-group">
-                        <input
-                          type="text"
-                          placeholder="Path (e.g. /category/ai/*)"
-                          value={newCustomRoute}
-                          onChange={(e) => setNewCustomRoute(e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="cms-btn cms-btn-primary"
-                          onClick={() => {
-                            if (newCustomRoute.trim() && !maintenanceRoutes.includes(newCustomRoute.trim())) {
-                              setMaintenanceRoutes([...maintenanceRoutes, newCustomRoute.trim()])
-                              setNewCustomRoute('')
-                              showToast('Route added to maintenance target list.', 'success')
-                            }
-                          }}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="cms-active-routes-list">
-                      <span className="cms-quick-label">ROUTES UNDER MAINTENANCE ({maintenanceRoutes.length})</span>
-                      {maintenanceRoutes.length > 0 ? (
-                        <div className="cms-routes-tags-wrap">
-                          {maintenanceRoutes.map((rt) => (
-                            <span key={rt} className="cms-active-route-tag">
-                              <code>{rt}</code>
-                              <button
-                                type="button"
-                                onClick={() => setMaintenanceRoutes(maintenanceRoutes.filter((x) => x !== rt))}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="cms-no-routes-placeholder">
-                          No individual pages selected.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Live Visitor Preview Card */}
-                  <div className="cms-card cms-maint-preview-card">
-                    <div className="cms-card-header-row">
-                      <div className="cms-header-title-flex">
-                        <span style={{ color: 'var(--cms-accent-blue)', display: 'inline-flex' }}>
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                            <circle cx="12" cy="12" r="3" />
-                          </svg>
-                        </span>
-                        <h3>LIVE VISITOR PREVIEW</h3>
-                      </div>
-                      <span className="cms-preview-theme-pill">Tech Blue Theme</span>
-                    </div>
-
-                    <div className="cms-live-visitor-preview-box">
-                      <div className="cms-preview-inner-card">
-                        <div className="cms-preview-tag-badge">
-                          <span>● SCHEDULED UPGRADE</span>
-                        </div>
-
-                        <div className="cms-preview-logo-wrap">
-                          <img
-                            src="https://img.miniexcavator.org/ebay/Dashboard-Icon/Happy_Machinery_Logo.webp"
-                            alt="Happy Machinery"
-                            className="cms-preview-logo-img"
-                            onError={(e) => { (e.target as HTMLImageElement).src = '/images/Happy_Machinery_Logo.webp' }}
-                          />
-                        </div>
-
-                        <h2 className="cms-preview-heading">{maintenanceTitle}</h2>
-                        <p className="cms-preview-message">{maintenanceMessage}</p>
-
-                        <div className="cms-preview-progress-box">
-                          <div className="cms-preview-pbar-header">
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                              </svg>
-                              <span>Upgrade Progress</span>
-                            </span>
-                            <strong>{maintenanceProgress}% {maintenanceProgress >= 90 ? 'Final Stage' : ''}</strong>
-                          </div>
-                          <div className="cms-preview-track">
-                            <div className="cms-preview-fill" style={{ width: `${maintenanceProgress}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 9: ADMINISTRATOR PROFILE & GOOGLE SSO */}
+          {/* ADMINISTRATOR PROFILE & GOOGLE SSO */}
           {activeTab === 'profile' && (
             <>
               <div className="cms-view-header">
@@ -11911,11 +12309,11 @@ export default function AdminDashboard() {
                 <div className="cms-profile-identity-strip" style={{ borderBottom: '1px solid var(--cms-border)' }}>
                   <div className="cms-profile-avatar-wrapper">
                     <img
-                      src={profileAvatar || currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'}
+                      src={profileAvatar || currentUser?.avatar || DEFAULT_SUPERADMIN_AVATAR}
                       alt={profileName || currentUser?.name || 'Administrator'}
                       className="cms-profile-avatar-img"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'
+                        (e.target as HTMLImageElement).src = DEFAULT_SUPERADMIN_AVATAR
                       }}
                     />
                     <span className="cms-profile-avatar-status-dot" title="Session Verified & Active" />
@@ -11934,7 +12332,7 @@ export default function AdminDashboard() {
                     <div className="cms-profile-presets-row">
                       <span className="cms-profile-presets-label">Presets:</span>
                       {[
-                        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
+                        DEFAULT_SUPERADMIN_AVATAR,
                         'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80',
                         'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=160&auto=format&fit=crop&q=80',
                         'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&auto=format&fit=crop&q=80',
@@ -12196,11 +12594,11 @@ export default function AdminDashboard() {
             <div className="cms-profile-identity-strip">
               <div className="cms-profile-avatar-wrapper">
                 <img
-                  src={profileAvatar || currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'}
+                  src={profileAvatar || currentUser?.avatar || DEFAULT_SUPERADMIN_AVATAR}
                   alt={profileName || currentUser?.name || 'Administrator'}
                   className="cms-profile-avatar-img"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80'
+                    (e.target as HTMLImageElement).src = DEFAULT_SUPERADMIN_AVATAR
                   }}
                 />
                 <span className="cms-profile-avatar-status-dot" title="Session Verified & Active" />
@@ -12219,7 +12617,7 @@ export default function AdminDashboard() {
                 <div className="cms-profile-presets-row">
                   <span className="cms-profile-presets-label">Presets:</span>
                   {[
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
+                    DEFAULT_SUPERADMIN_AVATAR,
                     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80',
                     'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=160&auto=format&fit=crop&q=80',
                     'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&auto=format&fit=crop&q=80',
@@ -13506,6 +13904,219 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Auto Sign-Out Security Policy Modal */}
+      {isAutoSignOutModalOpen && (
+        <div className="cms-modal-backdrop" onClick={() => setIsAutoSignOutModalOpen(false)}>
+          <div className="cms-recovery-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: tempAutoSignOutEnabled ? '#fee2e2' : '#dcfce7', color: tempAutoSignOutEnabled ? '#dc2626' : '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <polyline points="12 8 12 12 14 14" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--cms-text-primary, #0f172a)' }}>
+                    Auto Sign-Out Security
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--cms-text-muted, #64748b)' }}>
+                    Protect CMS on idle devices or remain signed in forever
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="cms-modal-close-btn"
+                onClick={() => setIsAutoSignOutModalOpen(false)}
+                title="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Toggle: Sign in Forever vs Auto Sign-Out */}
+            <div style={{ background: 'var(--cms-bg-subtle, #f8fafc)', border: '1px solid var(--cms-border, #e2e8f0)', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <strong style={{ fontSize: '0.9rem', color: 'var(--cms-text-primary, #0f172a)', display: 'block' }}>
+                    Auto Sign-Out on Inactivity
+                  </strong>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--cms-text-muted, #64748b)' }}>
+                    {tempAutoSignOutEnabled 
+                      ? 'Signs out automatically when keyboard/mouse is idle' 
+                      : 'Disabled: Stay signed in forever (no auto sign-out)'}
+                  </span>
+                </div>
+                <label className="cms-switch" style={{ position: 'relative', display: 'inline-block', width: '46px', height: '26px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={tempAutoSignOutEnabled}
+                    onChange={(e) => setTempAutoSignOutEnabled(e.target.checked)}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: tempAutoSignOutEnabled ? '#dc2626' : '#cbd5e1', borderRadius: '34px', transition: '0.2s' }}>
+                    <span style={{ position: 'absolute', content: '', height: '20px', width: '20px', left: tempAutoSignOutEnabled ? '23px' : '3px', bottom: '3px', background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                  </span>
+                </label>
+              </div>
+
+              {!tempAutoSignOutEnabled && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(22, 163, 74, 0.1)', border: '1px solid rgba(22, 163, 74, 0.25)' }}>
+                  <span style={{ fontSize: '15px' }}>🟢</span>
+                  <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 600 }}>
+                    Sign In Forever active: Session will never expire from inactivity.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Seconds Config Input (when enabled) */}
+            {tempAutoSignOutEnabled && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, marginBottom: '6px', color: 'var(--cms-text-primary)' }}>
+                  Inactivity Timeout (Set in Seconds)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="number"
+                    min="5"
+                    max="86400"
+                    className="cms-header-search-input"
+                    style={{ flex: 1, fontSize: '1rem', fontWeight: 700 }}
+                    value={tempAutoSignOutSeconds}
+                    onChange={(e) => setTempAutoSignOutSeconds(Math.max(5, Math.min(86400, parseInt(e.target.value, 10) || 60)))}
+                  />
+                  <span style={{ fontSize: '0.88rem', fontWeight: 650, color: 'var(--cms-text-muted)' }}>seconds</span>
+                </div>
+
+                {/* Quick Presets */}
+                <div style={{ marginTop: '10px' }}>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cms-text-muted)', display: 'block', marginBottom: '6px' }}>
+                    Quick Presets
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {[
+                      { label: '15s (Test)', sec: 15 },
+                      { label: '30s', sec: 30 },
+                      { label: '60s (1m)', sec: 60 },
+                      { label: '300s (5m)', sec: 300 },
+                      { label: '900s (15m)', sec: 900 },
+                      { label: '1800s (30m)', sec: 1800 },
+                      { label: '3600s (1h)', sec: 3600 },
+                    ].map((p) => (
+                      <button
+                        key={p.sec}
+                        type="button"
+                        className={`cms-action-btn-modern ${tempAutoSignOutSeconds === p.sec ? 'edit' : ''}`}
+                        style={{ fontSize: '11px', padding: '4px 9px' }}
+                        onClick={() => setTempAutoSignOutSeconds(p.sec)}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Countdown & Reset */}
+                {autoSignOutEnabled && (
+                  <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.74rem', color: '#b91c1c', fontWeight: 600 }}>
+                        Current Idle Countdown
+                      </span>
+                      <strong style={{ fontSize: '0.96rem', color: '#dc2626' }}>
+                        {secondsRemaining}s remaining
+                      </strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="cms-action-btn-modern view"
+                      style={{ fontSize: '11px', padding: '4px 10px' }}
+                      onClick={() => {
+                        lastActivityRef.current = Date.now()
+                        setSecondsRemaining(autoSignOutSeconds)
+                        showToast('Activity timer reset.', 'success')
+                      }}
+                    >
+                      Reset Timer
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--cms-border)', paddingTop: '14px' }}>
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                onClick={() => setIsAutoSignOutModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                onClick={() => handleSaveAutoSignOut(tempAutoSignOutEnabled, tempAutoSignOutSeconds)}
+              >
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Imminent Inactivity Auto Sign-Out Warning Modal */}
+      {showSignOutWarning && (
+        <div className="cms-modal-backdrop" style={{ zIndex: 999999 }}>
+          <div className="cms-signout-warning-dialog" onClick={(e) => e.stopPropagation()}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+
+            <h3 style={{ margin: '0 0 6px 0', fontSize: '1.25rem', color: '#b91c1c' }}>
+              Inactivity Auto Sign-Out
+            </h3>
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: 'var(--cms-text-secondary, #475569)', lineHeight: 1.4 }}>
+              You have been idle in the CMS. For your security, your session will automatically sign out in:
+            </p>
+
+            <div className="cms-warning-countdown-badge">
+              {secondsRemaining}s
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '16px' }}>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                style={{ padding: '10px 22px', fontSize: '0.9rem', fontWeight: 700 }}
+                onClick={() => {
+                  lastActivityRef.current = Date.now()
+                  setSecondsRemaining(autoSignOutSeconds)
+                  setShowSignOutWarning(false)
+                  showToast('Session extended! You remain signed in.', 'success')
+                }}
+              >
+                Stay Signed In
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-danger"
+                style={{ padding: '10px 18px', fontSize: '0.88rem' }}
+                onClick={executeAutoSignOut}
+              >
+                Sign Out Now
+              </button>
+            </div>
           </div>
         </div>
       )}

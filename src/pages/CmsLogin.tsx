@@ -22,6 +22,13 @@ export default function CmsLogin({ onLoginSuccess }: CmsLoginProps) {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState<string>(() => {
     if (typeof window !== 'undefined') {
+      try {
+        const autoMsg = localStorage.getItem('hm_auto_logout_msg')
+        if (autoMsg) {
+          localStorage.removeItem('hm_auto_logout_msg')
+          return autoMsg
+        }
+      } catch {}
       const params = new URLSearchParams(window.location.search)
       if (params.get('cms_action') === 'logout' || params.get('action') === 'logout' || params.has('logged_out')) {
         clearStoredSession()

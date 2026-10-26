@@ -147,26 +147,13 @@ test('7. Database backup exists and original content is preserved', () => {
   assert.ok(Array.isArray(content['blog-posts']) && content['blog-posts'].length > 15, 'Blog posts must be preserved')
 })
 
-test('8. Maintenance configuration structure and route matching is valid', () => {
-  const defaultConfig = {
-    global: false,
-    title: "We'll Be Right Back",
-    message: "We're performing scheduled maintenance. Please check back soon.",
-    eta: '',
-    progress: 90,
-    routes: ['/blog/*', '/equipment/*']
-  }
-  assert.equal(typeof defaultConfig.global, 'boolean')
-  assert.equal(defaultConfig.global, false)
-  assert.ok(Array.isArray(defaultConfig.routes))
+test('8. Maintenance mode is completely decommissioned and removed from CMS', () => {
+  const maintSplashFile = path.join(rootDir, 'src', 'components', 'MaintenanceSplash.tsx')
+  const maintConfigFile = path.join(rootDir, 'src', 'data', 'maintenanceConfig.ts')
+  assert.equal(fs.existsSync(maintSplashFile), false, 'MaintenanceSplash.tsx must not exist')
+  assert.equal(fs.existsSync(maintConfigFile), false, 'maintenanceConfig.ts must not exist')
 
-  // Simulate route matching logic
-  const isMatch = (pathname, pattern) => {
-    if (pattern.endsWith('/*')) {
-      return pathname.startsWith(pattern.slice(0, -2))
-    }
-    return pathname === pattern
-  }
-  assert.equal(isMatch('/blog/some-article', '/blog/*'), true)
-  assert.equal(isMatch('/contact-us', '/blog/*'), false)
+  const adminDashboardContent = fs.readFileSync(path.join(rootDir, 'src', 'pages', 'AdminDashboard.tsx'), 'utf8')
+  assert.equal(adminDashboardContent.includes("activeTab === 'maintenance'"), false, 'AdminDashboard must not have maintenance tab')
+  assert.equal(adminDashboardContent.includes("data-tooltip=\"Maintenance Mode\""), false, 'AdminDashboard must not have maintenance nav button')
 })
