@@ -112,6 +112,16 @@ type CmsTheme = 'dark' | 'light' | 'neon'
 
 export const DEFAULT_SUPERADMIN_AVATAR = 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
 
+export function getAdminDisplayName(fullName?: string): string {
+  if (!fullName) return 'Admin'
+  const trimmed = fullName.trim()
+  const parts = trimmed.split(/\s+/)
+  if (parts.length > 1 && /^(mr\.?|mrs\.?|ms\.?|dr\.?)$/i.test(parts[0])) {
+    return `${parts[0]} ${parts[1]}`
+  }
+  return parts[0]
+}
+
 export interface VisualBlock {
   id: string
   type: 'image' | 'video' | 'text'
@@ -545,11 +555,11 @@ export default function AdminDashboard() {
     }
     const session = getStoredSession()
     if (session?.user) {
-      const TARGET_AVATAR = 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
       if (!session.user.avatar || session.user.avatar.includes('about-team-1.png')) {
-        session.user.avatar = TARGET_AVATAR
+        session.user.avatar = DEFAULT_SUPERADMIN_AVATAR
         try {
           localStorage.setItem('hm_admin_session', JSON.stringify(session))
+          sessionStorage.setItem('hm_admin_session', JSON.stringify(session))
         } catch {}
       }
       return session.user
@@ -1760,11 +1770,10 @@ export default function AdminDashboard() {
         setMediaList((prev) => (prev.length > 0 ? prev : DEFAULT_MEDIA))
       }
 
-      const TARGET_AVATAR = 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
       if (fetchedUsers && Array.isArray(fetchedUsers) && fetchedUsers.length > 0) {
         const normalizedUsers = fetchedUsers.map((u) => {
           if ((u.username === 'admin' || u.email === 'soporadara@kiuq.com') && (!u.avatar || u.avatar.includes('about-team-1.png'))) {
-            return { ...u, avatar: TARGET_AVATAR }
+            return { ...u, avatar: DEFAULT_SUPERADMIN_AVATAR }
           }
           return u
         })
@@ -4627,7 +4636,7 @@ export default function AdminDashboard() {
                   <span className="cms-avatar-status-dot"></span>
                 </div>
                 <div className="cms-user-pill-text">
-                  <span className="cms-user-pill-greeting">Hi, {currentUser.name ? currentUser.name.split(' ')[0] : 'Rafvex'}</span>
+                  <span className="cms-user-pill-greeting">Hi, {getAdminDisplayName(currentUser.name)}</span>
                   <span className="cms-user-pill-role">{currentUser.role === 'Super Administrator' ? 'Super Admin' : currentUser.role}</span>
                 </div>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -4642,7 +4651,7 @@ export default function AdminDashboard() {
                     <img
                       src={currentUser.avatar || DEFAULT_SUPERADMIN_AVATAR}
                       alt={currentUser.name}
-                      style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }}
+                      style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', objectPosition: '50% 15%' }}
                       onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_SUPERADMIN_AVATAR }}
                     />
                     <div className="cms-dropdown-user-details">
@@ -4746,7 +4755,7 @@ export default function AdminDashboard() {
                     <span>✨ HAPPY MACHINERY V900 CMS</span>
                   </div>
                   <h1 className="cms-hero-title">
-                    Welcome back, {currentUser?.name ? currentUser.name.split(' ')[0] : 'Administrator'}! 👋
+                    Welcome back, {getAdminDisplayName(currentUser?.name)}! 👋
                   </h1>
                   <p className="cms-hero-subtitle">
                     Here's what's happening on your publication today. You have <strong>{products.length} equipment listings</strong> and <strong>{posts.length} articles</strong> published across <strong>{blogCategories.length} categories</strong>.
