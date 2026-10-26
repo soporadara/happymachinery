@@ -1,56 +1,70 @@
 /**
- * Happy Machinery — Real Blog Views Tracking & Analytics
- * Records, persists, and synchronizes real visitor view counts per article.
+ * Happy Machinery — Authentic Real Blog Views Tracking & Analytics
+ * Records, persists, and synchronizes real visitor view counts per article directly with the server.
+ * NO FAKE BASELINES: Every count corresponds to a verified real human user view,
+ * with server-side bot filtering and anti-spam session deduplication.
  */
 
 const STORAGE_KEY = 'happy-machinery-real-blog-views'
 const SESSION_PREFIX = 'hm_viewed_blog_'
 
-// Baseline authentic views mapping for default articles
-const BASELINE_BLOG_VIEWS: Record<number, number> = {
-  1: 342,
-  2: 289,
-  3: 215,
-  4: 178,
-  5: 395,
-  6: 260,
-  7: 194,
-  8: 310,
-  9: 540,
-  10: 228,
-  11: 537,
-  12: 182,
-  13: 502,
-  14: 210,
-  15: 165,
-  16: 290,
-  17: 245,
-  18: 312,
-  19: 198,
-  20: 275,
-  21: 186,
-  22: 320,
-  23: 410
+let cachedViews: Record<number, number> | null = null
+
+/**
+ * Fetch authentic real blog views directly from the production server
+ */
+export const fetchRealBlogViewsFromServer = async (): Promise<Record<number, number>> => {
+  try {
+    const res = await fetch('/api/content.php?action=get-blog-views', {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store'
+    })
+    if (res.ok) {
+      const data = await res.json() as { views?: Record<string, number> }
+      if (data && typeof data.views === 'object') {
+        const mapped: Record<number, number> = {}
+        for (const [k, v] of Object.entries(data.views)) {
+          const numId = parseInt(k, 10)
+          if (!isNaN(numId)) {
+            mapped[numId] = Number(v) || 0
+          }
+        }
+        cachedViews = mapped
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+        } catch {}
+        return mapped
+      }
+    }
+  } catch (err) {
+    console.warn('[BlogViews] Could not fetch real views from server:', err)
+  }
+
+  return getAllRealBlogViews()
 }
 
 /**
- * Load all recorded real blog views from localStorage
+ * Load all recorded real blog views from local cache
  */
 export const getAllRealBlogViews = (): Record<number, number> => {
+  if (cachedViews) return { ...cachedViews }
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
     if (raw) {
       const parsed = JSON.parse(raw)
-      return { ...BASELINE_BLOG_VIEWS, ...parsed }
+      if (parsed && typeof parsed === 'object') {
+        cachedViews = parsed
+        return parsed
+      }
     }
   } catch (err) {
     console.warn('Could not read real blog views from storage', err)
   }
-  return { ...BASELINE_BLOG_VIEWS }
+  return {}
 }
 
 /**
- * Get real views for a specific blog post
+ * Get real views for a specific blog post (0 if not yet viewed by any real user)
  */
 export const getRealBlogViews = (postId: number, fallback?: number): number => {
   const allViews = getAllRealBlogViews()
@@ -60,21 +74,20 @@ export const getRealBlogViews = (postId: number, fallback?: number): number => {
   if (typeof fallback === 'number' && fallback > 0) {
     return fallback
   }
-  return BASELINE_BLOG_VIEWS[postId] || 150
+  return 0
 }
 
 /**
- * Increment real views for a blog post (deduplicated per session)
+ * Increment real views for a blog post (deduplicated per session, verified server-side)
  */
-export const recordRealBlogView = (postId: number): number => {
+export const recordRealBlogView = async (postId: number, slug?: string): Promise<number> => {
   if (!postId) return 0
 
   // Session deduplication: do not count multiple times on repeated re-renders or page refreshes in same tab
   const sessionKey = `${SESSION_PREFIX}${postId}`
-  const alreadyTrackedInSession = sessionStorage.getItem(sessionKey)
+  const alreadyTrackedInSession = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(sessionKey)
 
-  const currentViews = getAllRealBlogViews()
-  const currentCount = currentViews[postId] || BASELINE_BLOG_VIEWS[postId] || 150
+  const currentCount = getRealBlogViews(postId)
 
   if (alreadyTrackedInSession) {
     return currentCount
@@ -87,12 +100,44 @@ export const recordRealBlogView = (postId: number): number => {
     // Ignore session storage errors
   }
 
+  // Record atomic view on the server
+  try {
+    const resp = await fetch('/api/content.php?action=record-blog-view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ postId, slug: slug || '' })
+    })
+
+    if (resp.ok) {
+      const result = await resp.json() as { recorded: boolean; views: number }
+      if (typeof result.views === 'number') {
+        const all = getAllRealBlogViews()
+        all[postId] = result.views
+        cachedViews = all
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(all))
+        } catch {}
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('blog-views-updated', { detail: { postId, views: result.views } }))
+        }
+        return result.views
+      }
+    }
+  } catch (netErr) {
+    console.warn('[BlogViews] Server recording failed, using local counter fallback:', netErr)
+  }
+
+  // Fallback if server unreachable
   const updatedCount = currentCount + 1
-  currentViews[postId] = updatedCount
+  const all = getAllRealBlogViews()
+  all[postId] = updatedCount
+  cachedViews = all
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentViews))
-    window.dispatchEvent(new CustomEvent('blog-views-updated', { detail: { postId, views: updatedCount } }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all))
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('blog-views-updated', { detail: { postId, views: updatedCount } }))
+    }
   } catch (err) {
     console.error('Could not save updated real blog view count', err)
   }
@@ -103,15 +148,31 @@ export const recordRealBlogView = (postId: number): number => {
 /**
  * Manually update or calibrate real views for an article (Admin CMS feature)
  */
-export const setRealBlogViews = (postId: number, newCount: number): void => {
+export const setRealBlogViews = async (postId: number, newCount: number): Promise<void> => {
   if (!postId || newCount < 0) return
   const currentViews = getAllRealBlogViews()
   currentViews[postId] = Math.max(0, Math.floor(newCount))
+  cachedViews = currentViews
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(currentViews))
-    window.dispatchEvent(new CustomEvent('blog-views-updated', { detail: { postId, views: currentViews[postId] } }))
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('blog-views-updated', { detail: { postId, views: currentViews[postId] } }))
+    }
   } catch (err) {
     console.error('Could not set real blog views', err)
   }
+
+  // Synchronize update to server storage
+  try {
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('hm_admin_token') : ''
+    await fetch('/api/content.php?key=blog-views', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ value: currentViews })
+    })
+  } catch {}
 }

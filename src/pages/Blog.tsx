@@ -5,7 +5,7 @@ import { readPersistentContent } from '../data/persistentStorage'
 import { readSharedContent, appendSharedContent } from '../data/sharedContentStorage'
 import { getStoredSession } from '../data/cmsAuth'
 import { getBlogPostPath, getBlogPostSlug } from '../data/blogUrls'
-import { getRealBlogViews, recordRealBlogView } from '../data/blogViews'
+import { getRealBlogViews, recordRealBlogView, fetchRealBlogViewsFromServer } from '../data/blogViews'
 import './Blog.css'
 
 export const slugifyHeading = (text: string): string => {
@@ -474,6 +474,11 @@ export default function Blog() {
     }
   }
 
+  // Synchronize authentic view counts from server
+  useEffect(() => {
+    void fetchRealBlogViewsFromServer()
+  }, [])
+
   // Canonical redirect for old ?post=ID links
   useEffect(() => {
     if (!slug && postId && selectedPost) {
@@ -484,7 +489,7 @@ export default function Blog() {
   // Record authentic view count on article visit
   useEffect(() => {
     if (selectedPost?.id) {
-      recordRealBlogView(selectedPost.id)
+      void recordRealBlogView(selectedPost.id, getBlogPostSlug(selectedPost))
     }
   }, [selectedPost?.id])
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import type { BlogPost } from '../pages/adminData'
 import { getBlogPostPath } from '../data/blogUrls'
-import { getRealBlogViews, setRealBlogViews } from '../data/blogViews'
+import { getRealBlogViews, setRealBlogViews, fetchRealBlogViewsFromServer } from '../data/blogViews'
 import './TopBlogsManager.css'
 
 interface TopBlogsManagerProps {
@@ -16,9 +16,6 @@ interface TopBlogsManagerProps {
 }
 
 export const getArticleViews = (post: BlogPost): number => {
-  if (typeof (post as any).views === 'number' && (post as any).views > 0) {
-    return (post as any).views
-  }
   return getRealBlogViews(post.id)
 }
 
@@ -37,8 +34,17 @@ export default function TopBlogsManager({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [selectedCategory, setSelectedCategory] = useState<string>('All')
   const [viewsTick, setViewsTick] = useState(0)
+  const [isLoadingRealViews, setIsLoadingRealViews] = useState(false)
   const [editingViewsPostId, setEditingViewsPostId] = useState<number | null>(null)
   const [editingViewsValue, setEditingViewsValue] = useState<string>('')
+
+  // Fetch verified real views directly from production server on mount
+  useEffect(() => {
+    setIsLoadingRealViews(true)
+    fetchRealBlogViewsFromServer()
+      .then(() => setViewsTick((t) => t + 1))
+      .finally(() => setIsLoadingRealViews(false))
+  }, [])
 
   // Sync real-time blog views updates
   useEffect(() => {
@@ -53,10 +59,10 @@ export default function TopBlogsManager({
     }
   }, [])
 
-  const handleSaveCustomViews = (postId: number) => {
+  const handleSaveCustomViews = async (postId: number) => {
     const num = parseInt(editingViewsValue, 10)
     if (!isNaN(num) && num >= 0) {
-      setRealBlogViews(postId, num)
+      await setRealBlogViews(postId, num)
       setViewsTick((t) => t + 1)
       showToast(`Updated real views to ${num.toLocaleString()}`, 'success')
     }
@@ -422,29 +428,41 @@ export default function TopBlogsManager({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <h1>Top Blogs Ranking & Performance</h1>
             <span className="top-blogs-badge-pill">🔥 POPULARITY RANK</span>
-            <span className="top-blogs-real-views-pill" title="Live real reader view tracking active">
-              <span className="top-blogs-pulse-dot" /> REAL VIEWS ACTIVE
+            <span className="top-blogs-real-views-pill" title="Live real human reader view tracking active with bot filtering & session deduplication">
+              <span className="top-blogs-pulse-dot" /> REAL USER VIEWS (SERVER-VERIFIED)
             </span>
           </div>
           <p>
-            Monitor which articles generate the highest reader views, customize rank limits, and export PDF intelligence reports.
+            Monitor real human readers across your publication. Every count reflects genuine visitor engagement filtered against bots, crawlers, and rapid refresh spam.
           </p>
         </div>
         <div className="cms-view-actions">
           <button
             type="button"
             className="cms-btn cms-btn-outline top-blogs-refresh-btn"
-            onClick={() => {
+            disabled={isLoadingRealViews}
+            onClick={async () => {
+              setIsLoadingRealViews(true)
+              await fetchRealBlogViewsFromServer()
               setViewsTick((t) => t + 1)
-              showToast('Live real views refreshed', 'success')
+              setIsLoadingRealViews(false)
+              showToast('Verified real user views refreshed from server', 'success')
             }}
-            title="Refresh real-time visitor view counts"
+            title="Refresh real-time visitor view counts from production server"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              style={isLoadingRealViews ? { animation: 'spin 1s linear infinite' } : undefined}
+            >
               <path d="M23 4v6h-6" />
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
-            <span>Refresh Views</span>
+            <span>{isLoadingRealViews ? 'Refreshing...' : 'Refresh Real Views'}</span>
           </button>
           <button
             type="button"

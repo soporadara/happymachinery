@@ -23,6 +23,7 @@ $allowedKeys = [
     'failed-logins',
     'security-settings',
     'analytics-events',
+    'blog-views',
     'site-settings',
     'site-pages',
     'blog-categories',
@@ -44,7 +45,6 @@ $protectedReadKeys = [
     'login-activity',
     'failed-logins',
     'security-settings',
-    'analytics-events',
     'trash-items',
     'orders'
 ];
@@ -55,7 +55,9 @@ $publicAppendKeys = [
     'comments',
     'cart-activity',
     'failed-logins',
-    'login-activity'
+    'login-activity',
+    'analytics-events',
+    'blog-views'
 ];
 
 $storageDirectory = dirname(__DIR__, 2) . '/happy-machinery-storage';
@@ -170,6 +172,107 @@ $action = $_GET['action'] ?? '';
 // Action: check-ip status
 if ($action === 'check-ip') {
     echo json_encode(['ip' => $clientIp, 'banned' => false, 'authenticated' => $authenticatedUser !== null]);
+    exit;
+}
+
+// Action: get-blog-views (returns authentic view counts per article)
+if ($action === 'get-blog-views') {
+    $views = $database['blog-views'] ?? [];
+    echo json_encode(['views' => is_array($views) ? $views : []], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+// Action: record-blog-view (Atomic real user visitor tracker with bot filtering & anti-spam deduplication)
+if ($action === 'record-blog-view') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'Method not allowed.']);
+        exit;
+    }
+
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw ?: '', true);
+    $postId = isset($data['postId']) ? (int)$data['postId'] : 0;
+    $slug = trim((string)($data['slug'] ?? ''));
+
+    if ($postId <= 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Valid postId is required.']);
+        exit;
+    }
+
+    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+    // Exclude bots, web crawlers, search engines, and scripts from inflating real user counts
+    if (preg_match('/bot|crawler|spider|googlebot|bingbot|yandex|slurp|duckduckbot|baiduspider|curl|wget|python|headlesschrome/i', $userAgent)) {
+        echo json_encode(['recorded' => false, 'reason' => 'bot_ignored', 'views' => (int)($database['blog-views'][(string)$postId] ?? 0)]);
+        exit;
+    }
+
+    $lockHandle = fopen($lockFile, 'c');
+    if ($lockHandle && flock($lockHandle, LOCK_EX)) {
+        $database = $readDatabase();
+    } else {
+        http_response_code(500);
+        echo json_encode(['error' => 'Database lock failed.']);
+        exit;
+    }
+
+    $now = time();
+    $ipHash = substr(hash('sha256', $clientIp . '_hm_real_salt'), 0, 16);
+    $recentSessions = (array)($database['blog-view-sessions'] ?? []);
+
+    // Purge session entries older than 2 hours to keep database clean
+    $cleanedSessions = [];
+    foreach ($recentSessions as $sKey => $ts) {
+        if ($now - (int)$ts < 7200) {
+            $cleanedSessions[$sKey] = $ts;
+        }
+    }
+
+    // Deduplication window: 1 view per IP per post every 30 minutes
+    $dedupKey = "{$ipHash}_{$postId}";
+    $alreadyCounted = isset($cleanedSessions[$dedupKey]) && ($now - (int)$cleanedSessions[$dedupKey] < 1800);
+
+    if (!$alreadyCounted) {
+        $cleanedSessions[$dedupKey] = $now;
+        $database['blog-view-sessions'] = $cleanedSessions;
+
+        if (!isset($database['blog-views']) || !is_array($database['blog-views'])) {
+            $database['blog-views'] = [];
+        }
+
+        $currentCount = (int)($database['blog-views'][(string)$postId] ?? 0);
+        $newCount = $currentCount + 1;
+        $database['blog-views'][(string)$postId] = $newCount;
+
+        // Also record an authentic analytics view event
+        $analyticsEvent = [
+            'id' => 'ev-' . $now . '-' . bin2hex(random_bytes(3)),
+            'timestamp' => date('c'),
+            'path' => $slug ? "/blog/{$slug}" : "/blog?post={$postId}",
+            'title' => "Article #{$postId}",
+            'type' => 'article',
+            'itemId' => $postId,
+            'ipHash' => $ipHash,
+            'device' => 'web'
+        ];
+        $database['analytics-events'] = array_slice(array_merge([$analyticsEvent], (array)($database['analytics-events'] ?? [])), 0, 5000);
+
+        file_put_contents($storageFile, json_encode($database, JSON_UNESCAPED_SLASHES), LOCK_EX);
+    } else {
+        $newCount = (int)($database['blog-views'][(string)$postId] ?? 0);
+    }
+
+    if ($lockHandle) {
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+    }
+
+    echo json_encode([
+        'recorded' => !$alreadyCounted,
+        'postId' => $postId,
+        'views' => $newCount
+    ]);
     exit;
 }
 

@@ -157,3 +157,16 @@ test('8. Maintenance mode is completely decommissioned and removed from CMS', ()
   assert.equal(adminDashboardContent.includes("activeTab === 'maintenance'"), false, 'AdminDashboard must not have maintenance tab')
   assert.equal(adminDashboardContent.includes("data-tooltip=\"Maintenance Mode\""), false, 'AdminDashboard must not have maintenance nav button')
 })
+
+test('9. Authentic blog view tracking is server-verified and fake baselines are eradicated', () => {
+  const blogViewsContent = fs.readFileSync(path.join(rootDir, 'src', 'data', 'blogViews.ts'), 'utf8')
+  assert.equal(blogViewsContent.includes('BASELINE_BLOG_VIEWS'), false, 'Fake BASELINE_BLOG_VIEWS must be completely removed')
+  assert.ok(blogViewsContent.includes('fetchRealBlogViewsFromServer'), 'Must support server-verified views fetch')
+  assert.ok(blogViewsContent.includes('record-blog-view'), 'Must record views to backend endpoint')
+
+  const contentPhpContent = fs.readFileSync(path.join(rootDir, 'public', 'api', 'content.php'), 'utf8')
+  assert.ok(contentPhpContent.includes("'blog-views'"), 'blog-views must be in allowed keys')
+  assert.ok(contentPhpContent.includes("$action === 'record-blog-view'"), 'Backend must have atomic record-blog-view handler')
+  assert.ok(contentPhpContent.includes("$action === 'get-blog-views'"), 'Backend must have get-blog-views handler')
+})
+
