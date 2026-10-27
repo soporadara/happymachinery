@@ -58,6 +58,7 @@ if ($type === 'blog' && ($id > 0 || $slug !== '')) {
         if (($id > 0 && (int)$post['id'] === $id) || ($slug !== '' && $postSlug === $slug)) {
             $title = !empty($post['seoTitle']) ? $post['seoTitle'] : ($post['title'] . " | Happy Machinery Blog");
             $desc = !empty($post['metaDescription']) ? $post['metaDescription'] : $post['excerpt'];
+            $imageAlt = !empty($post['imageAlt']) ? $post['imageAlt'] : (!empty($post['alt']) ? $post['alt'] : $post['title']);
             $imagePath = $post['image'];
             $image = strpos($imagePath, 'http') === 0 ? $imagePath : "https://happymachinery.com" . $imagePath;
             if ($id === 1784947777428) {
@@ -128,10 +129,16 @@ elseif ($type === 'product' && $id > 0) {
     <meta property="og:description" content="<?= htmlspecialchars($desc) ?>">
     <meta property="og:url" content="<?= htmlspecialchars($url) ?>">
     <meta property="og:image" content="<?= htmlspecialchars($image) ?>">
+    <?php if (!empty($imageAlt)): ?>
+    <meta property="og:image:alt" content="<?= htmlspecialchars($imageAlt) ?>">
+    <?php endif; ?>
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="<?= htmlspecialchars($title) ?>">
     <meta name="twitter:description" content="<?= htmlspecialchars($desc) ?>">
     <meta name="twitter:image" content="<?= htmlspecialchars($image) ?>">
+    <?php if (!empty($imageAlt)): ?>
+    <meta name="twitter:image:alt" content="<?= htmlspecialchars($imageAlt) ?>">
+    <?php endif; ?>
     <meta http-equiv="refresh" content="0;url=<?= htmlspecialchars($url) ?>">
 </head>
 <body>

@@ -411,10 +411,13 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     (/^(https?:\/\/|\/images\/)[^\s]+$/i.test(line) && /\.(png|jpg|jpeg|webp|gif|svg)/i.test(line)) ||
     (/^https?:\/\/img\.miniexcavator\.org\/[^\s]+$/i.test(line))
   ) {
+    const rawFileName = line.split('/').pop()?.split('?')[0]?.replace(/\.[^/.]+$/, '') || 'Machinery Asset';
+    const cleanLabel = rawFileName.replace(/[-_]+/g, ' ').trim();
+    const dynamicAlt = `${cleanLabel} | Happy Machinery Equipment`;
     return (
       <figure key={key} className="blog-body-figure blog-align-center">
         <div className="blog-body-image-box">
-          <img src={line} alt="Jobsite Media" className="blog-body-image" loading="lazy" />
+          <img src={line} alt={dynamicAlt} className="blog-body-image" loading="lazy" />
         </div>
       </figure>
     );
@@ -548,14 +551,17 @@ export default function Blog() {
       el.content = value
     }
 
+    const seoImageAlt = selectedPost.imageAlt || (selectedPost as any).alt || selectedPost.title
     setMeta('meta[name="description"]', 'name', 'description', seoDesc)
     setMeta('meta[property="og:title"]', 'property', 'og:title', seoTitle)
     setMeta('meta[property="og:description"]', 'property', 'og:description', seoDesc)
     setMeta('meta[property="og:image"]', 'property', 'og:image', seoImage)
+    setMeta('meta[property="og:image:alt"]', 'property', 'og:image:alt', seoImageAlt)
     setMeta('meta[property="og:url"]', 'property', 'og:url', articleUrl)
     setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', seoTitle)
     setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', seoDesc)
     setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', seoImage)
+    setMeta('meta[name="twitter:image:alt"]', 'name', 'twitter:image:alt', seoImageAlt)
 
     let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
     if (!canonical) {
