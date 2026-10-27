@@ -57,7 +57,8 @@ import HomePageCmsEditor from '../components/HomePageCmsEditor'
 import TopBlogsManager from '../components/TopBlogsManager'
 import TiptapEditor from '../components/Editor/TiptapEditor'
 import { renderMarkdownToReact } from './Blog'
-import { convertContentToHtml } from '../utils/editorContentHelper'
+import { convertContentToHtml, splitContentIntoBlocks, getHeadingMatch } from '../utils/editorContentHelper'
+import { processPastedBlog, cleanImageTitle } from '../utils/blogImportHelper'
 import { cacheSiteSettings, updateBrowserFavicon } from '../data/siteBranding'
 import './AdminDashboard.css'
 
@@ -593,6 +594,7 @@ export default function AdminDashboard() {
     })
   }
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [collapsedFlyout, setCollapsedFlyout] = useState<'articles' | 'products' | null>(null)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
   const [isNotificationOpen, setIsNotificationOpen] = useState(false)
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all')
@@ -600,6 +602,25 @@ export default function AdminDashboard() {
   const profileRef = useRef<HTMLDivElement | null>(null)
   const [globalSearch, setGlobalSearch] = useState('')
   const mainContentRef = useRef<HTMLDivElement | null>(null)
+
+  // Close flyout on outside click or sidebar uncollapse
+  useEffect(() => {
+    if (!collapsedFlyout) return
+    const handleDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.cms-nav-expandable-group')) {
+        setCollapsedFlyout(null)
+      }
+    }
+    document.addEventListener('click', handleDocClick)
+    return () => document.removeEventListener('click', handleDocClick)
+  }, [collapsedFlyout])
+
+  useEffect(() => {
+    if (!isSidebarCollapsed) {
+      setCollapsedFlyout(null)
+    }
+  }, [isSidebarCollapsed])
 
   // System & User Notifications State
   const [notifications, setNotifications] = useState<AdminNotificationItem[]>(() => {
@@ -1318,8 +1339,9 @@ export default function AdminDashboard() {
   const [linkModalInternalUrl, setLinkModalInternalUrl] = useState('/store')
   const [linkModalExternalUrl, setLinkModalExternalUrl] = useState('https://')
   const [linkModalText, setLinkModalText] = useState('')
-  // Live Visual WYSIWYG vs Markdown Code Mode
+  // Live Visual WYSIWYG vs Markdown Code Mode vs Full Live Reader Preview
   const [editorMode, setEditorMode] = useState<'visual' | 'code' | 'preview'>('visual')
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
   const [editorBlocks, setEditorBlocks] = useState<VisualBlock[]>([{ id: 'blk-init', type: 'text', text: '' }])
   const [activeVisualBlockIndex, setActiveVisualBlockIndex] = useState<number | null>(null)
   const [editingBlockIndex, setEditingBlockIndex] = useState<number | null>(null)
@@ -2563,10 +2585,10 @@ export default function AdminDashboard() {
     setEditorCategory(post.category)
     setEditorStatus('Published')
     setEditorCoverImage(post.image)
-    setEditorCoverAlt('')
+    setEditorCoverAlt(post.imageAlt || (post as any).alt || '')
     setEditorVideoUrl('')
-    setEditorSeoTitle(post.title)
-    setEditorSeoDesc(post.excerpt)
+    setEditorSeoTitle((post as any).seoTitle || post.title)
+    setEditorSeoDesc((post as any).metaDescription || post.excerpt)
     setEditorScheduledAt((post as any).scheduled_at || '')
     setArticlesSubView('editor')
   }
@@ -2806,39 +2828,73 @@ export default function AdminDashboard() {
 
   const pushContentHistory = (_newVal?: string) => {}
 
+  const handleSmartBlogImport = async (text: string) => {
+    if (!text || !text.trim()) return
+    const res = processPastedBlog(text)
+    if (!res.detected) {
+      showToast('No structured blog or miniexcavator images detected.', 'info' as any)
+      return
+    }
+
+    if (res.title) {
+      setEditorTitle(res.title)
+      if (!editingArticle) {
+        setEditorSlug(res.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+      }
+    }
+
+    if (res.coverImage) {
+      setEditorCoverImage(res.coverImage.url)
+      if (!editorCoverAlt.trim()) {
+        setEditorCoverAlt(res.coverImage.alt)
+      }
+    }
+
+    if (res.allImages && res.allImages.length > 0) {
+      const newMediaItems: MediaItem[] = res.allImages.map((img, idx) => ({
+        id: `media-auto-${Date.now()}-${idx}`,
+        title: img.caption || img.alt || cleanImageTitle(img.url),
+        url: img.url,
+        folder: 'galleries',
+        dateAdded: new Date().toISOString().split('T')[0],
+        size: '160 KB',
+      }))
+
+      setMediaList((prev) => {
+        const filteredNew = newMediaItems.filter(
+          (item) => !prev.some((existing) => existing.url === item.url)
+        )
+        const updated = [...filteredNew, ...prev]
+        void writeSharedContent('media-library', updated)
+        return updated
+      })
+    }
+
+    if (res.cleanedHtml) {
+      setEditorContent(res.cleanedHtml)
+    }
+
+    showToast(
+      `Smart Blog Import: Title set to "${res.title || 'Extracted'}", Cover Image filled, and ${res.remainingImages.length} images formatted!`,
+      'success'
+    )
+  }
+
   const handleSaveArticle = async (status: 'Published' | 'Draft' | 'Scheduled') => {
     if (!editorTitle.trim()) {
       showToast('Article title is required.', 'error')
       return
     }
 
-    let contentParagraphs: string[] = []
-    if (editorContent.trim()) {
-      if (editorContent.includes('</p>') || editorContent.includes('</div>') || editorContent.includes('</h2>')) {
-        contentParagraphs = editorContent
-          .replace(/<\/p>/gi, '</p>\n\n')
-          .replace(/<\/h([1-6])>/gi, '</h$1>\n\n')
-          .replace(/<\/div>/gi, '</div>\n\n')
-          .replace(/<\/blockquote>/gi, '</blockquote>\n\n')
-          .replace(/<\/ul>/gi, '</ul>\n\n')
-          .replace(/<\/ol>/gi, '</ol>\n\n')
-          .split(/\n\s*\n/)
-          .map((p) => p.trim())
-          .filter(Boolean)
-      } else {
-        contentParagraphs = editorContent
-          .split(/\n\s*\n/)
-          .map((p) => p.trim())
-          .filter(Boolean)
-      }
-    }
+    const contentParagraphs = splitContentIntoBlocks(editorContent)
 
     if (contentParagraphs.length === 0) {
       showToast('Article must contain content.', 'error')
       return
     }
 
-    const plainFirstParagraph = contentParagraphs[0] ? contentParagraphs[0].replace(/<[^>]*>/g, '').trim() : ''
+    const firstTextPara = contentParagraphs.find(p => !p.includes('<figure') && !p.includes('<img')) || contentParagraphs[0]
+    const plainFirstParagraph = firstTextPara ? firstTextPara.replace(/<[^>]*>/g, '').trim() : ''
     const finalExcerpt =
       editorExcerpt.trim() ||
       (plainFirstParagraph ? plainFirstParagraph.slice(0, 220).trim() + '...' : editorTitle)
@@ -2865,6 +2921,10 @@ export default function AdminDashboard() {
               category: editorCategory,
               author: 'Happy Machinery',
               image: editorCoverImage || p.image,
+              imageAlt: editorCoverAlt.trim() || p.imageAlt || (p as any).alt || '',
+              alt: editorCoverAlt.trim() || p.imageAlt || (p as any).alt || '',
+              seoTitle: editorSeoTitle.trim() || undefined,
+              metaDescription: editorSeoDesc.trim() || undefined,
               status: finalStatus,
               content_raw: editorContentRaw || undefined
             }
@@ -2884,6 +2944,10 @@ export default function AdminDashboard() {
         content: contentParagraphs,
         keyTakeaways: ['Maintenance standards', 'Safe operation', 'Field inspection guidelines'],
         image: editorCoverImage || '/images/why-choose-v900-jobsite.png',
+        imageAlt: editorCoverAlt.trim(),
+        alt: editorCoverAlt.trim(),
+        seoTitle: editorSeoTitle.trim() || undefined,
+        metaDescription: editorSeoDesc.trim() || undefined,
         date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
         readTime: `${Math.max(2, Math.ceil(contentParagraphs.join(' ').split(/\s+/).length / 180))} min read`,
         author: 'Happy Machinery',
@@ -3841,14 +3905,17 @@ export default function AdminDashboard() {
           </button>
 
           {/* Articles Expandable Item */}
-          <div className="cms-nav-expandable-group">
+          <div
+            className={`cms-nav-expandable-group ${collapsedFlyout === 'articles' ? 'flyout-open' : ''}`}
+            onMouseEnter={() => { if (isSidebarCollapsed) setCollapsedFlyout('articles') }}
+            onMouseLeave={() => { if (isSidebarCollapsed) setCollapsedFlyout(null) }}
+          >
             <button
               className={`cms-nav-item ${activeTab === 'articles' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('articles')
                 if (isSidebarCollapsed) {
-                  setIsSidebarCollapsed(false)
-                  setIsArticlesExpanded(true)
+                  setCollapsedFlyout(collapsedFlyout === 'articles' ? null : 'articles')
                 } else {
                   setIsArticlesExpanded(!isArticlesExpanded)
                 }
@@ -3956,17 +4023,116 @@ export default function AdminDashboard() {
                 </button>
               </div>
             )}
+
+            {/* Articles Flyout Submenu (Collapsed sidebar icon hover/click) */}
+            {isSidebarCollapsed && (
+              <div className={`cms-collapsed-flyout-menu ${collapsedFlyout === 'articles' ? 'is-active' : ''}`}>
+                <div className="cms-flyout-arrow" />
+                <div className="cms-flyout-header">
+                  <div className="cms-flyout-header-info">
+                    <span className="cms-flyout-title">Articles &amp; Content</span>
+                    <span className="cms-flyout-count">{posts.length} posts</span>
+                  </div>
+                </div>
+                <div className="cms-flyout-divider" />
+                <div className="cms-flyout-list">
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'articles' && articlesSubView === 'list' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('articles')
+                      setArticlesSubView('list')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">All Articles</span>
+                    <span className="cms-sub-count">{posts.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'articles' && articlesSubView === 'editor' && !editingArticle ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('articles')
+                      openNewArticle()
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="16" />
+                        <line x1="8" y1="12" x2="16" y2="12" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">New Article</span>
+                    <span className="cms-flyout-action-pill">+ Write</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'articles' && articlesSubView === 'categories' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('articles')
+                      setArticlesSubView('categories')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">Categories</span>
+                    <span className="cms-sub-count">{blogCategories.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'articles' && articlesSubView === 'topBlogs' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('articles')
+                      setArticlesSubView('topBlogs')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">Top Blogs</span>
+                    <span className="cms-flyout-badge-hot">HOT</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Products & Equipment Expandable Item */}
-          <div className="cms-nav-expandable-group">
+          <div
+            className={`cms-nav-expandable-group ${collapsedFlyout === 'products' ? 'flyout-open' : ''}`}
+            onMouseEnter={() => { if (isSidebarCollapsed) setCollapsedFlyout('products') }}
+            onMouseLeave={() => { if (isSidebarCollapsed) setCollapsedFlyout(null) }}
+          >
             <button
               className={`cms-nav-item ${activeTab === 'products' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('products')
                 if (isSidebarCollapsed) {
-                  setIsSidebarCollapsed(false)
-                  setIsProductsExpanded(true)
+                  setCollapsedFlyout(collapsedFlyout === 'products' ? null : 'products')
                 } else {
                   setIsProductsExpanded(!isProductsExpanded)
                 }
@@ -4094,6 +4260,129 @@ export default function AdminDashboard() {
                   <span>Attributes</span>
                   <span className="cms-sub-count">{productAttributes.length}</span>
                 </button>
+              </div>
+            )}
+
+            {/* Products Flyout Submenu (Collapsed sidebar icon hover/click) */}
+            {isSidebarCollapsed && (
+              <div className={`cms-collapsed-flyout-menu ${collapsedFlyout === 'products' ? 'is-active' : ''}`}>
+                <div className="cms-flyout-arrow" />
+                <div className="cms-flyout-header">
+                  <div className="cms-flyout-header-info">
+                    <span className="cms-flyout-title">Equipment &amp; Products</span>
+                    <span className="cms-flyout-count">{products.length} items</span>
+                  </div>
+                </div>
+                <div className="cms-flyout-divider" />
+                <div className="cms-flyout-list">
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'products' && productsSubView === 'list' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('products')
+                      setProductsSubView('list')
+                      setProdCategoryFilter('all')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                        <line x1="12" y1="22.08" x2="12" y2="12" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">All Products</span>
+                    <span className="cms-sub-count">{products.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'products' && productsSubView === 'editor' && !prodEditorId ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('products')
+                      openCreateProduct()
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="16" />
+                        <line x1="8" y1="12" x2="16" y2="12" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">Add new product</span>
+                    <span className="cms-flyout-action-pill">+ Add</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'products' && productsSubView === 'categories' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('products')
+                      setProductsSubView('categories')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                        <line x1="7" y1="7" x2="7.01" y2="7" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">Categories</span>
+                    <span className="cms-sub-count">{productCategories.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'products' && productsSubView === 'brands' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('products')
+                      setProductsSubView('brands')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                        <path d="M3 21h18M3 7v14M21 7v14M6 7V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v3M9 10h2M13 10h2M9 14h2M13 14h2M9 18h2M13 18h2" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">Brands</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cms-flyout-item ${activeTab === 'products' && productsSubView === 'attributes' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveTab('products')
+                      setProductsSubView('attributes')
+                      setCollapsedFlyout(null)
+                    }}
+                  >
+                    <span className="cms-sub-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                        <line x1="4" y1="21" x2="4" y2="14" />
+                        <line x1="4" y1="10" x2="4" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12" y2="3" />
+                        <line x1="20" y1="21" x2="20" y2="16" />
+                        <line x1="20" y1="12" x2="20" y2="3" />
+                        <line x1="1" y1="14" x2="7" y2="14" />
+                        <line x1="9" y1="8" x2="15" y2="8" />
+                        <line x1="17" y1="16" x2="23" y2="16" />
+                      </svg>
+                    </span>
+                    <span className="cms-flyout-item-name">Attributes</span>
+                    <span className="cms-sub-count">{productAttributes.length}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -5327,17 +5616,26 @@ export default function AdminDashboard() {
                     <div className="cms-editor-header-actions">
                       <button
                         type="button"
-                        className="cms-btn-header-preview"
+                        className={`cms-btn-header-preview ${editorMode === 'preview' ? 'active' : ''}`}
                         onClick={() => {
-                          if (editorSlug) window.open(`/blog/${editorSlug}`, '_blank');
-                          else setEditorMode('preview');
+                          setEditorMode(editorMode === 'preview' ? 'visual' : 'preview')
                         }}
+                        title={editorMode === 'preview' ? 'Return to editing article' : 'Preview full blog post as visitors see it'}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
+                          {editorMode === 'preview' ? (
+                            <>
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </>
+                          ) : (
+                            <>
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </>
+                          )}
                         </svg>
-                        <span>Preview</span>
+                        <span>{editorMode === 'preview' ? 'Edit Article' : 'Preview'}</span>
                       </button>
                       <button
                         type="button"
@@ -5365,8 +5663,276 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* 2-Column Editor Grid */}
-                  <div className="cms-rafvex-editor-grid">
+                  {/* 2-Column Editor Grid vs Full Live Reader Preview */}
+                  {editorMode === 'preview' ? (
+                    <div className="cms-full-preview-stage">
+                      {/* Top Preview Control Bar */}
+                      <div className="cms-preview-toolbar">
+                        <div className="cms-preview-toolbar-left">
+                          <span className="cms-preview-badge-live">
+                            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#2563eb', display: 'inline-block' }} />
+                            Live Reader Preview
+                          </span>
+                          <span style={{ fontSize: '12px', color: 'var(--cms-text-muted, #64748b)', fontWeight: 500 }}>
+                            Full Public Article View
+                          </span>
+                          <div className="cms-preview-device-switch">
+                            <button
+                              type="button"
+                              className={`cms-preview-device-btn ${previewDevice === 'desktop' ? 'active' : ''}`}
+                              onClick={() => setPreviewDevice('desktop')}
+                              title="Full Desktop View (100% width)"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect width="20" height="14" x="2" y="3" rx="2" />
+                                <line x1="8" x2="16" y1="21" y2="21" />
+                                <line x1="12" x2="12" y1="17" y2="21" />
+                              </svg>
+                              <span>Desktop</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`cms-preview-device-btn ${previewDevice === 'tablet' ? 'active' : ''}`}
+                              onClick={() => setPreviewDevice('tablet')}
+                              title="Tablet View (768px width)"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect width="16" height="20" x="4" y="2" rx="2" />
+                                <line x1="12" x2="12" y1="18" y2="18" />
+                              </svg>
+                              <span>Tablet</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`cms-preview-device-btn ${previewDevice === 'mobile' ? 'active' : ''}`}
+                              onClick={() => setPreviewDevice('mobile')}
+                              title="Mobile View (420px width)"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect width="14" height="20" x="5" y="2" rx="2" />
+                                <path d="M12 18h.01" />
+                              </svg>
+                              <span>Mobile</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="cms-preview-toolbar-right">
+                          <button
+                            type="button"
+                            className="cms-preview-btn-back"
+                            onClick={() => setEditorMode('visual')}
+                            title="Return to editing article"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                            <span>Back to Editor</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-btn-header-publish"
+                            style={{ padding: '6px 14px', fontSize: '12px' }}
+                            onClick={() => handleSaveArticle(editorStatus === 'Scheduled' ? 'Scheduled' : 'Published')}
+                          >
+                            <span>Save Changes</span>
+                          </button>
+                          {editorSlug && (
+                            <button
+                              type="button"
+                              className="cms-preview-btn-openlink"
+                              onClick={() => window.open(`/blog/${editorSlug}`, '_blank')}
+                              title="Open live URL in new tab"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" x2="21" y1="14" y2="3" />
+                              </svg>
+                              <span>Open Live URL</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Scrollable Stage */}
+                      <div className="cms-full-preview-scroll-area">
+                        <div className={`cms-preview-frame frame-${previewDevice}`}>
+                          <div className="cms-preview-paper">
+                            {/* Breadcrumbs */}
+                            <nav className="raf-breadcrumb" style={{ marginBottom: '18px' }}>
+                              <span className="raf-bc-link">Home</span>
+                              <span className="raf-bc-sep">›</span>
+                              <span className="raf-bc-link">Machinery Guides</span>
+                              <span className="raf-bc-sep">›</span>
+                              <span className="raf-bc-link">{editorCategory || 'Jobsite Productivity'}</span>
+                              <span className="raf-bc-sep">›</span>
+                              <span className="raf-bc-current">{editorTitle || 'Untitled Editorial Post'}</span>
+                            </nav>
+
+                            {/* Category Pill */}
+                            <div className="raf-meta-top-row" style={{ marginBottom: '10px' }}>
+                              <div className="raf-category-pill">
+                                <span className="raf-pill-dot" />
+                                <span className="raf-pill-text">{(editorCategory || 'Jobsite Productivity').toUpperCase()}</span>
+                              </div>
+                            </div>
+
+                            {/* Headline */}
+                            <h1 className="raf-article-headline" style={{ fontSize: previewDevice === 'mobile' ? '1.5rem' : '2.25rem', marginBottom: '14px' }}>
+                              {editorTitle || 'Untitled Editorial Post'}
+                            </h1>
+
+                            {/* Excerpt */}
+                            {editorExcerpt && (
+                              <p className="raf-article-excerpt-bar" style={{ marginBottom: '22px' }}>
+                                {editorExcerpt}
+                              </p>
+                            )}
+
+                            {/* Featured Cover Image */}
+                            {editorCoverImage && (
+                              <div className="raf-hero-image-box" style={{ width: '100%', aspectRatio: '16 / 9', marginBottom: '22px', borderRadius: '16px', overflow: 'hidden' }}>
+                                <img
+                                  src={editorCoverImage}
+                                  alt={editorCoverAlt || editorTitle || 'Featured Cover Image'}
+                                  className="raf-hero-image"
+                                  style={{ width: '100%', height: '100%', aspectRatio: '16 / 9', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
+                                />
+                              </div>
+                            )}
+
+                            {/* Author & Published Info Bar */}
+                            <div className="raf-author-row" style={{ marginBottom: '26px' }}>
+                              <div className="raf-author-avatar">
+                                <img
+                                  src="https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl"
+                                  alt={editingArticle?.author || 'Happy Machinery'}
+                                  className="raf-author-favicon"
+                                  onError={(e) => {
+                                    const img = e.currentTarget as HTMLImageElement;
+                                    img.src = '/favicon.png';
+                                  }}
+                                />
+                              </div>
+                              <div className="raf-author-details">
+                                <span className="raf-author-name">{editingArticle?.author || 'Happy Machinery'}</span>
+                                <span className="raf-publish-date">Published Today &bull; {editingArticle?.readTime || `${Math.max(2, Math.ceil((editorContent || '').replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length / 180))} min read`}</span>
+                              </div>
+                            </div>
+
+                            {/* Main Body + On This Page Grid */}
+                            <div className="cms-preview-split-grid">
+                              {/* Left Content Column */}
+                              <article className="raf-body-content" style={{ minWidth: 0 }}>
+                                {(() => {
+                                  const previewBlocks = splitContentIntoBlocks(editorContent)
+                                  if (previewBlocks.length === 0) {
+                                    return (
+                                      <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--cms-text-muted, #94a3b8)' }}>
+                                        <p style={{ fontSize: '15px', fontWeight: 500 }}>No article content to preview yet.</p>
+                                        <p style={{ fontSize: '13px' }}>Switch back to the editor to write paragraphs and insert images.</p>
+                                      </div>
+                                    )
+                                  }
+                                  return previewBlocks.map((block, idx) => {
+                                    // 1. Skip duplicate title if at start of content
+                                    if (idx === 0) {
+                                      const cleanP = block.replace(/^<[^>]+>/g, '').replace(/<\/[^>]+>$/g, '').replace(/^#+\s*/, '').trim().toLowerCase()
+                                      if (cleanP === editorTitle.trim().toLowerCase()) return null
+                                    }
+                                    // 2. Skip first image if identical to editorCoverImage
+                                    if ((idx === 0 || idx === 1) && editorCoverImage) {
+                                      if (block.includes(editorCoverImage)) return null
+                                    }
+                                    return renderMarkdownToReact(block, `full-prev-${idx}`)
+                                  })
+                                })()}
+                              </article>
+
+                              {/* Right Sidebar: On This Page */}
+                              <aside className="cms-preview-sidebar">
+                                <div className="cms-preview-toc-box">
+                                  <div className="cms-preview-toc-title">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                      <line x1="3" y1="6" x2="21" y2="6" />
+                                      <line x1="3" y1="12" x2="15" y2="12" />
+                                      <line x1="3" y1="18" x2="18" y2="18" />
+                                    </svg>
+                                    <span>On This Page</span>
+                                  </div>
+                                  <ul className="cms-preview-toc-list">
+                                    {(() => {
+                                      const blocks = splitContentIntoBlocks(editorContent)
+                                      const headings: { id: string; text: string; num: number }[] = []
+                                      let counter = 1
+                                      const seenIds = new Set<string>()
+                                      blocks.forEach((line, idx) => {
+                                        const h = getHeadingMatch(line, idx)
+                                        if (h && h.text.length > 2 && h.text.toLowerCase() !== editorTitle.toLowerCase()) {
+                                          let finalId = h.id
+                                          if (seenIds.has(finalId)) finalId = `${finalId}-${idx}`
+                                          seenIds.add(finalId)
+                                          headings.push({ id: finalId, text: h.text, num: counter++ })
+                                        }
+                                      })
+                                      if (headings.length === 0) {
+                                        return (
+                                          <li style={{ fontSize: '12px', color: 'var(--cms-text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                                            No section headings detected yet.
+                                          </li>
+                                        )
+                                      }
+                                      return headings.map((h) => (
+                                        <li key={h.id}>
+                                          <a
+                                            href={`#${h.id}`}
+                                            className="cms-preview-toc-link"
+                                            onClick={(e) => {
+                                              e.preventDefault()
+                                              const el = document.getElementById(h.id)
+                                              if (el) el.scrollIntoView({ behavior: 'smooth' })
+                                            }}
+                                          >
+                                            <span className="cms-preview-toc-num">{h.num}</span>
+                                            <span>{h.text}</span>
+                                          </a>
+                                        </li>
+                                      ))
+                                    })()}
+                                  </ul>
+                                </div>
+
+                                {/* Simulated Guidance Box */}
+                                <div style={{
+                                  marginTop: '20px',
+                                  padding: '20px',
+                                  borderRadius: '16px',
+                                  background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(15,23,42,0.04) 100%)',
+                                  border: '1px solid var(--cms-border, #e2e8f0)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '10px'
+                                }}>
+                                  <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#2563eb' }}>
+                                    Equipment Guidance
+                                  </span>
+                                  <h4 style={{ fontSize: '14px', fontWeight: 750, color: 'var(--cms-text, #0f172a)', margin: 0 }}>
+                                    Need Machinery Advice?
+                                  </h4>
+                                  <p style={{ fontSize: '12px', color: 'var(--cms-text-secondary, #64748b)', margin: 0, lineHeight: 1.5 }}>
+                                    Connect with our technical team for prompt answers, parts availability, or jobsite recommendations.
+                                  </p>
+                                </div>
+                              </aside>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="cms-rafvex-editor-grid">
                     {/* Left Main Column */}
                     <div className="cms-editor-main-col">
                       {/* Card 1: Article Title & Slug (Matches Screenshot 2 & 5) */}
@@ -5408,36 +5974,76 @@ export default function AdminDashboard() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <label className="cms-editor-eyebrow" style={{ margin: 0 }}>Article Content</label>
                             <span className="cms-wysiwyg-badge">
-                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : editorMode === 'code' ? 'Markdown Source' : 'Live Reader Preview'}
+                              {editorMode === 'visual' ? 'Rich WYSIWYG & Media' : 'Markdown Source'}
                             </span>
                           </div>
 
                           {/* Mode Switcher Buttons */}
-                          <div className="cms-raf-mode-switcher">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
                               type="button"
-                              className={`cms-raf-mode-btn ${editorMode === 'visual' ? 'active' : ''}`}
-                              onClick={() => setEditorMode('visual')}
-                              title="Visual WYSIWYG: Fluid writing with inline media, formatting ribbon, and drag & drop"
+                              onClick={async () => {
+                                try {
+                                  const clip = await navigator.clipboard.readText()
+                                  if (clip && clip.trim()) {
+                                    await handleSmartBlogImport(clip)
+                                  } else {
+                                    const text = prompt('Paste your blog content here (with miniexcavator links, title, images):')
+                                    if (text) await handleSmartBlogImport(text)
+                                  }
+                                } catch {
+                                  const text = prompt('Paste your blog content here (with miniexcavator links, title, images):')
+                                  if (text) await handleSmartBlogImport(text)
+                                }
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '6px 12px',
+                                borderRadius: '10px',
+                                fontSize: '12px',
+                                fontWeight: 650,
+                                background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+                                color: '#ffffff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.25)',
+                              }}
+                              title="Auto-detect blog with miniexcavator links: extracts title, cover image, and formats photos with captions"
                             >
-                              Visual (WYSIWYG)
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+                              </svg>
+                              <span>Smart Import Blog</span>
                             </button>
-                            <button
-                              type="button"
-                              className={`cms-raf-mode-btn ${editorMode === 'code' ? 'active' : ''}`}
-                              onClick={() => setEditorMode('code')}
-                              title="Raw Code: Direct markdown or HTML editing"
-                            >
-                              Code (Markdown)
-                            </button>
-                            <button
-                              type="button"
-                              className={`cms-raf-mode-btn ${editorMode === 'preview' ? 'active' : ''}`}
-                              onClick={() => setEditorMode('preview')}
-                              title="Live Reader Preview: Preview how this article looks to visitors"
-                            >
-                              Preview
-                            </button>
+
+                            <div className="cms-raf-mode-switcher">
+                              <button
+                                type="button"
+                                className={`cms-raf-mode-btn ${editorMode === 'visual' ? 'active' : ''}`}
+                                onClick={() => setEditorMode('visual')}
+                                title="Visual WYSIWYG: Fluid writing with inline media, formatting ribbon, and drag & drop"
+                              >
+                                Visual (WYSIWYG)
+                              </button>
+                              <button
+                                type="button"
+                                className={`cms-raf-mode-btn ${editorMode === 'code' ? 'active' : ''}`}
+                                onClick={() => setEditorMode('code')}
+                                title="Raw Code: Direct markdown or HTML editing"
+                              >
+                                Code (Markdown)
+                              </button>
+                              <button
+                                type="button"
+                                className={`cms-raf-mode-btn ${(editorMode as string) === 'preview' ? 'active' : ''}`}
+                                onClick={() => setEditorMode('preview')}
+                                title="Live Reader Preview: Preview how this article looks to visitors"
+                              >
+                                Preview
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -5461,7 +6067,25 @@ export default function AdminDashboard() {
                                 size: m.size
                               }))}
                               onMediaUploaded={(newItem: any) => {
-                                setMediaList((prev: any) => [newItem, ...prev])
+                                setMediaList((prev: any) => {
+                                  const updated = [newItem, ...prev]
+                                  void writeSharedContent('media-library', updated)
+                                  return updated
+                                })
+                              }}
+                              onAutoExtractTitle={(title) => {
+                                setEditorTitle(title)
+                                if (!editingArticle) {
+                                  setEditorSlug(title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+                                }
+                                showToast(`Auto-detected Article Title: "${title}"`, 'success')
+                              }}
+                              onAutoExtractCoverImage={(url, alt) => {
+                                setEditorCoverImage(url)
+                                if (alt) {
+                                  setEditorCoverAlt(alt)
+                                }
+                                showToast('Auto-filled Featured Cover Image from first photo!', 'success')
                               }}
                             />
                           </div>
@@ -5494,31 +6118,38 @@ export default function AdminDashboard() {
                               }}
                               onPaste={async (e) => {
                                 const items = e.clipboardData?.items
-                                if (!items) return
-                                for (let i = 0; i < items.length; i++) {
-                                  if (items[i].type.startsWith('image/')) {
-                                    const file = items[i].getAsFile()
-                                    if (file) {
-                                      e.preventDefault()
-                                      const reader = new FileReader()
-                                      reader.onload = () => {
-                                        const img = new Image()
-                                        img.onload = () => {
-                                          const canvas = document.createElement('canvas')
-                                          canvas.width = img.width
-                                          canvas.height = img.height
-                                          const ctx = canvas.getContext('2d')
-                                          ctx?.drawImage(img, 0, 0)
-                                          const webpUrl = canvas.toDataURL('image/webp', 0.88)
-                                          insertMediaAtSavedCursor(`\n\n![Pasted Image](${webpUrl})\n\n`)
-                                          showToast('Image pasted and converted to WebP.', 'success')
+                                if (items) {
+                                  for (let i = 0; i < items.length; i++) {
+                                    if (items[i].type.startsWith('image/')) {
+                                      const file = items[i].getAsFile()
+                                      if (file) {
+                                        e.preventDefault()
+                                        const reader = new FileReader()
+                                        reader.onload = () => {
+                                          const img = new Image()
+                                          img.onload = () => {
+                                            const canvas = document.createElement('canvas')
+                                            canvas.width = img.width
+                                            canvas.height = img.height
+                                            const ctx = canvas.getContext('2d')
+                                            ctx?.drawImage(img, 0, 0)
+                                            const webpUrl = canvas.toDataURL('image/webp', 0.88)
+                                            insertMediaAtSavedCursor(`\n\n![Pasted Image](${webpUrl})\n\n`)
+                                            showToast('Image pasted and converted to WebP.', 'success')
+                                          }
+                                          img.src = reader.result as string
                                         }
-                                        img.src = reader.result as string
+                                        reader.readAsDataURL(file)
+                                        return
                                       }
-                                      reader.readAsDataURL(file)
-                                      return
                                     }
                                   }
+                                }
+
+                                const text = e.clipboardData?.getData('text/plain') || ''
+                                if (text && (/img\.miniexcavator\.org/i.test(text) || (/^(?:#+\s|<h[1-3])/im.test(text) && /\.(webp|png|jpe?g)/i.test(text)))) {
+                                  e.preventDefault()
+                                  await handleSmartBlogImport(text)
                                 }
                               }}
                               onDrop={async (e) => {
@@ -5551,26 +6182,6 @@ export default function AdminDashboard() {
                           </div>
                         )}
 
-                        {editorMode === 'preview' && (
-                          <div className="cms-article-live-preview-box" style={{ padding: '28px', background: 'var(--cms-card-bg, #ffffff)', minHeight: '440px' }}>
-                            <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--cms-border, #e2e8f0)', paddingBottom: '16px' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#dc2626' }}>
-                                {editorCategory || 'Jobsite Productivity'}
-                              </span>
-                              <h2 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--cms-text, #0f172a)', margin: '8px 0' }}>
-                                {editorTitle || 'Untitled Editorial Post'}
-                              </h2>
-                              {editorExcerpt && (
-                                <p style={{ fontSize: '15px', color: 'var(--cms-text-muted, #64748b)', fontStyle: 'italic', margin: 0 }}>
-                                  {editorExcerpt}
-                                </p>
-                              )}
-                            </div>
-                            <div className="raf-article-prose" style={{ lineHeight: 1.85, color: 'var(--cms-text, #334155)' }}>
-                              {renderMarkdownToReact(editorContent, 'editor-live-preview')}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -6019,6 +6630,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   </div>
+                )}
 
                   {/* Internal / External Link Picker Modal */}
                   {linkModalOpen && (

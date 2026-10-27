@@ -511,6 +511,7 @@ a.footer-contact-value:hover {
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+  padding-right: 64px;
 }
 
 .footer-bottom-links a {

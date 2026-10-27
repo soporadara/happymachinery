@@ -38,7 +38,7 @@ test('1. V900Showcase.css contains full dark mode theme coverage for Engine & Tr
   assert.ok(css.includes('.app-shell.dark .v900-pointer-badge'), 'Pointer badges must have dark mode override')
 })
 
-test('2. CmsLogin.tsx has responsive Google SSO button with no click-blocking overlay', () => {
+test('2. CmsLogin.tsx has responsive Google SSO button with no click-blocking overlay and protects public security', () => {
   const loginTsxPath = path.join(projectRoot, 'src/pages/CmsLogin.tsx')
   assert.ok(fs.existsSync(loginTsxPath), 'CmsLogin.tsx must exist')
   const content = fs.readFileSync(loginTsxPath, 'utf8')
@@ -50,10 +50,9 @@ test('2. CmsLogin.tsx has responsive Google SSO button with no click-blocking ov
   // Verify the invisible overlay is removed
   assert.ok(!content.includes('id="google-signin-btn-slot"'), 'Must remove click-blocking google-signin-btn-slot')
 
-  // Verify Google SSO fallback modal is present
-  assert.ok(content.includes('showGoogleModal'), 'Must have showGoogleModal state')
-  assert.ok(content.includes('Google Single Sign-On'), 'Must render Google SSO modal title')
-  assert.ok(content.includes('soporadara@kiuq.com'), 'Must support 1-click select for soporadara@kiuq.com')
+  // Security: Ensure public 1-click bypass modal is eradicated and administrator email is not exposed in public
+  assert.ok(!content.includes('cms-quick-account-btn'), 'Must not expose 1-click quick account button in public')
+  assert.ok(!content.includes('showGoogleModal'), 'Must not display insecure Google SSO bypass modal')
 })
 
 test('3. Default admin user is pre-linked to soporadara@kiuq.com', () => {

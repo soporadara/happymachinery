@@ -45,7 +45,90 @@ export default function ImageNodeView({
 
   const alignment = node.attrs.alignment || 'center';
   const caption = node.attrs.caption || '';
+  const alt = node.attrs.alt || '';
+  const href = node.attrs.href || '';
+
+  // Local state with refs to avoid cursor jumping to end on keystrokes
+  const [localCaption, setLocalCaption] = useState(caption);
+  const lastSyncedCaptionRef = useRef(caption);
+  const captionInputRef = useRef<HTMLInputElement>(null);
   const [showCaptionInput, setShowCaptionInput] = useState(Boolean(caption));
+
+  const [localAlt, setLocalAlt] = useState(alt);
+  const lastSyncedAltRef = useRef(alt);
+  const altInputRef = useRef<HTMLInputElement>(null);
+  const [showAltInput, setShowAltInput] = useState(Boolean(alt));
+
+  const [localHref, setLocalHref] = useState(href);
+  const lastSyncedHrefRef = useRef(href);
+  const hrefInputRef = useRef<HTMLInputElement>(null);
+  const [showLinkInput, setShowLinkInput] = useState(Boolean(href));
+
+  // Sync when node attrs change externally
+  useEffect(() => {
+    if (node.attrs.caption !== lastSyncedCaptionRef.current) {
+      setLocalCaption(node.attrs.caption || '');
+      lastSyncedCaptionRef.current = node.attrs.caption || '';
+    }
+  }, [node.attrs.caption]);
+
+  useEffect(() => {
+    if (node.attrs.alt !== lastSyncedAltRef.current) {
+      setLocalAlt(node.attrs.alt || '');
+      lastSyncedAltRef.current = node.attrs.alt || '';
+    }
+  }, [node.attrs.alt]);
+
+  useEffect(() => {
+    if (node.attrs.href !== lastSyncedHrefRef.current) {
+      setLocalHref(node.attrs.href || '');
+      lastSyncedHrefRef.current = node.attrs.href || '';
+      if (node.attrs.href) setShowLinkInput(true);
+    }
+  }, [node.attrs.href]);
+
+  // Cursor-preserving handlers
+  const handleCaptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setLocalCaption(val);
+    lastSyncedCaptionRef.current = val;
+    updateAttributes({ caption: val });
+
+    requestAnimationFrame(() => {
+      if (captionInputRef.current && cursor !== null) {
+        captionInputRef.current.setSelectionRange(cursor, cursor);
+      }
+    });
+  };
+
+  const handleAltChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setLocalAlt(val);
+    lastSyncedAltRef.current = val;
+    updateAttributes({ alt: val });
+
+    requestAnimationFrame(() => {
+      if (altInputRef.current && cursor !== null) {
+        altInputRef.current.setSelectionRange(cursor, cursor);
+      }
+    });
+  };
+
+  const handleHrefChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setLocalHref(val);
+    lastSyncedHrefRef.current = val;
+    updateAttributes({ href: val });
+
+    requestAnimationFrame(() => {
+      if (hrefInputRef.current && cursor !== null) {
+        hrefInputRef.current.setSelectionRange(cursor, cursor);
+      }
+    });
+  };
 
   // Determine if image can move up / down
   const getMoveStates = () => {
@@ -359,6 +442,43 @@ export default function ImageNodeView({
             </button>
           </div>
 
+          {/* Alt SEO Button */}
+          <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setShowAltInput(true);
+                setTimeout(() => altInputRef.current?.focus(), 50);
+              }}
+              title="Edit Image Alt Text for SEO & Accessibility"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                localAlt ? 'bg-red-900/60 text-red-200 border border-red-500/50' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              <span>Alt SEO</span>
+            </button>
+          </div>
+
+          {/* Link Button */}
+          <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setShowLinkInput(prev => !prev);
+                setTimeout(() => hrefInputRef.current?.focus(), 50);
+              }}
+              title="Add or edit link on this image (internal or external URL)"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                localHref ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              <LinkIcon size={12} className={localHref ? 'text-white' : 'text-blue-400'} />
+              <span>{localHref ? 'Linked' : 'Link'}</span>
+            </button>
+          </div>
+
           {/* Replace Button */}
           <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
             <button
@@ -413,6 +533,17 @@ export default function ImageNodeView({
             <span className="text-[11px] font-semibold tracking-wide">Drag Image</span>
           </div>
 
+          {/* Floating Link Badge on Image */}
+          {localHref && (
+            <div
+              title={`Image links to: ${localHref}`}
+              className="absolute top-3 right-3 z-20 flex items-center gap-1.5 max-w-[220px] px-2.5 py-1 rounded-full bg-blue-600/90 text-white text-[11px] font-medium backdrop-blur-md shadow-lg border border-blue-400/40 select-none pointer-events-none animate-in fade-in duration-150"
+            >
+              <LinkIcon size={11} className="shrink-0 text-white" />
+              <span className="truncate">{localHref}</span>
+            </div>
+          )}
+
           <img
             src={node.attrs.src}
             alt={node.attrs.alt || ''}
@@ -428,37 +559,134 @@ export default function ImageNodeView({
           </div>
         </div>
 
-        {/* Caption Field */}
-        <div className="mt-2 text-center">
+        {/* Caption, Alt & Link Metadata Bar */}
+        <div className="mt-2.5 max-w-xl mx-auto space-y-1.5">
+          {/* Caption Input with cursor preservation */}
           {showCaptionInput ? (
-            <div className="flex items-center justify-center gap-2 max-w-lg mx-auto">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 shadow-xs transition-colors">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 shrink-0">Caption:</span>
               <input
+                ref={captionInputRef}
                 type="text"
-                value={caption}
-                onChange={(e) => updateAttributes({ caption: e.target.value })}
+                value={localCaption}
+                onChange={handleCaptionChange}
                 placeholder="Write caption or attribution (e.g. Photo courtesy of TechLab)..."
-                className="w-full text-center text-xs text-slate-600 dark:text-slate-400 italic bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-red-500 focus:outline-none py-1 transition-colors"
+                className="w-full text-xs text-slate-700 dark:text-slate-300 italic bg-transparent focus:outline-none py-0.5"
               />
+              {localCaption && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalCaption('');
+                    lastSyncedCaptionRef.current = '';
+                    updateAttributes({ caption: '' });
+                  }}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                  title="Clear caption"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-center">
               <button
                 type="button"
                 onClick={() => {
-                  updateAttributes({ caption: '' });
-                  setShowCaptionInput(false);
+                  setShowCaptionInput(true);
+                  setTimeout(() => captionInputRef.current?.focus(), 50);
                 }}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs p-1"
-                title="Remove caption"
+                className="text-[11px] text-slate-400 hover:text-red-600 dark:hover:text-red-400 italic opacity-0 group-hover/img:opacity-100 transition-opacity"
               >
-                <X size={12} />
+                + Add image caption / credit
               </button>
             </div>
+          )}
+
+          {/* Alt Text (SEO & Accessibility) with cursor preservation */}
+          {showAltInput ? (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 shadow-xs transition-colors">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-red-500 shrink-0">Alt SEO:</span>
+              <input
+                ref={altInputRef}
+                type="text"
+                value={localAlt}
+                onChange={handleAltChange}
+                placeholder="Describe image for search engines & accessibility..."
+                className="w-full text-xs text-slate-700 dark:text-slate-300 bg-transparent focus:outline-none py-0.5"
+              />
+              {localAlt && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalAlt('');
+                    lastSyncedAltRef.current = '';
+                    updateAttributes({ alt: '' });
+                  }}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                  title="Clear alt text"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowCaptionInput(true)}
-              className="text-[11px] text-slate-400 hover:text-red-600 dark:hover:text-red-400 italic opacity-0 group-hover/img:opacity-100 transition-opacity"
-            >
-              + Add image caption / credit
-            </button>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAltInput(true);
+                  setTimeout(() => altInputRef.current?.focus(), 50);
+                }}
+                className="text-[10px] text-slate-400 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover/img:opacity-100 transition-opacity"
+              >
+                + Add Alt text (SEO)
+              </button>
+            </div>
+          )}
+
+          {/* Image Destination Link (Internal or External) with cursor preservation */}
+          {showLinkInput ? (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/70 shadow-xs transition-colors">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600 dark:text-blue-400 shrink-0 flex items-center gap-1">
+                <LinkIcon size={11} /> Link:
+              </span>
+              <input
+                ref={hrefInputRef}
+                type="text"
+                value={localHref}
+                onChange={handleHrefChange}
+                placeholder="Internal (/store, /contact) or External (https://...)..."
+                className="w-full text-xs text-blue-900 dark:text-blue-200 bg-transparent focus:outline-none py-0.5 placeholder:text-blue-400/60 dark:placeholder:text-blue-600"
+              />
+              {localHref && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalHref('');
+                    lastSyncedHrefRef.current = '';
+                    updateAttributes({ href: '' });
+                  }}
+                  className="text-blue-400 hover:text-blue-600 dark:hover:text-blue-200 p-0.5"
+                  title="Remove link"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLinkInput(true);
+                  setTimeout(() => hrefInputRef.current?.focus(), 50);
+                }}
+                className="text-[10px] text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 opacity-0 group-hover/img:opacity-100 transition-opacity"
+              >
+                + Add image link (URL)
+              </button>
+            </div>
           )}
         </div>
       </div>

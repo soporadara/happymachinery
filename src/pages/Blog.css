@@ -16,7 +16,7 @@
   background: #ffffff;
   color: #0f172a;
   min-height: 100vh;
-  padding: 96px 0 60px 0;
+  padding: 108px 0 60px 0;
   transition: background 220ms ease, color 220ms ease;
 }
 
@@ -40,7 +40,7 @@ body.dark .raf-article-view-wrapper {
 @media (max-width: 768px) {
   .raf-blog-index-wrapper,
   .raf-article-view-wrapper {
-    padding: 88px 0 60px 0;
+    padding: 96px 0 60px 0;
   }
 }
 
@@ -82,13 +82,14 @@ body.dark .raf-article-view-wrapper {
 @media (min-width: 1024px) {
   .raf-article-view-wrapper {
     min-height: 100vh;
-    padding-top: 104px;
+    padding-top: 116px;
     padding-bottom: 60px;
   }
 
   .raf-article-view-wrapper .raf-article-container {
     max-width: 100%;
     margin: 0 auto;
+    padding: 0 clamp(24px, 3.5vw, 64px);
   }
 
   .raf-article-view-wrapper .raf-breadcrumb {
@@ -103,17 +104,19 @@ body.dark .raf-article-view-wrapper {
     align-items: start;
   }
 
-  /* Left Side Article Column — Scrollable like right side */
+  /* Left Side Article Column — Large Scrollable Screen like before */
   .raf-article-view-wrapper .raf-primary-column {
     min-width: 0;
     max-width: 100%;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 140px);
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior-y: auto;
     overscroll-behavior-x: contain;
-    padding-right: 16px;
-    padding-bottom: 36px;
+    padding-right: 18px;
+    padding-bottom: 48px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: #94a3b8 transparent;
   }
@@ -150,7 +153,7 @@ body.dark .raf-article-view-wrapper {
     position: sticky;
     top: 96px;
     align-self: flex-start;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 140px);
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior-y: auto;
@@ -160,6 +163,8 @@ body.dark .raf-article-view-wrapper {
     display: flex;
     flex-direction: column;
     gap: 24px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;
   }
@@ -425,22 +430,27 @@ html.dark .raf-article-excerpt-bar {
   min-width: 0;
 }
 
-/* Hero Cover Image (16:9 Landscape - 1920x1080) */
+/* Hero Cover Image (Strict 16:9 Landscape - 1920x1080 Equivalent) */
 .raf-hero-image-box {
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: 640px;
   border-radius: 16px;
   overflow: hidden;
-  margin-bottom: 28px;
+  margin-bottom: 26px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
   background: #0f172a;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .raf-hero-image {
   width: 100%;
   height: 100%;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
+  object-position: center;
   display: block;
 }
 
@@ -462,13 +472,29 @@ html.dark .raf-article-excerpt-bar {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  color: #ffffff;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 850;
-  font-size: 1.1rem;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.app-shell.dark .raf-author-avatar,
+html.dark .raf-author-avatar {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.raf-author-favicon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 
 .raf-author-details {
@@ -507,70 +533,177 @@ html.dark .raf-article-excerpt-bar {
   margin-bottom: 22px;
 }
 
-.raf-body-content h2.blog-body-h2 {
-  font-size: 1.7rem;
+.raf-body-content h2.blog-body-h2,
+.raf-body-content h2 {
+  font-size: 1.75rem;
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.02em;
   margin: 36px 0 16px 0;
+  line-height: 1.3;
 }
 
-.app-shell.dark .raf-body-content h2.blog-body-h2 {
+.app-shell.dark .raf-body-content h2.blog-body-h2,
+.app-shell.dark .raf-body-content h2,
+html.dark .raf-body-content h2 {
   color: #f8fafc;
 }
 
-.raf-body-content h3.blog-body-h3 {
+.raf-body-content h3.blog-body-h3,
+.raf-body-content h3 {
   font-size: 1.35rem;
   font-weight: 750;
   color: #0f172a;
   margin: 28px 0 12px 0;
+  line-height: 1.35;
 }
 
-.app-shell.dark .raf-body-content h3.blog-body-h3 {
+.app-shell.dark .raf-body-content h3.blog-body-h3,
+.app-shell.dark .raf-body-content h3,
+html.dark .raf-body-content h3 {
   color: #f1f5f9;
 }
 
-.raf-body-content a.blog-body-link {
+.raf-body-content a.blog-body-link,
+.raf-body-content a {
   color: #0066ff;
   text-decoration: underline;
   text-underline-offset: 3px;
   font-weight: 600;
+  transition: color 0.15s ease;
 }
 
-.raf-body-content a.blog-body-link:hover {
+.raf-body-content a.blog-body-link:hover,
+.raf-body-content a:hover {
   color: #1d4ed8;
 }
 
-.blog-body-image-container {
-  margin: 28px 0;
-  border-radius: 12px;
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
+.app-shell.dark .raf-body-content a,
+html.dark .raf-body-content a {
+  color: #60a5fa;
+}
+
+.app-shell.dark .raf-body-content a:hover,
+html.dark .raf-body-content a:hover {
+  color: #93c5fd;
+}
+
+.raf-body-content a.blog-body-image-link {
+  text-decoration: none !important;
+}
+
+.blog-body-figure,
+.article-image-figure,
+figure.article-image-figure {
+  margin: 32px auto;
   width: 100%;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  max-width: 100%;
+  display: block;
+}
+
+.blog-body-figure.blog-align-left,
+.article-image-figure.text-left {
+  text-align: left;
+  margin-right: auto;
+}
+
+.blog-body-figure.blog-align-center,
+.article-image-figure.text-center {
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.blog-body-figure.blog-align-right,
+.article-image-figure.text-right {
+  text-align: right;
+  margin-left: auto;
+}
+
+.blog-body-figure.blog-align-full,
+.article-image-figure.w-full {
+  width: 100%;
+  max-width: 100%;
+}
+
+.blog-body-image-box,
+.blog-body-image-container {
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  width: 100%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-shell.dark .blog-body-image-box,
+.app-shell.dark .blog-body-image-container,
+html.dark .blog-body-image-box,
+html.dark .blog-body-image-container {
   background: #0f172a;
+}
+
+.blog-body-image-box.blog-body-image-clickable {
+  cursor: pointer;
+}
+
+.blog-body-image-box.blog-body-image-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.blog-body-image-link {
+  display: block;
+  width: 100%;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .blog-body-image {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  max-height: 560px;
+  object-fit: contain;
   display: block;
+  margin: 0 auto;
+  border-radius: 16px;
+  transition: transform 0.25s ease, opacity 0.2s ease;
 }
 
-.blog-body-image-caption {
+.blog-body-image-link:hover .blog-body-image {
+  opacity: 0.96;
+}
+
+.blog-body-image-caption,
+figcaption.blog-body-image-caption,
+.raf-body-content figcaption {
   display: block;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
   color: #64748b;
   text-align: center;
-  padding: 8px 12px;
-  background: #f8fafc;
+  padding: 10px 16px 4px 16px;
+  margin-top: 6px;
+  font-style: italic;
+  font-weight: 500;
 }
 
 .app-shell.dark .blog-body-image-caption,
-html.dark .blog-body-image-caption {
-  background: #0a1728;
+html.dark .blog-body-image-caption,
+.app-shell.dark .raf-body-content figcaption,
+html.dark .raf-body-content figcaption {
   color: #94a3b8;
+}
+
+.blog-body-html-block img,
+.raf-body-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 14px;
 }
 
 /* Embedded Jobsite Video Player */
@@ -2933,10 +3066,19 @@ html.dark .raf-no-results-box p {
 }
 
 /* ==============================================================================
-   7. Section Anchor Headers & Jump Links
+   7. Section Anchor Headings, Scroll Offsets & Jump Links
    ============================================================================== */
-.blog-section-anchor {
-  scroll-margin-top: 24px;
+.blog-section-anchor,
+.raf-body-content h1,
+.raf-body-content h2,
+.raf-body-content h3,
+.raf-body-content h4,
+.raf-body-content h5,
+.raf-body-content h6,
+.raf-takeaways-card,
+.raf-comments-section,
+.raf-suggested-section {
+  scroll-margin-top: 130px;
   position: relative;
 }
 
@@ -2944,25 +3086,9 @@ html.dark .raf-no-results-box p {
   display: inline;
 }
 
+/* Hide # anchor symbols behind headings completely */
 .blog-heading-anchor-link {
-  display: inline-block;
-  margin-left: 8px;
-  color: #94a3b8;
-  text-decoration: none;
-  font-weight: 700;
-  opacity: 0;
-  transition: opacity 150ms ease, color 150ms ease;
-  font-size: 0.85em;
-  vertical-align: middle;
-}
-
-.blog-section-anchor:hover .blog-heading-anchor-link {
-  opacity: 0.7;
-}
-
-.blog-heading-anchor-link:hover {
-  opacity: 1 !important;
-  color: #0066ff !important;
+  display: none !important;
 }
 
 /* Inline Takeaway Callout Box */

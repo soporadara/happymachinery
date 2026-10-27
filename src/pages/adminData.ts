@@ -9,11 +9,16 @@ export interface BlogPost {
   content: string[]
   keyTakeaways: string[]
   image: string
+  imageAlt?: string
+  alt?: string
   date: string
   readTime: string
   author: string
   status?: 'Published' | 'Draft'
   content_raw?: string
+  seoTitle?: string
+  metaDescription?: string
+  tags?: string[]
 }
 
 export interface MediaItem {
@@ -311,6 +316,12 @@ export const DEFAULT_POSTS: BlogPost[] = [
     slug: 'maximizing-skid-steer-efficiency-and-safety-on-residential-jobsites',
     category: 'Jobsite Productivity',
     excerpt: 'Key strategies and essential attachments to maximize efficiency, protect turf, and boost operator safety when operating compact skid steers on tight residential lots.',
+    seoTitle: 'Maximizing Skid Steer Efficiency & Safety | Happy Machinery',
+    metaDescription: 'Discover expert strategies and attachments to maximize compact skid steer productivity, protect residential turf, and enhance operator sightlines.',
+    image: '/images/why-choose-v900-jobsite.png',
+    imageAlt: 'Compact stand-on mini skid steer loader operating with attachments on residential lawn',
+    alt: 'Compact stand-on mini skid steer loader operating with attachments on residential lawn',
+    tags: ['Skid Steer', 'Residential Jobsites', 'Turf Protection', 'Attachments', 'Operator Safety'],
     content: [
       'Operating compact skid steers on residential job sites requires balancing high performance with strict noise, space, and turf protection requirements.',
       '## 1. Navigating Tight Access Points',
@@ -326,7 +337,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Match auxiliary hydraulic pressure (12.7 GPM) to demanding attachment tasks',
       'Utilize rubber tracks to minimize turf displacement and ground disturbance'
     ],
-    image: '/images/why-choose-v900-jobsite.png',
     date: 'August 15, 2026',
     readTime: '5 min read',
     author: 'Happy Machinery'
@@ -337,6 +347,12 @@ export const DEFAULT_POSTS: BlogPost[] = [
     slug: 'wheel-loader-pallet-forks-vs-buckets-for-material-handling',
     category: 'Jobsite Productivity',
     excerpt: 'Compare wheel loader pallet forks vs buckets to choose the right attachment for pallets, lumber, gravel, soil, sand, debris, and more.',
+    seoTitle: 'Wheel Loader Pallet Forks vs Buckets Guide | Happy Machinery',
+    metaDescription: 'Choosing between wheel loader pallet forks and buckets? Compare payload stability, cycle times, and attachment versatility for construction material handling.',
+    image: '/images/fork-red-jobsite.png',
+    imageAlt: 'Heavy-duty crimson red wheel loader equipped with pallet fork attachment lifting cargo',
+    alt: 'Heavy-duty crimson red wheel loader equipped with pallet fork attachment lifting cargo',
+    tags: ['Wheel Loader', 'Pallet Forks', 'Loader Buckets', 'Material Handling', 'Attachments'],
     content: [
       'Selecting between pallet forks and standard utility buckets depends on payload geometry, material density, and site placement goals.',
       '## Pallet Forks for Precision Placement',
@@ -349,7 +365,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Utility buckets optimize high-volume loose material loading',
       'Universal quick-attach mechanisms enable 60-second attachment swaps'
     ],
-    image: '/images/fork-red-jobsite.png',
     date: 'August 14, 2026',
     readTime: '5 min read',
     author: 'Happy Machinery'
@@ -360,6 +375,12 @@ export const DEFAULT_POSTS: BlogPost[] = [
     slug: 'can-a-compact-excavator-work-all-day',
     category: 'Maintenance & Service',
     excerpt: 'How to Maximize Compact Excavator Productivity on long work shifts.',
+    seoTitle: 'Can a Compact Excavator Work All Day? | Happy Machinery',
+    metaDescription: 'Can mini excavators handle full-day heavy digging? Learn thermal management, fuel planning, and maintenance intervals for reliable all-day excavator shifts.',
+    image: '/images/fork-blue-jobsite.png',
+    imageAlt: 'Compact mini excavator performing deep foundation digging during all-day operation',
+    alt: 'Compact mini excavator performing deep foundation digging during all-day operation',
+    tags: ['Mini Excavator', 'Shift Productivity', 'Thermal Management', 'Equipment Duty Cycle', 'Maintenance'],
     content: [
       'Modern diesel engine cooling systems and high-efficiency hydraulic pumps allow compact excavators to operate continuously through full 10-to-12 hour work shifts.',
       '## Engine Thermal & Hydraulic Cooling',
@@ -372,7 +393,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Ensure air filters and radiator screens stay free of fine site dust',
       'Perform mid-day grease passes on high-wear bucket linkage pins'
     ],
-    image: '/images/fork-blue-jobsite.png',
     date: 'July 25, 2026',
     readTime: '4 min read',
     author: 'Happy Machinery'
@@ -383,6 +403,12 @@ export const DEFAULT_POSTS: BlogPost[] = [
     slug: '7-essential-wheel-loader-bucket-capacity-tips-for-better-performance',
     category: 'Equipment Guide',
     excerpt: 'Discover wheel loader bucket capacity, bucket types, material density, loading limits, and 7 essential tips for safer, more efficient performance.',
+    seoTitle: '7 Wheel Loader Bucket Capacity Tips | Happy Machinery',
+    metaDescription: 'Calculate correct wheel loader bucket capacity. 7 expert tips on material density, tipping load margins, and matched sizing to maximize payload efficiency.',
+    image: '/images/why-choose-v900-jobsite.png',
+    imageAlt: 'Compact industrial wheel loader bucket loaded with construction aggregate',
+    alt: 'Compact industrial wheel loader bucket loaded with construction aggregate',
+    tags: ['Wheel Loader', 'Bucket Capacity', 'Payload Optimization', 'Tipping Load', 'Equipment Sizing'],
     content: [
       'Matching wheel loader bucket capacity to material density is vital for preventing hydraulic overload and optimizing cycle times on busy jobsites.',
       '## 1. Understand Heaped vs. Struck Capacity',
@@ -395,7 +421,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Never exceed machine rated operating capacity or tipping load limits',
       'Inspect bucket teeth and cutting edges weekly to preserve breakout force'
     ],
-    image: '/images/why-choose-v900-jobsite.png',
     date: 'August 11, 2026',
     readTime: '5 min read',
     author: 'Happy Machinery'
@@ -406,6 +431,12 @@ export const DEFAULT_POSTS: BlogPost[] = [
     slug: 'signs-your-forklift-needs-immediate-maintenance',
     category: 'Maintenance & Service',
     excerpt: 'Discover 5 critical forklift maintenance signs, including unusual noises, hydraulic leaks, warning lights, brake problems, and battery issues.',
+    seoTitle: 'Signs Your Forklift Needs Immediate Service | Happy Machinery',
+    metaDescription: 'Prevent forklift breakdowns and OSHA safety violations. Learn 5 critical warning signs that indicate your forklift requires immediate mechanical maintenance.',
+    image: '/images/loader-yellow.jpg',
+    imageAlt: 'Industrial warehouse forklift undergoing routine hydraulic mast inspection',
+    alt: 'Industrial warehouse forklift undergoing routine hydraulic mast inspection',
+    tags: ['Forklift Maintenance', 'Hydraulic Leaks', 'Workplace Safety', 'Fleet Inspection', 'Preventive Service'],
     content: [
       'Ignoring early warning signs in material handling equipment leads to catastrophic breakdown and unsafe warehouse operation.',
       '## 1. Hydraulic Fluid Leaks and Pressure Drops',
@@ -418,7 +449,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Inspect lift chains and mast roller bearings every 50 hours',
       'Keep daily operator inspection logs for compliance and safety'
     ],
-    image: '/images/loader-yellow.jpg',
     date: 'August 10, 2026',
     readTime: '4 min read',
     author: 'Happy Machinery'
@@ -426,8 +456,15 @@ export const DEFAULT_POSTS: BlogPost[] = [
   {
     id: 1,
     title: 'How to Choose the Right Mini Track Loader for Your Jobsite',
+    slug: 'how-to-choose-the-right-mini-track-loader-for-your-jobsite',
     category: 'Equipment Guide',
     excerpt: 'Operating weight, hydraulic flow, track contact length, and attachment compatibility are critical parameters to consider before purchasing.',
+    seoTitle: 'How to Choose the Right Mini Track Loader | Happy Machinery',
+    metaDescription: 'Buyer guide: compare mini track loader operating weight, auxiliary hydraulic flow, ground pressure, and attachment compatibility for your jobsite.',
+    image: '/images/why-choose-v900-jobsite.png',
+    imageAlt: 'Mini track loader navigating residential jobsite with auxiliary hydraulic attachment',
+    alt: 'Mini track loader navigating residential jobsite with auxiliary hydraulic attachment',
+    tags: ['Mini Track Loader', 'Buyer Guide', 'Hydraulic Flow', 'Ground Pressure', 'Compact Equipment'],
     content: [
       'When selecting a mini track loader for commercial or residential job sites, machine footprint and hydraulic output directly dictate job performance.',
       '## 1. Compact Width & Gate Access',
@@ -443,7 +480,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Verify auxiliary hydraulic flow (minimum 12 GPM for high-flow attachments)',
       'Ensure EPA / Stage V engine compliance for commercial worksite operations'
     ],
-    image: '/images/why-choose-v900-jobsite.png',
     date: 'July 18, 2026',
     readTime: '5 min read',
     author: 'Happy Machinery'
@@ -451,8 +487,15 @@ export const DEFAULT_POSTS: BlogPost[] = [
   {
     id: 2,
     title: 'Stand-On Track Loaders vs. Wheeled Skid Steers',
+    slug: 'stand-on-track-loaders-vs-wheeled-skid-steers',
     category: 'Equipment Comparison',
     excerpt: 'Understand ground pressure dynamics, grading capabilities, and track durability differences under residential and industrial soil conditions.',
+    seoTitle: 'Stand-On Track Loaders vs Wheeled Skid Steers | Happy Machinery',
+    metaDescription: 'Compare stand-on track loaders vs wheeled skid steers. Learn which delivers superior ground pressure, traction, turning agility, and turf preservation.',
+    image: '/images/fork-red-jobsite.png',
+    imageAlt: 'Side-by-side comparison of stand-on track loader and traditional wheeled skid steer',
+    alt: 'Side-by-side comparison of stand-on track loader and traditional wheeled skid steer',
+    tags: ['Track Loader vs Skid Steer', 'Ground Pressure', 'Traction', 'Turf Preservation', 'Machinery Comparison'],
     content: [
       'Ground pressure is a fundamental distinction between rubber track loaders and traditional wheeled skid steers. Track loaders distribute operating weight over a wider surface area, reducing turf damage by up to 60%.',
       '## 1. Continuous Traction',
@@ -467,7 +510,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Stand-on platforms offer superior 360° operator sightlines',
       'Universal Quick-Attach plates accept standard skid steer attachments'
     ],
-    image: '/images/fork-red-jobsite.png',
     date: 'July 12, 2026',
     readTime: '6 min read',
     author: 'Happy Machinery'
@@ -475,8 +517,15 @@ export const DEFAULT_POSTS: BlogPost[] = [
   {
     id: 3,
     title: 'Daily Preventive Maintenance Checklist for Track Loaders',
+    slug: 'daily-preventive-maintenance-checklist-for-track-loaders',
     category: 'Maintenance & Service',
     excerpt: 'Keep your machinery running through every shift. Essential checks for hydraulic fluid, track tension, and grease points that save thousands.',
+    seoTitle: 'Daily Track Loader Maintenance Checklist | Happy Machinery',
+    metaDescription: 'Daily preventative maintenance checklist for compact track loaders: inspect track tension, hydraulic fluid, engine filters, and grease points.',
+    image: '/images/fork-blue-jobsite.png',
+    imageAlt: 'Service technician performing daily lubrication and fluid checks on compact track loader',
+    alt: 'Service technician performing daily lubrication and fluid checks on compact track loader',
+    tags: ['Maintenance Checklist', 'Track Loader Care', 'Hydraulic Fluid', 'Grease Points', 'Preventive Service'],
     content: [
       'Preventive maintenance is the single most effective way to maximize machine lifespan and prevent costly jobsite downtime.',
       '## Daily Under-carriage Inspections',
@@ -492,7 +541,6 @@ export const DEFAULT_POSTS: BlogPost[] = [
       'Check hydraulic fluid level and seal integrity before every shift',
       'Grease loader arm pivot points every 10 operating hours'
     ],
-    image: '/images/fork-blue-jobsite.png',
     date: 'July 05, 2026',
     readTime: '4 min read',
     author: 'Happy Machinery'

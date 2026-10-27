@@ -7,13 +7,15 @@ import { getStoredSession } from '../data/cmsAuth'
 import { getBlogPostPath, getBlogPostSlug } from '../data/blogUrls'
 import { getRealBlogViews, recordRealBlogView, fetchRealBlogViewsFromServer } from '../data/blogViews'
 import './Blog.css'
+import {
+  isStandaloneHeading,
+  slugifyHeading,
+  getHeadingMatch,
+  splitContentIntoBlocks,
+  type HeadingMatch
+} from '../utils/editorContentHelper'
 
-export const slugifyHeading = (text: string): string => {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-}
+export { isStandaloneHeading, slugifyHeading, getHeadingMatch, splitContentIntoBlocks, type HeadingMatch }
 
 /**
  * Resolves a verified user profile avatar based on email address.
@@ -63,7 +65,7 @@ export const getUserProfileAvatar = (email?: string, name?: string): string => {
     return 'https://lightcyan-weasel-711536.hostingersite.com/storage/avatars/UNOQP8Qv0cfy6L3twxNormAHlv7UnrVPV0Xs9k1c.jpg'
   }
   if (cleanEmail === 'support@happymachinery.com') {
-    return '/images/favicon.webp'
+    return 'https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl'
   }
 
   // 4. Resolve via Unavatar (automatically searches Gravatar, Google, GitHub, and Firebase connected profiles)
@@ -72,73 +74,7 @@ export const getUserProfileAvatar = (email?: string, name?: string): string => {
 }
 
 
-export function isStandaloneHeading(line: string): boolean {
-  const trimmed = line.trim()
-  if (trimmed.length < 3 || trimmed.length > 75) return false
-  if (trimmed.includes('\n')) return false
-  if (
-    trimmed.startsWith('http') ||
-    trimmed.startsWith('[') ||
-    trimmed.startsWith('!') ||
-    trimmed.startsWith('-') ||
-    trimmed.startsWith('*') ||
-    trimmed.startsWith('•') ||
-    trimmed.startsWith('|') ||
-    trimmed.startsWith('>')
-  ) return false
-  if (
-    trimmed.toLowerCase().startsWith('key takeaway') ||
-    trimmed.toLowerCase().startsWith('note:') ||
-    trimmed.toLowerCase().startsWith('warning:') ||
-    trimmed.toLowerCase().startsWith('caution:')
-  ) return false
-  if (trimmed.endsWith(':') || trimmed.endsWith('.') || trimmed.endsWith(',') || trimmed.endsWith(';')) return false
-  return /^[A-Z0-9]/.test(trimmed)
-}
 
-export interface HeadingMatch {
-  level: number
-  text: string
-  id: string
-}
-
-export function getHeadingMatch(line: string, fallbackSuffix: number = 0): HeadingMatch | null {
-  const trimmed = line.trim()
-  if (!trimmed) return null
-
-  // 1. Markdown: # Heading, ## Heading, ### Heading, #### Heading
-  const md = trimmed.match(/^(#{1,6})\s+(.*)$/)
-  if (md) {
-    const text = md[2].trim()
-    return { level: md[1].length, text, id: slugifyHeading(text) || `section-${fallbackSuffix}` }
-  }
-
-  // 2. HTML: <h1>Heading</h1> or <h2 class="...">Heading</h2> etc.
-  const html = trimmed.match(/^<h([1-6])(?:\s+[^>]*)?>(.*?)<\/h\1>$/i)
-  if (html) {
-    const text = html[2].replace(/<[^>]+>/g, '').trim()
-    return { level: parseInt(html[1], 10), text, id: slugifyHeading(text) || `section-${fallbackSuffix}` }
-  }
-
-  // 3. Prefix markers: h1: Heading, h2: Heading etc.
-  const marker = trimmed.match(/^h([1-6]):\s+(.*)$/i)
-  if (marker) {
-    const text = marker[2].trim()
-    return { level: parseInt(marker[1], 10), text, id: slugifyHeading(text) || `section-${fallbackSuffix}` }
-  }
-
-  // 4. Numbered sections: "1. Heading Title..." or "1. Understand Heaped..."
-  if (/^\d+\.\s+[A-Z]/.test(trimmed) && trimmed.length <= 100 && !trimmed.includes('\n')) {
-    return { level: 2, text: trimmed, id: slugifyHeading(trimmed) || `section-${fallbackSuffix}` }
-  }
-
-  // 5. Standalone section titles in imported articles (e.g., "Purpose of Stabilizing Legs", "Conclusion", "Frequently Asked Questions")
-  if (isStandaloneHeading(trimmed)) {
-    return { level: 2, text: trimmed, id: slugifyHeading(trimmed) || `section-${fallbackSuffix}` }
-  }
-
-  return null
-}
 
 export function renderInlineMarkdown(text: string, keyPrefix: string): React.ReactNode {
   if (!text) return null
@@ -231,7 +167,7 @@ export function renderMarkdownToReact(text: string, key: string | number) {
   const line = text.trim()
   if (!line) return null
 
-  // Heading check with Anchor link ID & Clickable Anchor
+  // Heading check with Anchor link ID (for 'On This Page' table of contents)
   const heading = getHeadingMatch(line, typeof key === 'number' ? key : 0)
   if (heading) {
     const Tag = (heading.level === 1 ? 'h2' : heading.level === 2 ? 'h2' : heading.level === 3 ? 'h3' : 'h4') as 'h2' | 'h3' | 'h4'
@@ -242,32 +178,6 @@ export function renderMarkdownToReact(text: string, key: string | number) {
         className={`blog-body-${Tag} blog-section-anchor`}
       >
         <span className="blog-heading-text">{renderInlineMarkdown(heading.text, `${key}-ht`)}</span>
-        <a
-          href={`#${heading.id}`}
-          className="blog-heading-anchor-link"
-          title={`Link to section: ${heading.text}`}
-          aria-label={`Link to section: ${heading.text}`}
-          onClick={(e) => {
-            e.preventDefault()
-            const container = document.querySelector('.raf-primary-column')
-            const el = document.getElementById(heading.id)
-            if (container && el) {
-              const containerRect = container.getBoundingClientRect()
-              const targetRect = el.getBoundingClientRect()
-              const relativeTop = targetRect.top - containerRect.top + container.scrollTop - 20
-              container.scrollTo({ top: Math.max(0, relativeTop), behavior: 'smooth' })
-            } else if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
-            if (window.history.pushState) {
-              window.history.pushState(null, '', `#${heading.id}`)
-            } else {
-              window.location.hash = heading.id
-            }
-          }}
-        >
-          #
-        </a>
       </Tag>
     )
   }
@@ -373,26 +283,141 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     )
   }
 
-  // Raw Image URL Auto-detection
-  if (/^(https?:\/\/|\/images\/)[^\s]+$/i.test(line) && /\.(png|jpg|jpeg|webp|gif|svg)/i.test(line)) {
-    return (
-      <div key={key} className="blog-body-image-container">
-        <img src={line} alt="Jobsite Media" className="blog-body-image" />
-      </div>
-    )
+  // 1. Check for HTML Image or Figure block: <figure...><img...><figcaption>...</figcaption></figure> or <img ... /> or <p><img ...></p>
+  const hasHtmlImg = line.includes('<img');
+  const hasFigure = line.includes('<figure');
+
+  if (hasHtmlImg || hasFigure) {
+    const srcMatch = line.match(/src=["']([^"']+)["']/i);
+    if (srcMatch) {
+      const src = srcMatch[1];
+      const altMatch = line.match(/alt=["']([^"']*)["']/i);
+      const capMatch = line.match(/<figcaption[^>]*>(.*?)<\/figcaption>/i) ||
+                       line.match(/data-caption=["']([^"']*)["']/i) ||
+                       line.match(/<span[^>]*class=["'][^"']*caption[^"']*["'][^>]*>(.*?)<\/span>/i);
+      const alignMatch = line.match(/data-alignment=["']([^"']*)["']/i) ||
+                         line.match(/blog-align-(left|center|right|full)/i) ||
+                         line.match(/text-(left|center|right)/i);
+      const hrefMatch = line.match(/data-href=["']([^"']+)["']/i) ||
+                        line.match(/<a\s+[^>]*href=["']([^"']+)["']/i);
+      const targetMatch = line.match(/data-link-target=["']([^"']+)["']/i) ||
+                          line.match(/<a\s+[^>]*target=["']([^"']+)["']/i);
+
+      const alt = altMatch ? altMatch[1].trim() : '';
+      const caption = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+      const alignment = alignMatch ? (alignMatch[1] || 'center') : 'center';
+      const href = hrefMatch ? hrefMatch[1].trim() : '';
+      const target = targetMatch ? targetMatch[1].trim() : (href.startsWith('/') ? '_self' : '_blank');
+      const isInternal = href.startsWith('/') || href.includes('happymachinery.com');
+
+      const imgElement = (
+        <img
+          src={src}
+          alt={alt || caption || 'Machinery Asset'}
+          className="blog-body-image"
+          loading="lazy"
+        />
+      );
+
+      const linkedImage = href ? (
+        isInternal ? (
+          <Link to={href} className="blog-body-image-link" title={caption || alt || href}>
+            {imgElement}
+          </Link>
+        ) : (
+          <a href={href} target={target} rel="noopener noreferrer" className="blog-body-image-link" title={caption || alt || href}>
+            {imgElement}
+          </a>
+        )
+      ) : imgElement;
+
+      return (
+        <figure key={key} className={`blog-body-figure blog-align-${alignment}`}>
+          <div className={`blog-body-image-box ${href ? 'blog-body-image-clickable' : ''}`}>
+            {linkedImage}
+          </div>
+          {(caption || (alt && alt !== 'Jobsite Media' && alt !== 'Machinery Asset' && !alt.startsWith('http'))) && (
+            <figcaption className="blog-body-image-caption">
+              {caption || alt}
+            </figcaption>
+          )}
+        </figure>
+      );
+    }
   }
 
-  // Image: "![Alt Text](url)"
-  const imgRegex = /^!\[(.*?)\]\((.*?)\)$/
-  const imgMatch = line.match(imgRegex)
-  if (imgMatch) {
-    const [, alt, url] = imgMatch
+  // 2. Markdown Linked Image: [![Alt Text](imgUrl)](linkUrl)
+  const mdLinkedImg = line.match(/^\[!\[(.*?)\]\((https?:\/\/[^\s)]+|\/images\/[^\s)]+)\)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)$/i);
+  if (mdLinkedImg) {
+    const [, alt, imgUrl, linkUrl] = mdLinkedImg;
+    const isInternal = linkUrl.startsWith('/') || linkUrl.includes('happymachinery.com');
+    const imgElement = <img src={imgUrl} alt={alt || 'Machinery Asset'} className="blog-body-image" loading="lazy" />;
     return (
-      <div key={key} className="blog-body-image-container">
-        <img src={url} alt={alt} className="blog-body-image" />
-        {alt && <span className="blog-body-image-caption">{alt}</span>}
-      </div>
-    )
+      <figure key={key} className="blog-body-figure blog-align-center">
+        <div className="blog-body-image-box blog-body-image-clickable">
+          {isInternal ? (
+            <Link to={linkUrl} className="blog-body-image-link" title={alt || linkUrl}>
+              {imgElement}
+            </Link>
+          ) : (
+            <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="blog-body-image-link" title={alt || linkUrl}>
+              {imgElement}
+            </a>
+          )}
+        </div>
+        {alt && alt !== 'Jobsite Media' && !alt.startsWith('http') && (
+          <figcaption className="blog-body-image-caption">{alt}</figcaption>
+        )}
+      </figure>
+    );
+  }
+
+  // 3. Markdown Image: ![Alt Text](url)
+  const mdImg = line.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+|\/images\/[^\s)]+)\)$/i);
+  if (mdImg) {
+    const [, alt, url] = mdImg;
+    return (
+      <figure key={key} className="blog-body-figure blog-align-center">
+        <div className="blog-body-image-box">
+          <img src={url} alt={alt || 'Machinery Asset'} className="blog-body-image" loading="lazy" />
+        </div>
+        {alt && alt !== 'Jobsite Media' && !alt.startsWith('http') && (
+          <figcaption className="blog-body-image-caption">{alt}</figcaption>
+        )}
+      </figure>
+    );
+  }
+
+  // 3. Markdown Link containing Image URL / img.miniexcavator.org: [Caption / URL](url)
+  const mdImgLink = line.match(/^\[(.*?)\]\((https?:\/\/[^\s)]+\.(?:webp|png|jpe?g|gif|svg)(?:\?[^\s)]*)?|https?:\/\/img\.miniexcavator\.org\/[^\s)]+)\)$/i);
+  if (mdImgLink) {
+    const [, label, url] = mdImgLink;
+    const isUrlLabel = label.startsWith('http://') || label.startsWith('https://');
+    const caption = isUrlLabel ? '' : label.trim();
+    return (
+      <figure key={key} className="blog-body-figure blog-align-center">
+        <div className="blog-body-image-box">
+          <img src={url} alt={caption || 'Machinery Media Asset'} className="blog-body-image" loading="lazy" />
+        </div>
+        {caption && (
+          <figcaption className="blog-body-image-caption">{caption}</figcaption>
+        )}
+      </figure>
+    );
+  }
+
+  // 4. Raw Image URL Auto-detection (standalone webp/jpg/png/svg or img.miniexcavator.org)
+  if (
+    (/^(https?:\/\/|\/images\/)[^\s]+$/i.test(line) && /\.(png|jpg|jpeg|webp|gif|svg)/i.test(line)) ||
+    (/^https?:\/\/img\.miniexcavator\.org\/[^\s]+$/i.test(line))
+  ) {
+    return (
+      <figure key={key} className="blog-body-figure blog-align-center">
+        <div className="blog-body-image-box">
+          <img src={line} alt="Jobsite Media" className="blog-body-image" loading="lazy" />
+        </div>
+      </figure>
+    );
   }
 
   // Rich HTML block pass-through (for Tiptap / Gutenberg rich blocks)
@@ -403,7 +428,7 @@ export function renderMarkdownToReact(text: string, key: string | number) {
         className="blog-body-html-block"
         dangerouslySetInnerHTML={{ __html: line }}
       />
-    )
+    );
   }
 
   return (
@@ -507,8 +532,8 @@ export default function Blog() {
 
     const SITE_URL = 'https://happymachinery.com'
     const articleUrl = `${SITE_URL}${getBlogPostPath(selectedPost)}`
-    const seoTitle = `${selectedPost.title} | Happy Machinery`
-    const seoDesc = selectedPost.excerpt.slice(0, 160)
+    const seoTitle = (selectedPost as any).seoTitle || `${selectedPost.title} | Happy Machinery`
+    const seoDesc = (selectedPost as any).metaDescription || selectedPost.excerpt.slice(0, 160)
     const seoImage = selectedPost.image.startsWith('http') ? selectedPost.image : `${SITE_URL}${selectedPost.image}`
 
     document.title = seoTitle
@@ -638,6 +663,68 @@ export default function Blog() {
     setReplyText('')
     setReplyToUser('')
   }, [selectedPost?.id])
+
+  // Smoothly route internal links (images and text) and ensure external links open in a new tab securely
+  const handleArticleBodyClick = (e: React.MouseEvent<HTMLElement>) => {
+    const anchor = (e.target as HTMLElement).closest('a')
+    if (!anchor) return
+    const href = anchor.getAttribute('href')
+    if (!href) return
+
+    // 1. In-page hash link (e.g. #section-id)
+    if (href.startsWith('#')) {
+      e.preventDefault()
+      const id = href.replace(/^#/, '')
+      const el = document.getElementById(id)
+      if (el) {
+        const primaryCol = document.querySelector('.raf-primary-column') as HTMLElement | null
+        const isPrimaryScrollable = primaryCol && primaryCol.scrollHeight > primaryCol.clientHeight && window.getComputedStyle(primaryCol).overflowY === 'auto'
+        if (isPrimaryScrollable && primaryCol) {
+          const colRect = primaryCol.getBoundingClientRect()
+          const targetRect = el.getBoundingClientRect()
+          const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 40
+          primaryCol.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' })
+        } else {
+          const headerOffset = 130
+          const elementPosition = el.getBoundingClientRect().top
+          const offsetPosition = elementPosition + window.pageYOffset - headerOffset
+          window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
+        }
+        if (window.history.pushState) {
+          window.history.pushState(null, '', href)
+        }
+      }
+      return
+    }
+
+    // 2. Check if internal link
+    const isInternal =
+      href.startsWith('/') ||
+      href.startsWith('./') ||
+      href.startsWith('../') ||
+      (typeof window !== 'undefined' && href.startsWith(window.location.origin)) ||
+      /https?:\/\/(?:www\.)?happymachinery\.com/i.test(href)
+
+    if (isInternal) {
+      e.preventDefault()
+      let targetPath = href
+      if (typeof window !== 'undefined' && href.startsWith(window.location.origin)) {
+        targetPath = href.substring(window.location.origin.length) || '/'
+      } else if (/https?:\/\/(?:www\.)?happymachinery\.com/i.test(href)) {
+        targetPath = href.replace(/^https?:\/\/(?:www\.)?happymachinery\.com/i, '') || '/'
+      }
+      navigate(targetPath)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      const primaryCol = document.querySelector('.raf-primary-column')
+      if (primaryCol) {
+        primaryCol.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    } else if (/^https?:\/\//i.test(href)) {
+      // External link: ensure target="_blank" and rel="noopener noreferrer"
+      anchor.setAttribute('target', '_blank')
+      anchor.setAttribute('rel', 'noopener noreferrer')
+    }
+  }
 
   const handleCommentSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -796,7 +883,9 @@ export default function Blog() {
     let counter = 1
     const seenIds = new Set<string>()
 
-    selectedPost.content.forEach((line, idx) => {
+    const blocks = splitContentIntoBlocks(selectedPost.content)
+
+    blocks.forEach((line, idx) => {
       const h = getHeadingMatch(line, idx)
       if (h && h.text.length > 2) {
         if (h.text.toLowerCase() === selectedPost.title.toLowerCase()) return
@@ -860,10 +949,10 @@ export default function Blog() {
       if (isPrimaryScrollable && primaryCol) {
         const colRect = primaryCol.getBoundingClientRect()
         const targetRect = target.getBoundingClientRect()
-        const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 24
+        const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 40
         primaryCol.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' })
       } else {
-        const headerOffset = 96
+        const headerOffset = 130
         const elementPosition = target.getBoundingClientRect().top
         const offsetPosition = elementPosition + window.pageYOffset - headerOffset
         window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
@@ -889,10 +978,10 @@ export default function Blog() {
           if (isPrimaryScrollable && primaryCol) {
             const colRect = primaryCol.getBoundingClientRect()
             const targetRect = el.getBoundingClientRect()
-            const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 24
+            const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 40
             primaryCol.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' })
           } else {
-            const headerOffset = 96
+            const headerOffset = 130
             const elementPosition = el.getBoundingClientRect().top
             const offsetPosition = elementPosition + window.pageYOffset - headerOffset
             window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
@@ -921,10 +1010,10 @@ export default function Blog() {
           if (isPrimaryScrollable && primaryCol) {
             const colRect = primaryCol.getBoundingClientRect()
             const targetRect = el.getBoundingClientRect()
-            const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 24
+            const topOffset = targetRect.top - colRect.top + primaryCol.scrollTop - 40
             primaryCol.scrollTo({ top: Math.max(0, topOffset), behavior: 'smooth' })
           } else {
-            const headerOffset = 96
+            const headerOffset = 130
             const elementPosition = el.getBoundingClientRect().top
             const offsetPosition = elementPosition + window.pageYOffset - headerOffset
             window.scrollTo({ top: Math.max(0, offsetPosition), behavior: 'smooth' })
@@ -1001,19 +1090,6 @@ export default function Blog() {
   // ============================================================================
   // VIEW A: SINGLE ARTICLE READING PAGE (MATCHING RAFVEX SCREENSHOT 1 & 2)
   // ============================================================================
-  // Forward scroll to window when reaching the end of article column or sidebar so the page scrolls to footer
-  const handleDualColumnWheel = (e: React.WheelEvent<HTMLElement>) => {
-    const target = e.currentTarget
-    if (!target) return
-    const isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 3
-    const isAtTop = target.scrollTop <= 1
-
-    if (e.deltaY > 0 && isAtBottom) {
-      window.scrollBy({ top: e.deltaY, behavior: 'auto' })
-    } else if (e.deltaY < 0 && isAtTop && window.scrollY > 0) {
-      window.scrollBy({ top: e.deltaY, behavior: 'auto' })
-    }
-  }
 
   if (selectedPost) {
     const isDraft = selectedPost.status === 'Draft'
@@ -1085,7 +1161,7 @@ export default function Blog() {
           {/* Main Content Layout: Two-Column Dual-Scroll Layout (Matching Reference Images 1 & 2) */}
           <div className="raf-main-grid-layout">
             {/* Primary Column: Independently scrollable, fixed on screen */}
-            <main className="raf-primary-column" onWheel={handleDualColumnWheel}>
+            <main className="raf-primary-column">
               {/* Top Bar: Category Pill */}
               <div className="raf-meta-top-row">
                 <div className="raf-category-pill">
@@ -1104,7 +1180,7 @@ export default function Blog() {
               <div className="raf-hero-image-box">
                 <img
                   src={selectedPost.image}
-                  alt={selectedPost.title}
+                  alt={selectedPost.imageAlt || (selectedPost as any).alt || selectedPost.title}
                   className="raf-hero-image"
                   loading="eager"
                 />
@@ -1113,19 +1189,38 @@ export default function Blog() {
               {/* Author & Published Info Bar */}
               <div className="raf-author-row">
                 <div className="raf-author-avatar">
-                  {selectedPost.author?.charAt(0).toUpperCase() || 'H'}
+                  <img
+                    src="https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl"
+                    alt={selectedPost.author || 'Happy Machinery'}
+                    className="raf-author-favicon"
+                    onError={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      img.src = '/favicon.png';
+                    }}
+                  />
                 </div>
                 <div className="raf-author-details">
-                  <span className="raf-author-name">{selectedPost.author || 'Happy Machinery Editorial'}</span>
+                  <span className="raf-author-name">{selectedPost.author || 'Happy Machinery'}</span>
                   <span className="raf-publish-date">Published {formatFullDate(selectedPost.date)} &bull; {selectedPost.readTime}</span>
                 </div>
               </div>
 
               {/* Rich Body Content */}
-              <article className="raf-body-content">
-                {selectedPost.content.map((paragraph, idx) => {
-                  if (idx === 0 && paragraph.trim().toLowerCase() === selectedPost.title.trim().toLowerCase()) return null
-                  return renderMarkdownToReact(paragraph, idx)
+              <article className="raf-body-content" onClick={handleArticleBodyClick}>
+                {splitContentIntoBlocks(selectedPost.content).map((paragraph, idx) => {
+                  const trimmedP = paragraph.trim();
+                  // 1. Skip duplicate title if at start of content
+                  if (idx === 0) {
+                    const cleanP = trimmedP.replace(/^<[^>]+>/g, '').replace(/<\/[^>]+>$/g, '').replace(/^#+\s*/, '').trim().toLowerCase();
+                    if (cleanP === selectedPost.title.trim().toLowerCase()) return null;
+                  }
+                  // 2. Skip first image if identical to selectedPost.image (Featured Cover Image)
+                  if ((idx === 0 || idx === 1) && selectedPost.image) {
+                    if (trimmedP.includes(selectedPost.image)) {
+                      return null;
+                    }
+                  }
+                  return renderMarkdownToReact(paragraph, idx);
                 })}
               </article>
 
@@ -1217,7 +1312,7 @@ export default function Blog() {
                                 <div className="raf-reply-meta">
                                   <div className="raf-reply-author-info">
                                     <span className="raf-reply-mini-avatar seller">
-                                      <img src="/images/favicon.webp" alt="Support" className="raf-reply-avatar-img" />
+                                      <img src="https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl" alt="Support" className="raf-reply-avatar-img" />
                                     </span>
                                     <strong>Happy Machinery</strong>
                                     <span className="raf-seller-tag">✓ Support</span>
@@ -1230,7 +1325,7 @@ export default function Blog() {
 
                             {/* Threaded multi-user replies */}
                             {(comment.replies || []).map((reply) => {
-                              const replyAvatar = reply.avatar || (reply.isSeller ? '/images/favicon.webp' : getUserProfileAvatar(reply.email, reply.author))
+                              const replyAvatar = reply.avatar || (reply.isSeller ? 'https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl' : getUserProfileAvatar(reply.email, reply.author))
                               return (
                                 <div
                                   className={`raf-seller-reply ${reply.isSeller ? 'is-official-support' : 'is-user-reply'}`}
@@ -1545,7 +1640,7 @@ export default function Blog() {
             </main>
 
             {/* Right Sticky Sidebar: Fixed on screen, independently scrollable (Matching Image 1 & 2) */}
-            <aside className="raf-sidebar-column custom-sidebar-scroll" onWheel={handleDualColumnWheel}>
+            <aside className="raf-sidebar-column custom-sidebar-scroll">
               {/* Widget: Quick Share (Positioned at Top of Sidebar above 'On This Page') */}
               <div className="raf-sidebar-card raf-quick-share-card">
                 <div className="raf-quick-share-header">

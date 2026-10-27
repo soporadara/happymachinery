@@ -11,7 +11,8 @@ import ImageNodeView from './ImageNodeView';
 import YoutubeNodeView, { getYoutubeVideoId } from './YoutubeNodeView';
 import TerminalNodeView from './TerminalNodeView';
 import LinkCardNodeView from './LinkCardNodeView';
-import { convertContentToHtml } from '../../utils/editorContentHelper';
+import { convertContentToHtml, isStandaloneHeading } from '../../utils/editorContentHelper';
+import { processPastedBlog, cleanImageTitle } from '../../utils/blogImportHelper';
 import './TiptapEditor.css';
 
 const CustomImage = Image.extend({
@@ -33,7 +34,155 @@ const CustomImage = Image.extend({
         }),
         parseHTML: (element) => element.getAttribute('data-caption') || '',
       },
+      href: {
+        default: '',
+        renderHTML: (attributes) => attributes.href ? { 'data-href': attributes.href } : {},
+        parseHTML: (element) => {
+          const anchor = element.tagName === 'A' ? element : element.querySelector('a') || element.closest('a');
+          return element.getAttribute('data-href') || anchor?.getAttribute('href') || '';
+        },
+      },
+      linkTarget: {
+        default: '_blank',
+        renderHTML: (attributes) => attributes.linkTarget ? { 'data-link-target': attributes.linkTarget } : {},
+        parseHTML: (element) => {
+          const anchor = element.tagName === 'A' ? element : element.querySelector('a') || element.closest('a');
+          return element.getAttribute('data-link-target') || anchor?.getAttribute('target') || '_blank';
+        },
+      },
     };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'figure.article-image-figure',
+        getAttrs: (element) => {
+          if (typeof element === 'string') return false;
+          const img = element.querySelector('img');
+          if (!img) return false;
+          const figcaption = element.querySelector('figcaption');
+          const anchor = element.querySelector('a') || element.closest('a');
+          const href = element.getAttribute('data-href') || anchor?.getAttribute('href') || img.getAttribute('data-href') || '';
+          const linkTarget = element.getAttribute('data-link-target') || anchor?.getAttribute('target') || (href.startsWith('/') ? '_self' : '_blank');
+          return {
+            src: img.getAttribute('src'),
+            alt: img.getAttribute('alt') || '',
+            alignment: element.getAttribute('data-alignment') || img.getAttribute('data-alignment') || 'center',
+            caption: figcaption?.textContent || element.getAttribute('data-caption') || img.getAttribute('data-caption') || '',
+            href,
+            linkTarget,
+          };
+        },
+      },
+      {
+        tag: 'figure',
+        getAttrs: (element) => {
+          if (typeof element === 'string') return false;
+          const img = element.querySelector('img');
+          if (!img) return false;
+          const figcaption = element.querySelector('figcaption');
+          const anchor = element.querySelector('a') || element.closest('a');
+          const href = element.getAttribute('data-href') || anchor?.getAttribute('href') || img.getAttribute('data-href') || '';
+          const linkTarget = element.getAttribute('data-link-target') || anchor?.getAttribute('target') || (href.startsWith('/') ? '_self' : '_blank');
+          return {
+            src: img.getAttribute('src'),
+            alt: img.getAttribute('alt') || '',
+            alignment: element.getAttribute('data-alignment') || img.getAttribute('data-alignment') || 'center',
+            caption: figcaption?.textContent || element.getAttribute('data-caption') || img.getAttribute('data-caption') || '',
+            href,
+            linkTarget,
+          };
+        },
+      },
+      {
+        tag: 'a:has(> img)',
+        getAttrs: (element) => {
+          if (typeof element === 'string') return false;
+          const img = element.querySelector('img');
+          if (!img) return false;
+          const href = element.getAttribute('href') || '';
+          const linkTarget = element.getAttribute('target') || (href.startsWith('/') ? '_self' : '_blank');
+          return {
+            src: img.getAttribute('src'),
+            alt: img.getAttribute('alt') || '',
+            alignment: element.getAttribute('data-alignment') || img.getAttribute('data-alignment') || 'center',
+            caption: element.getAttribute('data-caption') || img.getAttribute('data-caption') || '',
+            href,
+            linkTarget,
+          };
+        },
+      },
+      {
+        tag: 'img[src]',
+        getAttrs: (element) => {
+          if (typeof element === 'string') return false;
+          const parentA = element.closest('a');
+          const href = element.getAttribute('data-href') || parentA?.getAttribute('href') || '';
+          const linkTarget = element.getAttribute('data-link-target') || parentA?.getAttribute('target') || (href.startsWith('/') ? '_self' : '_blank');
+          return {
+            src: element.getAttribute('src'),
+            alt: element.getAttribute('alt') || '',
+            alignment: element.getAttribute('data-alignment') || 'center',
+            caption: element.getAttribute('data-caption') || '',
+            href,
+            linkTarget,
+          };
+        },
+      },
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const alignment = HTMLAttributes['data-alignment'] || HTMLAttributes.alignment || 'center';
+    const caption = HTMLAttributes['data-caption'] || HTMLAttributes.caption || '';
+    const alt = HTMLAttributes.alt || '';
+    const src = HTMLAttributes.src || '';
+    const href = HTMLAttributes['data-href'] || HTMLAttributes.href || '';
+    const linkTarget = HTMLAttributes['data-link-target'] || HTMLAttributes.linkTarget || (href.startsWith('/') ? '_self' : '_blank');
+
+    const alignClass = alignment === 'left' ? 'text-left mr-auto' : alignment === 'right' ? 'text-right ml-auto' : alignment === 'full' ? 'w-full' : 'text-center mx-auto';
+
+    const imgTag: any = [
+      'img',
+      {
+        src,
+        alt: alt || caption || '',
+        'data-alignment': alignment,
+        'data-caption': caption,
+        class: `blog-body-image rounded-2xl shadow-md mx-auto block max-w-full ${href ? 'cursor-pointer' : ''}`,
+        ...(href ? { 'data-href': href, 'data-link-target': linkTarget } : {}),
+      },
+    ];
+
+    const imageBody = href ? [
+      'a',
+      {
+        href,
+        target: linkTarget,
+        rel: linkTarget === '_blank' ? 'noopener noreferrer' : undefined,
+        class: 'blog-body-image-link block group/imglink transition-transform hover:scale-[1.01]',
+        'data-href': href,
+        'data-link-target': linkTarget,
+      },
+      imgTag,
+    ] : imgTag;
+
+    return [
+      'figure',
+      {
+        class: `article-image-figure my-6 ${alignClass}`,
+        'data-alignment': alignment,
+        'data-caption': caption,
+        ...(href ? { 'data-href': href, 'data-link-target': linkTarget } : {}),
+      },
+      imageBody,
+      ...(caption ? [
+        [
+          'figcaption',
+          { class: 'blog-body-image-caption text-xs text-center text-slate-500 dark:text-slate-400 mt-2 font-medium italic' },
+          caption,
+        ]
+      ] : []),
+    ];
   },
   addNodeView() {
     return ReactNodeViewRenderer(ImageNodeView);
@@ -615,6 +764,8 @@ export interface TiptapEditorProps {
   onChangeHtml?: (html: string) => void;
   mediaList?: Array<{ id: string; title: string; url: string; size?: string; folder?: string; dateAdded?: string }>;
   onMediaUploaded?: (newItem: any) => void;
+  onAutoExtractTitle?: (title: string) => void;
+  onAutoExtractCoverImage?: (url: string, alt?: string) => void;
 }
 
 export default function TiptapEditor({ 
@@ -622,8 +773,20 @@ export default function TiptapEditor({
   onChangeRaw, 
   onChangeHtml,
   mediaList = [],
-  onMediaUploaded
+  onMediaUploaded,
+  onAutoExtractTitle,
+  onAutoExtractCoverImage,
 }: TiptapEditorProps) {
+  const onAutoExtractTitleRef = useRef(onAutoExtractTitle);
+  useEffect(() => { onAutoExtractTitleRef.current = onAutoExtractTitle; }, [onAutoExtractTitle]);
+
+  const onAutoExtractCoverImageRef = useRef(onAutoExtractCoverImage);
+  useEffect(() => { onAutoExtractCoverImageRef.current = onAutoExtractCoverImage; }, [onAutoExtractCoverImage]);
+
+  const onMediaUploadedRef = useRef(onMediaUploaded);
+  useEffect(() => { onMediaUploadedRef.current = onMediaUploaded; }, [onMediaUploaded]);
+
+  const editorRef = useRef<any>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkNewTab, setLinkNewTab] = useState(true);
@@ -754,23 +917,99 @@ export default function TiptapEditor({
       attributes: {
         class: 'prose prose-sm sm:prose-base dark:prose-invert max-w-none focus:outline-none min-h-[440px] p-5 text-slate-800 dark:text-slate-100',
       },
-      handlePaste: (_view, event) => {
+      handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
-        if (!items) return false;
+        if (items) {
+          const imageFiles: File[] = [];
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.startsWith('image/')) {
+              const file = item.getAsFile();
+              if (file) imageFiles.push(file);
+            }
+          }
 
-        const imageFiles: File[] = [];
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item.type.startsWith('image/')) {
-            const file = item.getAsFile();
-            if (file) imageFiles.push(file);
+          if (imageFiles.length > 0) {
+            event.preventDefault();
+            uploadAndInsertFilesRef.current?.(imageFiles);
+            return true;
           }
         }
 
-        if (imageFiles.length > 0) {
-          event.preventDefault();
-          uploadAndInsertFilesRef.current?.(imageFiles);
-          return true;
+        // Check text or HTML for miniexcavator links or blog import
+        const textData = event.clipboardData?.getData('text/plain') || '';
+        const htmlData = event.clipboardData?.getData('text/html') || '';
+        const rawPasted = textData || htmlData;
+
+        if (rawPasted && (/img\.miniexcavator\.org/i.test(rawPasted) || (/^(?:#+\s|<h[1-3]|title:)/im.test(rawPasted) && /\.(webp|png|jpe?g|gif|svg)/i.test(rawPasted)))) {
+          const res = processPastedBlog(rawPasted);
+          if (res.detected) {
+            event.preventDefault();
+
+            // 1. Auto-extract Article Title
+            if (res.title && onAutoExtractTitleRef.current) {
+              onAutoExtractTitleRef.current(res.title);
+            }
+
+            // 2. Auto-fill Featured Cover Image
+            if (res.coverImage && onAutoExtractCoverImageRef.current) {
+              onAutoExtractCoverImageRef.current(res.coverImage.url, res.coverImage.alt);
+            }
+
+            // 3. Auto-insert all detected images into the Media Library gallery
+            if (onMediaUploadedRef.current && res.allImages.length > 0) {
+              res.allImages.forEach((img, idx) => {
+                onMediaUploadedRef.current?.({
+                  id: `media-auto-${Date.now()}-${idx}`,
+                  title: img.caption || img.alt || cleanImageTitle(img.url),
+                  url: img.url,
+                  folder: 'galleries',
+                  dateAdded: new Date().toISOString().split('T')[0],
+                  size: '150 KB',
+                });
+              });
+            }
+
+            // 4. Insert or set cleaned content into editor
+            if (res.cleanedHtml) {
+              const currentContent = view.state.doc.textContent.trim();
+              if (res.isFullBlogImport && currentContent.length === 0) {
+                setTimeout(() => {
+                  if (editorRef.current) {
+                    editorRef.current.commands.setContent(res.cleanedHtml);
+                  }
+                }, 10);
+              } else {
+                setTimeout(() => {
+                  if (editorRef.current) {
+                    editorRef.current.commands.insertContent(res.cleanedHtml);
+                  }
+                }, 10);
+              }
+            }
+
+            return true;
+          }
+        }
+
+        // If user pastes structured text containing standalone headings or numbered sections,
+        // format it with convertContentToHtml so headings are rendered as large <h2> elements
+        if (textData && textData.includes('\n')) {
+          const lines = textData.split('\n').map(l => l.trim()).filter(Boolean);
+          const hasHeading = lines.some(l => isStandaloneHeading(l) || /^#{1,6}\s+/.test(l) || /^\d+\.\s+[A-Z]/.test(l));
+          if (hasHeading && lines.length >= 2) {
+            event.preventDefault();
+            const formatted = convertContentToHtml(textData);
+            if (formatted) {
+              const currentContent = view.state.doc.textContent.trim();
+              if (currentContent.length === 0) {
+                editorRef.current?.commands.setContent(formatted);
+              } else {
+                editorRef.current?.commands.insertContent(formatted);
+              }
+              return true;
+            }
+          }
         }
 
         return false;
@@ -805,6 +1044,8 @@ export default function TiptapEditor({
       onChangeHtml?.(editor.getHTML());
     },
   });
+
+  editorRef.current = editor;
 
   useEffect(() => {
     if (editor && safeContent) {

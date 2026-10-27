@@ -248,8 +248,6 @@ export default function Footer() {
             <Link to="/faq">FAQ</Link>
             <span className="footer-separator">•</span>
             <Link to="/privacy-policy#cookies">Cookies</Link>
-            <span className="footer-separator">•</span>
-            <Link to="/contact">Contact</Link>
           </div>
         </div>
       </div>

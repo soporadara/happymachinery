@@ -56,8 +56,8 @@ if ($type === 'blog' && ($id > 0 || $slug !== '')) {
     foreach ($posts as $post) {
         $postSlug = $post['slug'] ?? strtolower(trim((string)preg_replace('/[^a-z0-9]+/i', '-', $post['title']), '-'));
         if (($id > 0 && (int)$post['id'] === $id) || ($slug !== '' && $postSlug === $slug)) {
-            $title = $post['title'] . " | Happy Machinery Blog";
-            $desc = $post['excerpt'];
+            $title = !empty($post['seoTitle']) ? $post['seoTitle'] : ($post['title'] . " | Happy Machinery Blog");
+            $desc = !empty($post['metaDescription']) ? $post['metaDescription'] : $post['excerpt'];
             $imagePath = $post['image'];
             $image = strpos($imagePath, 'http') === 0 ? $imagePath : "https://happymachinery.com" . $imagePath;
             if ($id === 1784947777428) {

@@ -107,7 +107,7 @@ function ScrollToTop() {
       const scrollToTarget = () => {
         const el = document.getElementById(elementId)
         if (el) {
-          const headerOffset = 90
+          const headerOffset = 130
           const elementPosition = el.getBoundingClientRect().top
           const offsetPosition = elementPosition + window.pageYOffset - headerOffset
           window.scrollTo({

@@ -225,11 +225,11 @@
   height: 18px;
 }
 
-/* Options Row: Remember Me & Forgot Password */
+/* Options Row: Remember Me */
 .cms-form-options {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 4px 10px;
   font-size: 0.88rem;
   color: #cbd5e1;
@@ -270,22 +270,6 @@
   border-left: 2px solid #ffffff;
   border-bottom: 2px solid #ffffff;
   transform: rotate(-45deg) translate(1px, -1px);
-}
-
-.cms-forgot-btn {
-  background: transparent;
-  border: none;
-  color: #cbd5e1;
-  font-size: 0.88rem;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: none;
-  transition: color 150ms ease;
-}
-
-.cms-forgot-btn:hover {
-  color: #ffffff;
-  text-decoration: underline;
 }
 
 /* Sign In Primary Pill Button */

@@ -26,7 +26,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   address: '2522 S Malt Ave., Commerce, CA 90040, United States',
   businessHours: 'Monday – Friday: 8:00 AM – 6:00 PM CST',
   logo: '/images/header-logo.webp',
-  favicon: '/images/favicon.webp',
+  favicon: 'https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl',
   defaultSeoTitle: 'Happy Machinery | Compact Heavy Equipment Dealer',
   defaultSeoDescription: 'Discover compact excavators, mini track loaders, and electric machinery from Happy Machinery. Compare models, specs, and pricing today.',
   socialLinks: {

@@ -1153,7 +1153,7 @@ export default function Home() {
                     <div className="latest-article-cover">
                       <img
                         src={post.image || '/images/why-choose-v900-jobsite.png'}
-                        alt={post.title}
+                        alt={post.imageAlt || (post as any).alt || post.title}
                         className="latest-article-img"
                         loading="lazy"
                         onError={(e) => {

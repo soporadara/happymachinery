@@ -64,7 +64,7 @@ export const getSiteSettingsSync = (): SiteSettings => {
         ...DEFAULT_SITE_SETTINGS,
         ...parsed,
         logo: (!parsed.logo || parsed.logo === '/logo.png' || parsed.logo.includes('Happy_Machinery_Logo.webp')) ? '/images/header-logo.webp' : parsed.logo,
-        favicon: (!parsed.favicon || parsed.favicon === '/logo.png' || parsed.favicon.includes('Happy_Machinery_Logo.webp')) ? '/images/favicon.webp' : parsed.favicon
+        favicon: (!parsed.favicon || parsed.favicon === '/logo.png' || parsed.favicon.includes('Happy_Machinery_Logo.webp')) ? DEFAULT_SITE_SETTINGS.favicon : parsed.favicon
       }
     }
   } catch {}
@@ -75,7 +75,7 @@ export const cacheSiteSettings = (settings: SiteSettings) => {
   try {
     localStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify(settings))
     window.dispatchEvent(new CustomEvent('hm-branding-updated', { detail: settings }))
-    updateBrowserFavicon(settings.favicon || '/images/favicon.webp')
+    updateBrowserFavicon(settings.favicon || DEFAULT_SITE_SETTINGS.favicon)
   } catch {}
 }
 
@@ -91,7 +91,7 @@ export const useSiteBranding = () => {
             ...DEFAULT_SITE_SETTINGS,
             ...remote,
             logo: (!remote.logo || remote.logo === '/logo.png' || remote.logo.includes('Happy_Machinery_Logo.webp')) ? '/images/header-logo.webp' : remote.logo,
-            favicon: (!remote.favicon || remote.favicon === '/logo.png' || remote.favicon.includes('Happy_Machinery_Logo.webp')) ? '/images/favicon.webp' : remote.favicon
+            favicon: (!remote.favicon || remote.favicon === '/logo.png' || remote.favicon.includes('Happy_Machinery_Logo.webp')) ? DEFAULT_SITE_SETTINGS.favicon : remote.favicon
           }
           setSettings(merged)
           cacheSiteSettings(merged)
