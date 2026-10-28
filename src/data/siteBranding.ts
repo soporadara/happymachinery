@@ -12,7 +12,7 @@ export const updateBrowserFavicon = (faviconUrl?: string) => {
   if (typeof document === 'undefined') return
   const url = faviconUrl || '/favicon.png'
   const isBrandDefault = url === '/favicon.png' || url.includes('/images/favicon.')
-  const versionParam = '?v=20'
+  const versionParam = '?v=21'
 
   // Update or create standard icon
   let link = document.querySelector<HTMLLinkElement>("link[rel='icon']")
@@ -64,7 +64,7 @@ export const getSiteSettingsSync = (): SiteSettings => {
         ...DEFAULT_SITE_SETTINGS,
         ...parsed,
         logo: (!parsed.logo || parsed.logo === '/logo.png' || parsed.logo.includes('Happy_Machinery_Logo.webp')) ? '/images/header-logo.webp' : parsed.logo,
-        favicon: (!parsed.favicon || parsed.favicon === '/logo.png' || parsed.favicon.includes('Happy_Machinery_Logo.webp')) ? DEFAULT_SITE_SETTINGS.favicon : parsed.favicon
+        favicon: (!parsed.favicon || parsed.favicon === '/logo.png' || parsed.favicon.includes('Happy_Machinery_Logo.webp') || parsed.favicon.includes('googleusercontent.com')) ? '/favicon.png' : parsed.favicon
       }
     }
   } catch {}
@@ -91,7 +91,7 @@ export const useSiteBranding = () => {
             ...DEFAULT_SITE_SETTINGS,
             ...remote,
             logo: (!remote.logo || remote.logo === '/logo.png' || remote.logo.includes('Happy_Machinery_Logo.webp')) ? '/images/header-logo.webp' : remote.logo,
-            favicon: (!remote.favicon || remote.favicon === '/logo.png' || remote.favicon.includes('Happy_Machinery_Logo.webp')) ? DEFAULT_SITE_SETTINGS.favicon : remote.favicon
+            favicon: (!remote.favicon || remote.favicon === '/logo.png' || remote.favicon.includes('Happy_Machinery_Logo.webp') || remote.favicon.includes('googleusercontent.com')) ? '/favicon.png' : remote.favicon
           }
           setSettings(merged)
           cacheSiteSettings(merged)

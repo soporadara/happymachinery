@@ -1836,7 +1836,7 @@ export default function AdminDashboard() {
           ...DEFAULT_SITE_SETTINGS,
           ...fetchedSiteSettings,
           logo: (!fetchedSiteSettings.logo || fetchedSiteSettings.logo.includes('Happy_Machinery_Logo.webp')) ? '/logo.png' : fetchedSiteSettings.logo,
-          favicon: (!fetchedSiteSettings.favicon || fetchedSiteSettings.favicon === '/logo.png' || fetchedSiteSettings.favicon.includes('Happy_Machinery_Logo.webp')) ? '/favicon.png' : fetchedSiteSettings.favicon
+          favicon: (!fetchedSiteSettings.favicon || fetchedSiteSettings.favicon === '/logo.png' || fetchedSiteSettings.favicon.includes('Happy_Machinery_Logo.webp') || fetchedSiteSettings.favicon.includes('googleusercontent.com')) ? '/favicon.png' : fetchedSiteSettings.favicon
         }
         setSiteSettings(normalized)
         cacheSiteSettings(normalized)

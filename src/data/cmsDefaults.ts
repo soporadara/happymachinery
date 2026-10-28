@@ -26,7 +26,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   address: '2522 S Malt Ave., Commerce, CA 90040, United States',
   businessHours: 'Monday – Friday: 8:00 AM – 6:00 PM CST',
   logo: '/images/header-logo.webp',
-  favicon: 'https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl',
+  favicon: '/favicon.png',
   defaultSeoTitle: 'TYPHON Machinery | American Skid Steer & Mini Excavator USA | Happy Machinery',
   defaultSeoDescription: 'Official USA dealer for TYPHON Machinery. Explore American skid steer loaders, mini excavator attachments, compact track loaders & Kubota diesel equipment with nationwide delivery.',
   socialLinks: {
