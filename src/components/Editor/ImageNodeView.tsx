@@ -325,6 +325,14 @@ export default function ImageNodeView({
     full: 'w-full',
   }[alignment as 'left' | 'center' | 'right' | 'full'] || 'mx-auto';
 
+  // Responsive floating bar positioning based on alignment
+  const barPositionClass = {
+    left: 'left-0 translate-x-0',
+    right: 'right-0 translate-x-0',
+    center: 'left-1/2 -translate-x-1/2',
+    full: 'left-1/2 -translate-x-1/2',
+  }[alignment as 'left' | 'center' | 'right' | 'full'] || 'left-1/2 -translate-x-1/2';
+
   const isBarVisible = isHovered || selected || isReplaceModalOpen;
 
   return (
@@ -336,7 +344,7 @@ export default function ImageNodeView({
       <div className={`relative ${alignmentClass} max-w-full transition-all`}>
         {/* Floating Action Bar */}
         <div 
-          className={`absolute -top-11 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-2xl bg-slate-950/95 dark:bg-slate-900/98 text-white backdrop-blur-xl shadow-2xl border border-slate-700/80 transition-all duration-200 pointer-events-auto ${
+          className={`editor-floating-toolbar absolute -top-12 ${barPositionClass} z-30 flex items-center gap-1 p-1 rounded-xl bg-slate-950/95 dark:bg-slate-900/95 text-white backdrop-blur-xl shadow-2xl border border-slate-700/80 w-max max-w-[calc(100vw-2rem)] overflow-x-auto scrollbar-none whitespace-nowrap transition-all duration-200 pointer-events-auto select-none ${
             isBarVisible 
               ? 'opacity-100 translate-y-0 visible scale-100' 
               : 'opacity-0 -translate-y-2 invisible scale-95 pointer-events-none'
@@ -345,105 +353,105 @@ export default function ImageNodeView({
           {/* Drag Handle */}
           <div 
             data-drag-handle="" 
-            title="Drag and drop Image into any section" 
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white cursor-grab active:cursor-grabbing font-mono text-[11px] font-semibold select-none border border-slate-600/50 shadow-xs mr-1"
+            title="Drag and drop image into any section" 
+            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white cursor-grab active:cursor-grabbing font-mono text-[11px] font-semibold select-none border border-slate-600/50 shadow-xs whitespace-nowrap"
           >
-            <GripVertical size={14} className="text-red-400" />
-            <span>Drag</span>
+            <GripVertical size={13} className="text-red-400 shrink-0" />
+            <span className="hidden sm:inline">Drag</span>
           </div>
 
           {/* Section Move Group */}
-          <div className="flex items-center gap-0.5 pr-1 border-r border-slate-700/80">
+          <div className="shrink-0 flex items-center gap-0.5 px-0.5 border-r border-slate-700/80">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleMoveUp}
               disabled={!canUp}
-              title={canUp ? 'Move section up (above previous paragraph)' : 'Already at the top of this section'}
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title={canUp ? 'Move image up (above previous paragraph)' : 'Already at the top of this section'}
+              className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <ArrowUp size={15} />
+              <ArrowUp size={14} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleMoveDown}
               disabled={!canDown}
-              title={canDown ? 'Move section down (below next paragraph)' : 'Already at the bottom of this section'}
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title={canDown ? 'Move image down (below next paragraph)' : 'Already at the bottom of this section'}
+              className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <ArrowDown size={15} />
+              <ArrowDown size={14} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleMoveToTop}
               title="Move to top of article"
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors hidden sm:inline-flex"
+              className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors hidden sm:inline-flex"
             >
-              <ChevronsUp size={15} />
+              <ChevronsUp size={14} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleMoveToBottom}
               title="Move to bottom of article"
-              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors hidden sm:inline-flex"
+              className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors hidden sm:inline-flex"
             >
-              <ChevronsDown size={15} />
+              <ChevronsDown size={14} />
             </button>
           </div>
 
           {/* Alignment Group */}
-          <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
+          <div className="shrink-0 flex items-center gap-0.5 px-0.5 border-r border-slate-700/80">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => updateAttributes({ alignment: 'left' })}
               title="Align Left"
-              className={`p-1.5 rounded-lg transition-colors ${
-                alignment === 'left' ? 'bg-red-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'
+              className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                alignment === 'left' ? 'bg-red-600 text-white font-bold shadow-xs' : 'hover:bg-slate-800 text-slate-300'
               }`}
             >
-              <AlignLeft size={15} />
+              <AlignLeft size={14} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => updateAttributes({ alignment: 'center' })}
               title="Align Center"
-              className={`p-1.5 rounded-lg transition-colors ${
-                alignment === 'center' ? 'bg-red-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'
+              className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                alignment === 'center' ? 'bg-red-600 text-white font-bold shadow-xs' : 'hover:bg-slate-800 text-slate-300'
               }`}
             >
-              <AlignCenter size={15} />
+              <AlignCenter size={14} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => updateAttributes({ alignment: 'right' })}
               title="Align Right"
-              className={`p-1.5 rounded-lg transition-colors ${
-                alignment === 'right' ? 'bg-red-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'
+              className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                alignment === 'right' ? 'bg-red-600 text-white font-bold shadow-xs' : 'hover:bg-slate-800 text-slate-300'
               }`}
             >
-              <AlignRight size={15} />
+              <AlignRight size={14} />
             </button>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => updateAttributes({ alignment: 'full' })}
               title="Full Width"
-              className={`p-1.5 rounded-lg transition-colors ${
-                alignment === 'full' ? 'bg-red-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-300'
+              className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                alignment === 'full' ? 'bg-red-600 text-white font-bold shadow-xs' : 'hover:bg-slate-800 text-slate-300'
               }`}
             >
-              <Maximize2 size={15} />
+              <Maximize2 size={14} />
             </button>
           </div>
 
           {/* Alt SEO Button */}
-          <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
+          <div className="shrink-0 flex items-center px-0.5 border-r border-slate-700/80">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -451,17 +459,18 @@ export default function ImageNodeView({
                 setShowAltInput(true);
                 setTimeout(() => altInputRef.current?.focus(), 50);
               }}
-              title="Edit Image Alt Text for SEO & Accessibility"
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                localAlt ? 'bg-red-900/60 text-red-200 border border-red-500/50' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              title={localAlt ? `Alt Text: "${localAlt}" (Click to edit)` : 'Edit Image Alt Text for SEO & Accessibility'}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                localAlt ? 'bg-red-950/80 text-red-200 border border-red-500/60 shadow-xs' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
               }`}
             >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${localAlt ? 'bg-red-400' : 'bg-slate-500'}`} />
               <span>Alt SEO</span>
             </button>
           </div>
 
           {/* Link Button */}
-          <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
+          <div className="shrink-0 flex items-center px-0.5 border-r border-slate-700/80">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -469,18 +478,18 @@ export default function ImageNodeView({
                 setShowLinkInput(prev => !prev);
                 setTimeout(() => hrefInputRef.current?.focus(), 50);
               }}
-              title="Add or edit link on this image (internal or external URL)"
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+              title={localHref ? `Linked to: ${localHref}` : 'Add or edit link on this image (internal or external URL)'}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                 localHref ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
               }`}
             >
-              <LinkIcon size={12} className={localHref ? 'text-white' : 'text-blue-400'} />
+              <LinkIcon size={12} className={localHref ? 'text-white shrink-0' : 'text-blue-400 shrink-0'} />
               <span>{localHref ? 'Linked' : 'Link'}</span>
             </button>
           </div>
 
           {/* Replace Button */}
-          <div className="flex items-center gap-0.5 px-1 border-r border-slate-700/80">
+          <div className="shrink-0 flex items-center px-0.5 border-r border-slate-700/80">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -490,15 +499,15 @@ export default function ImageNodeView({
                 setIsReplaceModalOpen(true);
               }}
               title="Replace Image with new file, media library, or URL"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+              className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white whitespace-nowrap transition-colors cursor-pointer"
             >
-              <RefreshCw size={13} className="text-red-400" />
+              <RefreshCw size={12} className="text-red-400 shrink-0" />
               <span>Replace</span>
             </button>
           </div>
 
           {/* Delete Button */}
-          <div className="pl-1">
+          <div className="shrink-0 pl-0.5">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -508,9 +517,9 @@ export default function ImageNodeView({
                 deleteNode();
               }}
               title="Delete Image"
-              className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-600 text-red-300 hover:text-white transition-colors cursor-pointer"
+              className="shrink-0 p-1.5 rounded-lg bg-red-950/60 hover:bg-red-600 text-red-300 hover:text-white transition-colors cursor-pointer"
             >
-              <Trash2 size={15} />
+              <Trash2 size={14} />
             </button>
           </div>
         </div>

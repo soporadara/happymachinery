@@ -168,7 +168,7 @@ export default function LinkCardNodeView({
     >
       {/* Floating Action Bar */}
       <div 
-        className={`absolute -top-11 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 px-2.5 py-1.5 rounded-2xl bg-slate-950/95 dark:bg-slate-900/98 text-white backdrop-blur-xl shadow-2xl border border-slate-700/80 transition-all duration-200 pointer-events-auto ${
+        className={`editor-floating-toolbar absolute -top-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1 rounded-xl bg-slate-950/95 dark:bg-slate-900/95 text-white backdrop-blur-xl shadow-2xl border border-slate-700/80 w-max max-w-[calc(100vw-2rem)] overflow-x-auto scrollbar-none whitespace-nowrap transition-all duration-200 pointer-events-auto select-none ${
           isBarVisible 
             ? 'opacity-100 translate-y-0 visible scale-100' 
             : 'opacity-0 -translate-y-2 invisible scale-95 pointer-events-none'
@@ -178,23 +178,23 @@ export default function LinkCardNodeView({
         <div 
           data-drag-handle="" 
           title="Drag and drop Link Card into any section" 
-          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white cursor-grab active:cursor-grabbing font-mono text-[11px] font-semibold select-none border border-slate-600/50 shadow-xs mr-1"
+          className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white cursor-grab active:cursor-grabbing font-mono text-[11px] font-semibold select-none border border-slate-600/50 shadow-xs whitespace-nowrap"
         >
-          <GripVertical size={14} className="text-blue-400" />
-          <span>Drag</span>
+          <GripVertical size={13} className="text-blue-400 shrink-0" />
+          <span className="hidden sm:inline">Drag</span>
         </div>
 
         {/* Section Move Group */}
-        <div className="flex items-center gap-0.5 pr-1 border-r border-slate-700/80">
+        <div className="shrink-0 flex items-center gap-0.5 px-0.5 border-r border-slate-700/80">
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={handleMoveUp}
             disabled={!canUp}
             title={canUp ? 'Move link card up (above previous paragraph)' : 'Already at the top of this section'}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
-            <ArrowUp size={15} />
+            <ArrowUp size={14} />
           </button>
           <button
             type="button"
@@ -202,9 +202,9 @@ export default function LinkCardNodeView({
             onClick={handleMoveDown}
             disabled={!canDown}
             title={canDown ? 'Move link card down (below next paragraph)' : 'Already at the bottom of this section'}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="shrink-0 p-1.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
-            <ArrowDown size={15} />
+            <ArrowDown size={14} />
           </button>
           <button
             type="button"

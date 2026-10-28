@@ -813,3 +813,35 @@ html:not(.dark) .tiptap.ProseMirror td {
   color: #334155 !important;
 }
 
+/* ── SLEEK FLOATING NODE ACTION BARS (IMAGE, TERMINAL, LINK CARD) ── */
+.editor-floating-toolbar {
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.editor-floating-toolbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.editor-floating-toolbar,
+.editor-floating-toolbar * {
+  white-space: nowrap !important;
+}
+
+.scrollbar-none {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+
