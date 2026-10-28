@@ -6,6 +6,8 @@
  * with captions and SEO alt tags, and registers them in the Media Library gallery.
  */
 
+import { cleanHtmlTable, isTsvTable, convertTsvToTableHtml, isMarkdownTable, convertMarkdownTableToHtml } from './tablePasteHelper.ts';
+
 export interface DetectedImage {
   url: string;
   alt: string;
@@ -43,7 +45,7 @@ export function isImageUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
   if (isMiniexcavatorUrl(trimmed)) return true;
-  return /\.(webp|png|jpe?g|gif|svg)(\?.*)?$/i.test(trimmed);
+  return /\.(webp|png|jpe?g|gif|svg)(\?.*)?$/i.test(trimmed) || /googleusercontent\.com/i.test(trimmed);
 }
 
 /**
@@ -97,6 +99,10 @@ function escapeHtml(str: string): string {
  */
 export function isStandaloneHeading(line: string): boolean {
   if (!line || typeof line !== 'string') return false;
+  if (line.includes('\t')) return false;
+  if (/^<(?:\/)?(?:table|thead|tbody|tr|th|td)/i.test(line.trim())) return false;
+  if (line.trim().startsWith('|')) return false;
+
   const clean = line
     .trim()
     .replace(/^<p(?:\s+[^>]*)?>\s*/i, '')
@@ -138,6 +144,9 @@ export function isStandaloneHeading(line: string): boolean {
 export function detectHeadingInBlock(block: string): { level: number; text: string } | null {
   const trimmed = block.trim();
   if (!trimmed) return null;
+  if (trimmed.includes('\t') || (trimmed.startsWith('|') && trimmed.includes('|')) || /^<(?:\/)?(?:table|thead|tbody|tr|th|td)/i.test(trimmed)) {
+    return null;
+  }
 
   // 1. Markdown headings: #, ##, ###, ####
   const mdHead = trimmed.match(/^(#{1,6})\s+(.+)$/);
@@ -198,8 +207,29 @@ export function detectHeadingInBlock(block: string): { level: number; text: stri
  * - Plain https://img.miniexcavator.org/...
  */
 export function parseImageLine(line: string): { url: string; alt: string; caption: string; href?: string } | null {
-  const trimmed = line.trim();
+  if (!line || typeof line !== 'string') return null;
+  let trimmed = line.trim();
   if (!trimmed) return null;
+
+  // Strip wrapping <p> or <div> tag if it wraps an image or link
+  trimmed = trimmed.replace(/^<(?:p|div)(?:\s+[^>]*)?>\s*/i, '').replace(/\s*<\/(?:p|div)>$/i, '').trim();
+  if (!trimmed) return null;
+
+  // 0. HTML <figure> tag: <figure><img src="..." alt="..."><figcaption>...</figcaption></figure>
+  if (/<figure[\s>]/i.test(trimmed) && /<img[\s>]/i.test(trimmed)) {
+    const srcMatch = trimmed.match(/<img\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i);
+    if (srcMatch && (isMiniexcavatorUrl(srcMatch[1]) || isImageUrl(srcMatch[1]))) {
+      const altMatch = trimmed.match(/<img\s+[^>]*alt=["']([^"']*)["']/i);
+      const capMatch = trimmed.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i);
+      const alt = altMatch ? altMatch[1].trim() : '';
+      const caption = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+      return {
+        url: srcMatch[1].trim(),
+        alt: alt || caption || cleanImageTitle(srcMatch[1]),
+        caption: caption || alt,
+      };
+    }
+  }
 
   // 1. Markdown Linked Image: [![Alt](imgUrl)](linkUrl)
   const mdLinkedImg = trimmed.match(/^\[!\[(.*?)\]\((https?:\/\/[^\s)]+|\/images\/[^\s)]+)\)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)$/i);
@@ -360,12 +390,19 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const hasMiniexcavator = /img\.miniexcavator\.org/i.test(normalized);
 
+  // Protect HTML tables so they are not fragmented by block splitting
+  const tablePlaceholders: string[] = [];
+  const protectedTables = normalized.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+    const placeholder = `__HM_HTML_TABLE_BLOCK_${tablePlaceholders.length}__`;
+    tablePlaceholders.push(match);
+    return `\n\n${placeholder}\n\n`;
+  });
+
   // Split into raw lines / paragraphs
-  // If HTML with <p> or <h>, preserve blocks; otherwise split by lines
   let rawBlocks: string[] = [];
-  if (normalized.includes('</p>') || normalized.includes('</div>') || normalized.includes('</h1>')) {
+  if (protectedTables.includes('</p>') || protectedTables.includes('</div>') || protectedTables.includes('</h1>')) {
     // Split HTML blocks
-    rawBlocks = normalized
+    rawBlocks = protectedTables
       .replace(/<\/p>/gi, '</p>\n')
       .replace(/<\/h([1-6])>/gi, '</h$1>\n')
       .replace(/<\/div>/gi, '</div>\n')
@@ -374,8 +411,36 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
       .map(b => b.trim())
       .filter(Boolean);
   } else {
-    rawBlocks = normalized.split('\n').map(b => b.trim()).filter(Boolean);
+    const lines = protectedTables.split('\n').map(l => l.trim()).filter(Boolean);
+    let tableBuffer: string[] = [];
+
+    for (let k = 0; k < lines.length; k++) {
+      const line = lines[k];
+      const isTableLine = line.includes('\t') || (line.startsWith('|') && line.includes('|'));
+
+      if (isTableLine) {
+        tableBuffer.push(line);
+      } else {
+        if (tableBuffer.length > 0) {
+          rawBlocks.push(tableBuffer.join('\n'));
+          tableBuffer = [];
+        }
+        rawBlocks.push(line);
+      }
+    }
+    if (tableBuffer.length > 0) {
+      rawBlocks.push(tableBuffer.join('\n'));
+    }
   }
+
+  // Restore protected HTML tables
+  rawBlocks = rawBlocks.map((b) => {
+    if (b.startsWith('__HM_HTML_TABLE_BLOCK_')) {
+      const idx = parseInt(b.replace('__HM_HTML_TABLE_BLOCK_', '').replace('__', ''), 10);
+      return tablePlaceholders[idx] || b;
+    }
+    return b;
+  });
 
   if (rawBlocks.length === 0) {
     return {
@@ -551,6 +616,31 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
 
     const block = rawBlocks[i].trim();
     if (!block) continue;
+
+    // Check if block is an HTML Table
+    if (/<table[\s>]/i.test(block)) {
+      const cleaned = cleanHtmlTable(block);
+      bodyOut.push(cleaned ? cleaned.html : block);
+      continue;
+    }
+
+    // Check if block is a TSV Table
+    if (isTsvTable(block)) {
+      const tsvRes = convertTsvToTableHtml(block);
+      if (tsvRes) {
+        bodyOut.push(tsvRes.html);
+        continue;
+      }
+    }
+
+    // Check if block is a Markdown Table
+    if (isMarkdownTable(block)) {
+      const mdRes = convertMarkdownTableToHtml(block);
+      if (mdRes) {
+        bodyOut.push(mdRes.html);
+        continue;
+      }
+    }
 
     // Check if block is a heading (markdown, html, numbered, or standalone)
     const headingMatch = detectHeadingInBlock(block);

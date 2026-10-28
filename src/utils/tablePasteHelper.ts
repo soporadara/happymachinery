@@ -349,10 +349,20 @@ export function cleanHtmlTable(html: string): DetectedTableResult | null {
  * Returns clean HTML table or null if no table detected.
  */
 export function detectAndConvertTable(htmlData: string, textData: string): DetectedTableResult | null {
+  const raw = textData || htmlData || '';
+  // If the content is an entire blog article with miniexcavator links or headings + images,
+  // do not intercept as standalone table: let processPastedBlog handle the entire article!
+  if (/img\.miniexcavator\.org/i.test(raw) || (/^(?:#+\s|<h[1-3]|title:)/im.test(raw) && /\.(webp|png|jpe?g|gif|svg)/i.test(raw))) {
+    return null;
+  }
+
   // 1. Check HTML data for Google Docs / Web <table>
   if (htmlData && /<table[\s>]/i.test(htmlData)) {
-    const res = cleanHtmlTable(htmlData);
-    if (res && res.detected) return res;
+    const textOutside = htmlData.replace(/<table[\s\S]*?<\/table>/gi, '').replace(/<[^>]+>/g, '').trim();
+    if (textOutside.length <= 150) {
+      const res = cleanHtmlTable(htmlData);
+      if (res && res.detected) return res;
+    }
   }
 
   // 2. Check textData for Tab-Separated Values (TSV) from Google Sheets / Excel / Google Docs plain copy

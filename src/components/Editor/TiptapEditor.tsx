@@ -937,12 +937,70 @@ export default function TiptapEditor({
           }
         }
 
-        // Check text or HTML for miniexcavator links or blog import
+        // Check text or HTML for miniexcavator links, blog import, or tables
         const textData = event.clipboardData?.getData('text/plain') || '';
         const htmlData = event.clipboardData?.getData('text/html') || '';
-        const rawPasted = textData || htmlData;
 
-        // 1. SMART TABLE DETECTION: Accurately detect Google Docs table, TSV (Sheets/Excel), or Markdown table
+        // 1. FULL BLOG IMPORT FIRST: Detect article title, featured cover image, media gallery images, AND tables
+        const candidatePayloads = [textData, htmlData].filter(Boolean);
+        for (const payload of candidatePayloads) {
+          if (
+            /img\.miniexcavator\.org/i.test(payload) ||
+            (/^(?:#+\s|<h[1-3]|title:)/im.test(payload) && /\.(webp|png|jpe?g|gif|svg)/i.test(payload)) ||
+            (/<h[1-3]/i.test(payload) && /<img/i.test(payload))
+          ) {
+            const res = processPastedBlog(payload);
+            if (res.detected) {
+              event.preventDefault();
+
+              // 1. Auto-extract Article Title
+              if (res.title && onAutoExtractTitleRef.current) {
+                onAutoExtractTitleRef.current(res.title);
+              }
+
+              // 2. Auto-fill Featured Cover Image
+              if (res.coverImage && onAutoExtractCoverImageRef.current) {
+                onAutoExtractCoverImageRef.current(res.coverImage.url, res.coverImage.alt);
+              }
+
+              // 3. Auto-insert all detected images into the Media Library gallery
+              if (onMediaUploadedRef.current && res.allImages.length > 0) {
+                res.allImages.forEach((img, idx) => {
+                  onMediaUploadedRef.current?.({
+                    id: `media-auto-${Date.now()}-${idx}`,
+                    title: img.caption || img.alt || cleanImageTitle(img.url),
+                    url: img.url,
+                    folder: 'galleries',
+                    dateAdded: new Date().toISOString().split('T')[0],
+                    size: '150 KB',
+                  });
+                });
+              }
+
+              // 4. Insert or set cleaned content into editor (includes tables, images with captions, and headings)
+              if (res.cleanedHtml) {
+                const currentContent = view.state.doc.textContent.trim();
+                if (res.isFullBlogImport && currentContent.length === 0) {
+                  setTimeout(() => {
+                    if (editorRef.current) {
+                      editorRef.current.commands.setContent(res.cleanedHtml);
+                    }
+                  }, 10);
+                } else {
+                  setTimeout(() => {
+                    if (editorRef.current) {
+                      editorRef.current.commands.insertContent(res.cleanedHtml);
+                    }
+                  }, 10);
+                }
+              }
+
+              return true;
+            }
+          }
+        }
+
+        // 2. STANDALONE TABLE DETECTION: Accurately detect Google Docs table, TSV (Sheets/Excel), or Markdown table
         const tableRes = detectAndConvertTable(htmlData, textData);
         if (tableRes && tableRes.detected) {
           event.preventDefault();
@@ -962,60 +1020,7 @@ export default function TiptapEditor({
           }
           return true;
         }
-
-        if (rawPasted && (/img\.miniexcavator\.org/i.test(rawPasted) || (/^(?:#+\s|<h[1-3]|title:)/im.test(rawPasted) && /\.(webp|png|jpe?g|gif|svg)/i.test(rawPasted)))) {
-          const res = processPastedBlog(rawPasted);
-          if (res.detected) {
-            event.preventDefault();
-
-            // 1. Auto-extract Article Title
-            if (res.title && onAutoExtractTitleRef.current) {
-              onAutoExtractTitleRef.current(res.title);
-            }
-
-            // 2. Auto-fill Featured Cover Image
-            if (res.coverImage && onAutoExtractCoverImageRef.current) {
-              onAutoExtractCoverImageRef.current(res.coverImage.url, res.coverImage.alt);
-            }
-
-            // 3. Auto-insert all detected images into the Media Library gallery
-            if (onMediaUploadedRef.current && res.allImages.length > 0) {
-              res.allImages.forEach((img, idx) => {
-                onMediaUploadedRef.current?.({
-                  id: `media-auto-${Date.now()}-${idx}`,
-                  title: img.caption || img.alt || cleanImageTitle(img.url),
-                  url: img.url,
-                  folder: 'galleries',
-                  dateAdded: new Date().toISOString().split('T')[0],
-                  size: '150 KB',
-                });
-              });
-            }
-
-            // 4. Insert or set cleaned content into editor
-            if (res.cleanedHtml) {
-              const currentContent = view.state.doc.textContent.trim();
-              if (res.isFullBlogImport && currentContent.length === 0) {
-                setTimeout(() => {
-                  if (editorRef.current) {
-                    editorRef.current.commands.setContent(res.cleanedHtml);
-                  }
-                }, 10);
-              } else {
-                setTimeout(() => {
-                  if (editorRef.current) {
-                    editorRef.current.commands.insertContent(res.cleanedHtml);
-                  }
-                }, 10);
-              }
-            }
-
-            return true;
-          }
-        }
-
-        // If user pastes structured text containing standalone headings or numbered sections,
-        // format it with convertContentToHtml so headings are rendered as large <h2> elements
+        // 3. Structured text with standalone headings or numbered sections
         if (textData && textData.includes('\n')) {
           const lines = textData.split('\n').map(l => l.trim()).filter(Boolean);
           const hasHeading = lines.some(l => isStandaloneHeading(l) || /^#{1,6}\s+/.test(l) || /^\d+\.\s+[A-Z]/.test(l));

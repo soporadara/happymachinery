@@ -9,6 +9,7 @@ import {
   detectAndConvertTable
 } from '../src/utils/tablePasteHelper.ts';
 import { isStandaloneHeading, convertContentToHtml } from '../src/utils/editorContentHelper.ts';
+import { processPastedBlog } from '../src/utils/blogImportHelper.ts';
 
 test('1. TSV table copied from Google Sheets or plain-text is accurately detected and converted', () => {
   const tsvSample = `Specification\tTYPHON KUVUO 4.0 (TYPH-KUVUO)\tTYPHON KUVUO 2.7 KONSTRUCTZ (TYPH-KUVUO27)
@@ -128,4 +129,79 @@ test('6. convertContentToHtml converts TSV table and Markdown table into HTML ta
   const converted = convertContentToHtml(tsvSample);
   assert.ok(converted.includes('<table class="editor-table'), 'convertContentToHtml must render table');
   assert.ok(!converted.includes('<h2>Travel Speed</h2>'), 'Table row must NOT be turned into <h2>');
+});
+
+test('7. processPastedBlog detects full blog with title, cover image, body gallery images, AND embedded TSV table', () => {
+  const fullBlogWithTable = `# Mini Excavator Comparison 2026
+
+https://img.miniexcavator.org/hero-excavator.webp
+TYPHON KUVUO 4.0 operating at industrial job site
+
+Choosing the right mini excavator requires careful examination of operating class, engine horsepower, and hydraulic capacities.
+
+Specification\tTYPHON KUVUO 4.0\tTYPHON KUVUO 2.7 KONSTRUCTZ
+Operating Class\t4-Ton (~8,800 lbs)\t2.7-Ton (5,300 lbs)
+Engine\tKubota D1703 Diesel\tKubota D1105 Diesel
+Horsepower\t25 HP @ 2,200 RPM\t19 HP @ 2,200 RPM
+Travel Speed\t2-speed: 1.4-2.7 mph\tSingle speed: 1.8 mph
+Cab Type\tEnclosed AC/Heater cabin\tOpen Canopy
+Boom Swing\tIndependent boom swing\tFixed boom swing
+
+https://img.miniexcavator.org/kuvuo-action.webp
+TYPHON KUVUO in trenching operation with hydraulic thumb
+
+Both models offer exceptional durability and standard auxiliary hydraulics for versatile attachments.`;
+
+  const res = processPastedBlog(fullBlogWithTable);
+
+  assert.strictEqual(res.detected, true, 'Blog must be detected');
+  assert.strictEqual(res.isFullBlogImport, true, 'Must be flagged as full blog import');
+  assert.strictEqual(res.title, 'Mini Excavator Comparison 2026', 'Article title must be extracted');
+  assert.ok(res.coverImage, 'Cover image must be extracted');
+  assert.strictEqual(res.coverImage.url, 'https://img.miniexcavator.org/hero-excavator.webp');
+  assert.strictEqual(res.allImages.length, 2, 'Must detect both images for media library gallery');
+
+  // Verify table is inside cleanedHtml
+  assert.ok(res.cleanedHtml.includes('<table class="editor-table'), 'Cleaned HTML must contain table');
+  assert.ok(res.cleanedHtml.includes('<th class="editor-th'), 'Table must have <th> headers');
+  assert.ok(res.cleanedHtml.includes('TYPHON KUVUO 4.0'), 'Table must contain cell data');
+  assert.ok(res.cleanedHtml.includes('Kubota D1703 Diesel'), 'Table must contain engine data');
+
+  // Table rows must NOT be converted to <h2>
+  assert.ok(!res.cleanedHtml.includes('<h2>Travel Speed</h2>'), 'Travel Speed must be table cell, not <h2>');
+  assert.ok(!res.cleanedHtml.includes('<h2>Cab Type</h2>'), 'Cab Type must be table cell, not <h2>');
+  assert.ok(!res.cleanedHtml.includes('<h2>Boom Swing</h2>'), 'Boom Swing must be table cell, not <h2>');
+
+  // Second image must be rendered in cleanedHtml
+  assert.ok(res.cleanedHtml.includes('kuvuo-action.webp'), 'Second image must be in body HTML');
+  assert.ok(res.cleanedHtml.includes('trenching operation with hydraulic thumb'), 'Caption must be retained');
+});
+
+test('8. detectAndConvertTable yields to full blog import when blog indicators exist', () => {
+  const fullBlogWithTable = `# Mini Excavator Comparison 2026\nhttps://img.miniexcavator.org/hero.webp\nCol A\tCol B\nVal A\tVal B`;
+  const result = detectAndConvertTable('', fullBlogWithTable);
+  assert.strictEqual(result, null, 'detectAndConvertTable must not hijack full blog import');
+});
+
+test('9. processPastedBlog detects full blog with HTML table and images', () => {
+  const fullBlogWithHtmlTable = `<h1>Compact Machinery Buyer Guide</h1>
+<p><img src="https://img.miniexcavator.org/compact-guide.webp" alt="Compact guide cover" /></p>
+<p>Modern mini excavators are indispensable across construction sites.</p>
+<table>
+  <tr><td>Model</td><td>Weight</td><td>Horsepower</td></tr>
+  <tr><td>TYPHON T18</td><td>1.8 Ton</td><td>14 HP</td></tr>
+  <tr><td>TYPHON V900</td><td>1.0 Ton</td><td>13.5 HP</td></tr>
+</table>
+<p><img src="https://img.miniexcavator.org/t18-work.webp" alt="TYPHON T18 working" /></p>
+<p>Summary of best practices.</p>`;
+
+  const res = processPastedBlog(fullBlogWithHtmlTable);
+  assert.strictEqual(res.detected, true, 'HTML blog must be detected');
+  assert.strictEqual(res.title, 'Compact Machinery Buyer Guide', 'Title must be extracted');
+  assert.ok(res.coverImage, 'Cover image must be extracted');
+  assert.strictEqual(res.coverImage.url, 'https://img.miniexcavator.org/compact-guide.webp');
+  assert.strictEqual(res.allImages.length, 2, 'All images must be detected');
+  assert.ok(res.cleanedHtml.includes('<table class="editor-table'), 'Table must be in cleaned HTML');
+  assert.ok(res.cleanedHtml.includes('TYPHON T18'), 'Table content must be preserved');
+  assert.ok(res.cleanedHtml.includes('t18-work.webp'), 'Body image must be preserved');
 });
