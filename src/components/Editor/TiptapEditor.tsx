@@ -13,6 +13,7 @@ import TerminalNodeView from './TerminalNodeView';
 import LinkCardNodeView from './LinkCardNodeView';
 import { convertContentToHtml, isStandaloneHeading } from '../../utils/editorContentHelper';
 import { processPastedBlog, cleanImageTitle } from '../../utils/blogImportHelper';
+import { detectAndConvertTable } from '../../utils/tablePasteHelper';
 import './TiptapEditor.css';
 
 const CustomImage = Image.extend({
@@ -940,6 +941,27 @@ export default function TiptapEditor({
         const textData = event.clipboardData?.getData('text/plain') || '';
         const htmlData = event.clipboardData?.getData('text/html') || '';
         const rawPasted = textData || htmlData;
+
+        // 1. SMART TABLE DETECTION: Accurately detect Google Docs table, TSV (Sheets/Excel), or Markdown table
+        const tableRes = detectAndConvertTable(htmlData, textData);
+        if (tableRes && tableRes.detected) {
+          event.preventDefault();
+          const currentContent = view.state.doc.textContent.trim();
+          if (currentContent.length === 0) {
+            setTimeout(() => {
+              if (editorRef.current) {
+                editorRef.current.commands.setContent(tableRes.html);
+              }
+            }, 10);
+          } else {
+            setTimeout(() => {
+              if (editorRef.current) {
+                editorRef.current.commands.insertContent(tableRes.html);
+              }
+            }, 10);
+          }
+          return true;
+        }
 
         if (rawPasted && (/img\.miniexcavator\.org/i.test(rawPasted) || (/^(?:#+\s|<h[1-3]|title:)/im.test(rawPasted) && /\.(webp|png|jpe?g|gif|svg)/i.test(rawPasted)))) {
           const res = processPastedBlog(rawPasted);

@@ -4,6 +4,8 @@
  * Matches Rafelblog's clean editorial UX with pretty headings and rendered images
  */
 
+import { isTsvTable, convertTsvToTableHtml, isMarkdownTable, convertMarkdownTableToHtml } from './tablePasteHelper.ts'
+
 export function renderInlineMarkdownToHtml(text: string): string {
   if (!text) return ''
   return text
@@ -23,6 +25,10 @@ export function renderInlineMarkdownToHtml(text: string): string {
 
 export function isStandaloneHeading(line: string): boolean {
   if (!line || typeof line !== 'string') return false
+  if (line.includes('\t')) return false
+  if (/^<(?:\/)?(?:table|thead|tbody|tr|th|td)/i.test(line.trim())) return false
+  if (line.trim().startsWith('|')) return false
+
   const clean = line
     .trim()
     .replace(/^<p(?:\s+[^>]*)?>\s*/i, '')
@@ -213,17 +219,37 @@ export function convertContentToHtml(content: string | string[] | any): string {
       return normalizedHtml
     }
 
-    // Split text into paragraphs, ensuring headings are separated into their own blocks
-    const lines = trimmed.split('\n').map(l => l.trim())
+    // Split text into paragraphs, ensuring headings are separated into their own blocks while keeping tables intact
+    const lines = trimmed.split('\n')
     const rebuilt: string[] = []
+    let inTable = false
+    let tableBuffer: string[] = []
+
     for (let k = 0; k < lines.length; k++) {
       const line = lines[k]
-      if (isStandaloneHeading(line) || /^#{1,6}\s+/.test(line) || /^\d+\.\s+[A-Z]/.test(line)) {
-        rebuilt.push(`\n\n${line}\n\n`)
+      const trimmedLine = line.trim()
+      const isTableLine = trimmedLine.includes('\t') || (trimmedLine.startsWith('|') && trimmedLine.includes('|'))
+
+      if (isTableLine) {
+        inTable = true
+        tableBuffer.push(trimmedLine)
+        continue
+      } else if (inTable) {
+        rebuilt.push(`\n\n${tableBuffer.join('\n')}\n\n`)
+        tableBuffer = []
+        inTable = false
+      }
+
+      if (isStandaloneHeading(trimmedLine) || /^#{1,6}\s+/.test(trimmedLine) || /^\d+\.\s+[A-Z]/.test(trimmedLine)) {
+        rebuilt.push(`\n\n${trimmedLine}\n\n`)
       } else {
         rebuilt.push(line)
       }
     }
+    if (tableBuffer.length > 0) {
+      rebuilt.push(`\n\n${tableBuffer.join('\n')}\n\n`)
+    }
+
     paragraphs = rebuilt.join('\n').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean)
   } else {
     return ''
@@ -339,6 +365,23 @@ export function convertContentToHtml(content: string | string[] | any): string {
       const items = raw.split('\n').map(l => l.trim()).filter(Boolean)
       out.push(`<ol>${items.map(it => `<li>${renderInlineMarkdownToHtml(it.replace(/^\d+\.\s+/, ''))}</li>`).join('')}</ol>`)
       continue
+    }
+
+    // 8.5. Tables: TSV Table or Markdown Table
+    if (isTsvTable(raw)) {
+      const tsvRes = convertTsvToTableHtml(raw)
+      if (tsvRes) {
+        out.push(tsvRes.html)
+        continue
+      }
+    }
+
+    if (isMarkdownTable(raw)) {
+      const mdRes = convertMarkdownTableToHtml(raw)
+      if (mdRes) {
+        out.push(mdRes.html)
+        continue
+      }
     }
 
     // 9. Already an HTML block (tables, div, blockquote, etc.)

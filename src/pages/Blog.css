@@ -738,43 +738,58 @@ html.dark .raf-body-content figcaption {
   border-color: #334155;
 }
 
-.blog-body-table {
+.blog-body-table,
+.blog-body-html-block table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
   font-size: 0.92rem;
   background: #ffffff;
+  margin: 24px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
 }
 
-.app-shell.dark .blog-body-table {
+.app-shell.dark .blog-body-table,
+.app-shell.dark .blog-body-html-block table {
   background: #1e293b;
+  border-color: #334155;
 }
 
-.blog-body-table th {
+.blog-body-table th,
+.blog-body-html-block table th {
   background: #07182e;
   color: #ffffff;
   padding: 12px 16px;
   font-weight: 750;
   font-size: 0.86rem;
   letter-spacing: 0.02em;
+  border: 1px solid #1e293b;
 }
 
-.blog-body-table td {
+.blog-body-table td,
+.blog-body-html-block table td {
   padding: 12px 16px;
   border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid #f1f5f9;
   color: #334155;
 }
 
-.app-shell.dark .blog-body-table td {
+.app-shell.dark .blog-body-table td,
+.app-shell.dark .blog-body-html-block table td {
   border-bottom-color: #334155;
+  border-right-color: #334155;
   color: #cbd5e1;
 }
 
-.blog-body-table tr:nth-child(even) td {
+.blog-body-table tr:nth-child(even) td,
+.blog-body-html-block table tr:nth-child(even) td {
   background: #f8fafc;
 }
 
-.app-shell.dark .blog-body-table tr:nth-child(even) td {
+.app-shell.dark .blog-body-table tr:nth-child(even) td,
+.app-shell.dark .blog-body-html-block table tr:nth-child(even) td {
   background: #0f172a;
 }
 
