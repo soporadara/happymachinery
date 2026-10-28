@@ -41,24 +41,24 @@ export default function Navigation({
   const searchableProducts = [
     {
       id: 901,
-      name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Crimson Red',
-      category: 'Equipment, Mini Skid Steer',
+      name: 'TYPHON STOMP V900 American Skid Steer Loader (25HP Kubota D1105) – Crimson Red',
+      category: 'Equipment, American Skid Steer, Mini Excavator Pairing',
       image: '/images/loader-red.png',
-      keywords: 'red crimson typhon v900 skid steer loader pallet fork'
+      keywords: 'red crimson typhon v900 skid steer loader pallet fork american skid steer american excavator mini excavator usa typhon machinery'
     },
     {
       id: 902,
-      name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Industrial Yellow',
-      category: 'Equipment, Mini Skid Steer',
+      name: 'TYPHON STOMP V900 American Skid Steer Loader (25HP Kubota D1105) – Industrial Yellow',
+      category: 'Equipment, American Skid Steer, Mini Excavator Pairing',
       image: '/images/loader-yellow.png',
-      keywords: 'yellow industrial typhon v900 skid steer loader pallet fork'
+      keywords: 'yellow industrial typhon v900 skid steer loader pallet fork american skid steer american excavator mini excavator usa typhon machinery'
     },
     {
       id: 903,
-      name: 'TYPHON STOMP V900 1.4 Ton Skid Steer Loader with 25HP Kubota D1105 Engine, 1,102 lb Max Load – Cobalt Blue',
-      category: 'Equipment, Mini Skid Steer',
+      name: 'TYPHON STOMP V900 American Skid Steer Loader (25HP Kubota D1105) – Cobalt Blue',
+      category: 'Equipment, American Skid Steer, Mini Excavator Pairing',
       image: '/images/loader-blue.png',
-      keywords: 'blue cobalt typhon v900 skid steer loader pallet fork'
+      keywords: 'blue cobalt typhon v900 skid steer loader pallet fork american skid steer american excavator mini excavator usa typhon machinery'
     }
   ]
   const normalizedQuery = searchQuery.trim().toLowerCase()

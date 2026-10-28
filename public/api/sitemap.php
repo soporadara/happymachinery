@@ -52,16 +52,57 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/hero-v900-three-colors.png</image:loc>
-      <image:title>TYPHON STOMP V900 Three Colors Lineup</image:title>
+      <image:title>TYPHON STOMP V900 Three Colors Lineup — American Skid Steer</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
-      <image:title>TYPHON STOMP V900 Jobsite Operations</image:title>
+      <image:title>TYPHON STOMP V900 Jobsite Operations and Mini Excavator Trenching Support</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
-      <image:title>Happy Machinery TYPHON Fleet</image:title>
+      <image:title>Official Happy Machinery TYPHON Machinery Heavy Equipment Fleet</image:title>
     </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/v900-equipment-layout.png</image:loc>
+      <image:title>TYPHON STOMP V900 American Skid Steer Equipment Layout</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/v900-delivery.png</image:loc>
+      <image:title>American Skid Steer and Mini Excavator USA Nationwide Transport</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-red-jobsite.png</image:loc>
+      <image:title>Crimson Red V900 with Pallet Fork on USA Jobsite</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-yellow-jobsite.png</image:loc>
+      <image:title>Industrial Yellow V900 Skid Steer on Commercial Jobsite</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/fork-blue-jobsite.png</image:loc>
+      <image:title>Cobalt Blue V900 Skid Steer on Worksite</image:title>
+    </image:image>
+    <video:video>
+      <video:thumbnail_loc>https://happymachinery.com/images/fork-red-jobsite.png</video:thumbnail_loc>
+      <video:title>TYPHON STOMP V900 American Skid Steer Lift and Carry Performance</video:title>
+      <video:description>See the TYPHON STOMP V900 American skid steer lift, carry, and place materials using responsive hydraulics and a stable tracked platform.</video:description>
+      <video:content_loc>https://happymachinery.com/videos/v900-lift-performance.mp4</video:content_loc>
+      <video:publication_date>2026-07-22T14:29:40+07:00</video:publication_date>
+    </video:video>
+    <video:video>
+      <video:thumbnail_loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</video:thumbnail_loc>
+      <video:title>TYPHON STOMP V900 Jobsite Agility and Excavator Support Performance</video:title>
+      <video:description>Watch the compact TYPHON STOMP V900 American skid steer maneuver through confined jobsites and narrow access points.</video:description>
+      <video:content_loc>https://happymachinery.com/videos/v900-jobsite-performance.mp4</video:content_loc>
+      <video:publication_date>2026-07-22T14:29:40+07:00</video:publication_date>
+    </video:video>
+    <video:video>
+      <video:thumbnail_loc>https://happymachinery.com/images/v900-equipment-layout.png</video:thumbnail_loc>
+      <video:title>TYPHON STOMP V900 Tracked Ground Performance Across USA Soils</video:title>
+      <video:description>See the TYPHON STOMP V900 compact track loader maintain traction and controlled movement across demanding work surfaces.</video:description>
+      <video:content_loc>https://happymachinery.com/videos/v900-ground-performance.mp4</video:content_loc>
+      <video:publication_date>2026-07-22T14:29:40+07:00</video:publication_date>
+    </video:video>
   </url>
   <url>
     <loc>https://happymachinery.com/store</loc>
@@ -70,7 +111,7 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>0.95</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
-      <image:title>Official TYPHON Machinery Catalog</image:title>
+      <image:title>Official TYPHON Machinery Store — American Skid Steers and Mini Excavator Attachments</image:title>
     </image:image>
   </url>
   <url>
@@ -80,46 +121,46 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>0.95</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
-      <image:title>Commercial Machinery &amp; Contractor Resource Blog</image:title>
+      <image:title>Commercial Machinery Blog — Mini Excavator USA and American Skid Steer Guides</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://happymachinery.com/about</loc>
     <lastmod><?= $today ?></lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.80</priority>
+    <priority>0.85</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/about-team-1.png</image:loc>
-      <image:title>Happy Machinery Team &amp; Facilities</image:title>
+      <image:title>Happy Machinery Facilities and TYPHON Machinery USA Dealer Team</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://happymachinery.com/contact</loc>
     <lastmod><?= $today ?></lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.80</priority>
+    <priority>0.85</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/v900-promo.webp</image:loc>
-      <image:title>Direct Sales &amp; Technical Service</image:title>
+      <image:title>Contact Happy Machinery — TYPHON Skid Steer and Mini Excavator Direct Sales</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://happymachinery.com/faq</loc>
     <lastmod><?= $today ?></lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.70</priority>
+    <changefreq>weekly</changefreq>
+    <priority>0.80</priority>
   </url>
   <url>
     <loc>https://happymachinery.com/terms-of-service</loc>
     <lastmod><?= $today ?></lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.50</priority>
+    <priority>0.60</priority>
   </url>
   <url>
     <loc>https://happymachinery.com/privacy-policy</loc>
     <lastmod><?= $today ?></lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.50</priority>
+    <priority>0.60</priority>
   </url>
 
   <!-- Machinery Products -->
@@ -130,11 +171,15 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>0.90</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/loader-red.png</image:loc>
-      <image:title>TYPHON STOMP V900 – Crimson Red</image:title>
+      <image:title>Crimson Red TYPHON STOMP V900 American Skid Steer Loader</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-red.jpg</image:loc>
-      <image:title>Crimson Red V900 with Pallet Fork Attachment</image:title>
+      <image:title>Crimson Red V900 with Pallet Fork Attachment for Material Handling</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-red.jpg</image:loc>
+      <image:title>Crimson Red V900 Studio View — Kubota D1105 Diesel Power</image:title>
     </image:image>
   </url>
   <url>
@@ -144,11 +189,15 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>0.90</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/loader-yellow.png</image:loc>
-      <image:title>TYPHON STOMP V900 – Industrial Yellow</image:title>
+      <image:title>Industrial Yellow TYPHON STOMP V900 American Skid Steer Loader</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-yellow.jpg</image:loc>
-      <image:title>Industrial Yellow V900 with Pallet Fork Attachment</image:title>
+      <image:title>Industrial Yellow V900 with Pallet Fork Attachment on Jobsite</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-yellow.jpg</image:loc>
+      <image:title>Industrial Yellow V900 Studio View — Compact Track Loader</image:title>
     </image:image>
   </url>
   <url>
@@ -158,11 +207,15 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>0.90</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/loader-blue.png</image:loc>
-      <image:title>TYPHON STOMP V900 – Cobalt Blue</image:title>
+      <image:title>Cobalt Blue TYPHON STOMP V900 American Skid Steer Loader</image:title>
     </image:image>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-blue.jpg</image:loc>
-      <image:title>Cobalt Blue V900 with Pallet Fork Attachment</image:title>
+      <image:title>Cobalt Blue V900 with Pallet Fork Attachment for Construction</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://happymachinery.com/images/loader-blue.jpg</image:loc>
+      <image:title>Cobalt Blue V900 Studio View — Hydraulic 12.7 GPM Flow</image:title>
     </image:image>
   </url>
   <url>
@@ -172,7 +225,7 @@ echo '<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>' . "\n";
     <priority>0.85</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-yellow.jpg</image:loc>
-      <image:title>TYPH-5005M Heavy Duty Adjustable Pallet Fork Attachment</image:title>
+      <image:title>TYPH-5005M American Skid Steer Heavy Duty Pallet Fork Attachment</image:title>
     </image:image>
   </url>
 

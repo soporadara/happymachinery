@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   V900_PALLET_FORK_PRICE,
@@ -87,6 +87,50 @@ export default function Home() {
     title: string
     tag: string
   } | null>(null)
+  const heroVideoRef = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => {
+    const vid = heroVideoRef.current
+    if (!vid) return
+
+    // Explicitly enforce muted properties to satisfy iOS/Android mobile autoplay policies
+    vid.defaultMuted = true
+    vid.muted = true
+    vid.playsInline = true
+    vid.setAttribute('muted', '')
+    vid.setAttribute('playsinline', '')
+    vid.setAttribute('webkit-playsinline', '')
+
+    const startPlayback = () => {
+      if (!vid) return
+      const promise = vid.play()
+      if (promise !== undefined) {
+        promise.catch(() => {
+          // Autoplay blocked by power-saving or browser restriction
+        })
+      }
+    }
+
+    startPlayback()
+
+    // Resume video playback on first user touch/scroll if browser paused it
+    const handleUserInteraction = () => {
+      if (vid && vid.paused) {
+        vid.play().catch(() => {})
+      }
+    }
+
+    window.addEventListener('touchstart', handleUserInteraction, { passive: true, once: true })
+    window.addEventListener('scroll', handleUserInteraction, { passive: true, once: true })
+    window.addEventListener('click', handleUserInteraction, { passive: true, once: true })
+
+    return () => {
+      window.removeEventListener('touchstart', handleUserInteraction)
+      window.removeEventListener('scroll', handleUserInteraction)
+      window.removeEventListener('click', handleUserInteraction)
+    }
+  }, [content.hero.videoUrl])
+
   const [latestPosts, setLatestPosts] = useState<BlogPost[]>(() => {
     try {
       const local = localStorage.getItem('happy-machinery-blog-posts')
@@ -339,17 +383,18 @@ export default function Home() {
       {/* 1. Premium Hero Section */}
       {content.hero.visible !== false && (
         <section className="hero">
-          {/* Desktop ambient background video (screens > 760px) */}
-          <div className="hero-desktop-media" aria-hidden="true">
+          <div className="hero-background-wrapper" aria-hidden="true">
             <video
+              ref={heroVideoRef}
               key={content.hero.videoUrl}
               className="hero-background-media"
               autoPlay
               muted
               loop
               playsInline
-              preload="metadata"
+              preload="auto"
               poster={content.hero.posterUrl}
+              src={content.hero.videoUrl}
             >
               <source src={content.hero.videoUrl} type="video/mp4" />
             </video>
@@ -363,26 +408,6 @@ export default function Home() {
               <span className="hero-title-part hero-title-yellow">{content.hero.titleYellow}</span>{' '}
               <span className="hero-title-part hero-title-blue">{content.hero.titleBlue}</span>
             </h1>
-
-            {/* Mobile Dedicated Landscape Video Frame (screens <= 760px) */}
-            <div className="hero-mobile-landscape-frame">
-              <video
-                key={`mobile-${content.hero.videoUrl}`}
-                className="hero-mobile-landscape-video"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                poster={content.hero.posterUrl}
-              >
-                <source src={content.hero.videoUrl} type="video/mp4" />
-              </video>
-              <div className="hero-mobile-video-badge">
-                <span className="hero-live-pulse"></span>
-                TYPHON V900 in Action
-              </div>
-            </div>
 
             <p className="hero-desc">{content.hero.description}</p>
             <div className="hero-buttons">

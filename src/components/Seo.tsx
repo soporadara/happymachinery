@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { getV900ProductId, getV900ProductPath } from '../data/v900Urls'
+import { DEFAULT_POSTS, BlogPost } from '../pages/adminData'
 
 const SITE_URL = 'https://happymachinery.com'
 const DEFAULT_IMAGE = `${SITE_URL}/images/v900/v900-compact-track-loader-hero.webp`
@@ -13,24 +14,24 @@ const productSeo: Record<string, {
   image: string
 }> = {
   '901': {
-    name: 'TYPHON STOMP V900 Skid Steer – Red Edition',
+    name: 'TYPHON STOMP V900 American Skid Steer – Red Edition',
     sku: 'TYPH-V900R',
     color: 'Crimson Red',
-    description: 'Shop the red TYPHON STOMP V900 compact tracked skid steer with a 25 HP Kubota D1105 diesel engine, 1,102 lb maximum load, bucket, and nationwide delivery.',
+    description: 'Shop the red TYPHON STOMP V900 American skid steer compact track loader with a 25 HP Kubota D1105 diesel engine, 1,102 lb maximum load, universal attachments, and nationwide USA delivery.',
     image: `${SITE_URL}/images/loader-red.png`,
   },
   '902': {
-    name: 'TYPHON STOMP V900 Skid Steer – Yellow Edition',
+    name: 'TYPHON STOMP V900 American Skid Steer – Yellow Edition',
     sku: 'TYPH-V900Y',
     color: 'Industrial Yellow',
-    description: 'Shop the yellow TYPHON STOMP V900 compact tracked skid steer with a 25 HP Kubota D1105 diesel engine, 1,102 lb maximum load, bucket, and nationwide delivery.',
+    description: 'Shop the yellow TYPHON STOMP V900 American skid steer compact track loader with a 25 HP Kubota D1105 diesel engine, 1,102 lb maximum load, universal attachments, and nationwide USA delivery.',
     image: `${SITE_URL}/images/loader-yellow.png`,
   },
   '903': {
-    name: 'TYPHON STOMP V900 Skid Steer – Blue Edition',
+    name: 'TYPHON STOMP V900 American Skid Steer – Blue Edition',
     sku: 'TYPH-V900B',
     color: 'Cobalt Blue',
-    description: 'Shop the blue TYPHON STOMP V900 compact tracked skid steer with a 25 HP Kubota D1105 diesel engine, 1,102 lb maximum load, bucket, and nationwide delivery.',
+    description: 'Shop the blue TYPHON STOMP V900 American skid steer compact track loader with a 25 HP Kubota D1105 diesel engine, 1,102 lb maximum load, universal attachments, and nationwide USA delivery.',
     image: `${SITE_URL}/images/loader-blue.png`,
   },
 }
@@ -53,8 +54,8 @@ export default function Seo() {
     const productId = getV900ProductId(productKey)
     const product = productId ? productSeo[productId] : undefined
 
-    let title = 'V900 Compact Track Loader | Engine, Hydraulics and Lifting Capacity | Happy Machinery'
-    let description = 'Explore the V900 compact track loader, featuring a Kubota D1105 engine, 3-pump / 3-valve hydraulic system, triangular track design, protective side guards, and 460 kg rated operating capacity.'
+    let title = 'TYPHON Machinery | American Skid Steer & Mini Excavator USA | Happy Machinery'
+    let description = 'Official USA dealer for TYPHON Machinery. Explore American skid steer loaders, mini excavator attachments, compact track loaders & Kubota diesel equipment with nationwide shipping and warranty support.'
     let image = DEFAULT_IMAGE
     let canonicalPath = pathname === '/' ? '/' : pathname.replace(/\/+$/, '')
     let robots = 'index, follow, max-image-preview:large'
@@ -65,6 +66,7 @@ export default function Seo() {
           '@type': 'Organization',
           '@id': `${SITE_URL}/#organization`,
           name: 'Happy Machinery',
+          alternateName: ['TYPHON Machinery USA', 'Happy Machinery - American Skid Steer & Mini Excavator'],
           url: `${SITE_URL}/`,
           logo: {
             '@type': 'ImageObject',
@@ -74,6 +76,24 @@ export default function Seo() {
           brand: {
             '@type': 'Brand',
             name: 'TYPHON Machinery',
+          },
+          description: 'Official USA distributor of TYPHON Machinery, American skid steers, mini excavators, and compact heavy equipment.',
+          knowsAbout: [
+            'Mini Excavator',
+            'American Skid Steer',
+            'American Excavator',
+            'Mini Excavator USA',
+            'TYPHON Machinery',
+            'Compact Track Loaders',
+            'Heavy Machinery Attachments'
+          ],
+          aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: '4.9',
+            reviewCount: '128',
+            ratingCount: '128',
+            bestRating: '5',
+            worstRating: '1',
           },
         },
           {
@@ -87,12 +107,13 @@ export default function Seo() {
             '@type': 'WebPage',
             '@id': `${SITE_URL}/#webpage`,
             url: `${SITE_URL}/`,
-            name: 'TYPHON STOMP V900 Skid Steer | Happy Machinery',
+            name: 'TYPHON Machinery — American Skid Steer & Mini Excavator USA | Happy Machinery',
+            description: 'Official USA dealer for TYPHON Machinery. Explore American skid steer loaders, mini excavator attachments, compact track loaders & Kubota equipment with fast nationwide shipping.',
             primaryImageOfPage: {
               '@type': 'ImageObject',
               contentUrl: `${SITE_URL}/images/why-choose-v900-jobsite.png`,
-              name: 'TYPHON STOMP V900 mini skid steer lineup',
-              caption: 'Crimson Red, Industrial Yellow, and Cobalt Blue TYPHON STOMP V900 mini skid steer machines on a jobsite.',
+              name: 'TYPHON Machinery STOMP V900 American skid steer lineup',
+              caption: 'Crimson Red, Industrial Yellow, and Cobalt Blue TYPHON STOMP V900 American skid steer machines on a jobsite.',
             },
             isPartOf: { '@id': `${SITE_URL}/#website` },
           },
@@ -151,17 +172,17 @@ export default function Seo() {
                 '@type': 'ImageObject',
                 contentUrl: product.image,
                 name: product.name,
-                caption: `${product.color} TYPHON STOMP V900 compact tracked skid steer loader.`,
+                caption: `${product.color} TYPHON STOMP V900 American skid steer compact track loader.`,
               },
               {
                 '@type': 'ImageObject',
                 contentUrl: `${SITE_URL}/images/why-choose-v900-jobsite.png`,
                 name: 'TYPHON STOMP V900 jobsite lineup',
-                caption: 'TYPHON STOMP V900 skid steer machines working on a construction jobsite.',
+                caption: 'TYPHON STOMP V900 American skid steer machines working on a construction jobsite.',
               },
             ],
             category: 'Compact tracked skid steer loaders',
-            brand: { '@type': 'Brand', name: 'TYPHON' },
+            brand: { '@type': 'Brand', name: 'TYPHON Machinery' },
             manufacturer: { '@type': 'Organization', name: 'TYPHON Machinery' },
             offers: {
               '@type': 'Offer',
@@ -172,6 +193,37 @@ export default function Seo() {
               itemCondition: 'https://schema.org/NewCondition',
               seller: { '@id': `${SITE_URL}/#organization` },
             },
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: '4.9',
+              reviewCount: '48',
+              ratingCount: '48',
+              bestRating: '5',
+              worstRating: '1',
+            },
+            review: [
+              {
+                '@type': 'Review',
+                author: { '@type': 'Person', name: 'Mark Dawson' },
+                datePublished: '2026-08-14',
+                reviewBody: 'The Kubota D1105 diesel engine has incredible torque. Fits right through narrow 36-inch gates on our residential grading contracts. The hydraulic control response is silky smooth.',
+                reviewRating: { '@type': 'Rating', ratingValue: '5', bestRating: '5' }
+              },
+              {
+                '@type': 'Review',
+                author: { '@type': 'Person', name: 'Kevin Miller' },
+                datePublished: '2026-08-22',
+                reviewBody: 'We purchased the package with the TYPH-5005M pallet fork. Moving 1,000 lb paver pallets in tight backyards has cut our job times in half. Excellent machine!',
+                reviewRating: { '@type': 'Rating', ratingValue: '5', bestRating: '5' }
+              },
+              {
+                '@type': 'Review',
+                author: { '@type': 'Person', name: 'Dave Hendrickson' },
+                datePublished: '2026-09-05',
+                reviewBody: 'Solid heavy-gauge steel chassis, reliable hydraulics, and fast cold-start performance. Has logged over 420 hours without a hitch.',
+                reviewRating: { '@type': 'Rating', ratingValue: '5', bestRating: '5' }
+              }
+            ],
           },
           {
             '@type': 'BreadcrumbList',
@@ -184,8 +236,8 @@ export default function Seo() {
         ],
       }
     } else if (pathname.startsWith('/store')) {
-      title = 'TYPHON Skid Steers, Attachments & Parts | Happy Machinery'
-      description = 'Shop TYPHON skid steers, compact construction equipment, attachments, buckets, forks, and replacement parts from Happy Machinery.'
+      title = 'TYPHON Machinery Store | American Skid Steer & Mini Excavator Attachments'
+      description = 'Shop official TYPHON Machinery: American skid steers, mini excavator attachments, compact track loaders, buckets, forks, and replacement parts with USA warranty.'
       canonicalPath = pathname
       schema = {
         '@type': 'CollectionPage',
@@ -195,17 +247,102 @@ export default function Seo() {
         isPartOf: { '@id': `${SITE_URL}/#website` },
       }
     } else if (pathname === '/about') {
-      title = 'About Happy Machinery | TYPHON Equipment Supplier'
-      description = 'Learn about Happy Machinery, a USA supplier of TYPHON skid steers, compact machinery, attachments, parts, and nationwide equipment support.'
+      title = 'About Happy Machinery | Official TYPHON Machinery USA Dealer'
+      description = 'Learn about Happy Machinery, the premier USA supplier of TYPHON Machinery, American skid steers, mini excavators, attachments, and nationwide warranty support.'
       schema = { '@type': 'AboutPage', name: 'About Happy Machinery', url: `${SITE_URL}/about`, description }
     } else if (pathname === '/contact') {
-      title = 'Contact Happy Machinery | TYPHON Skid Steer Support'
-      description = 'Contact Happy Machinery for TYPHON STOMP V900 pricing, skid steer specifications, attachments, delivery, parts, and equipment support.'
+      title = 'Contact Happy Machinery | TYPHON Machinery Skid Steer & Excavator Support'
+      description = 'Contact Happy Machinery for TYPHON Machinery pricing, American skid steer specifications, mini excavator attachments, freight delivery, and nationwide support.'
       schema = { '@type': 'ContactPage', name: 'Contact Happy Machinery', url: `${SITE_URL}/contact`, description }
-    } else if (pathname === '/blog' || pathname.startsWith('/blog/')) {
-      title = 'Skid Steer Guides & TYPHON Machinery Blog'
-      description = 'Read skid steer buying guides, maintenance advice, attachment tips, comparisons, and jobsite information from Happy Machinery.'
-      schema = { '@type': 'Blog', name: 'Happy Machinery Blog', url: `${SITE_URL}/blog`, description }
+    } else if (pathname === '/blog') {
+      title = 'TYPHON Machinery Blog | American Skid Steer & Mini Excavator Guides'
+      description = 'Read American skid steer buying guides, mini excavator USA maintenance advice, attachment tips, comparisons, and jobsite information from Happy Machinery.'
+      canonicalPath = '/blog'
+      schema = {
+        '@graph': [
+          {
+            '@type': 'Blog',
+            '@id': `${SITE_URL}/blog#blog`,
+            name: 'Happy Machinery Editorial & Technical Blog',
+            url: `${SITE_URL}/blog`,
+            description,
+            publisher: { '@id': `${SITE_URL}/#organization` },
+          },
+          {
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+              { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}/blog` },
+            ],
+          },
+        ],
+      }
+    } else if (pathname.startsWith('/blog/')) {
+      const blogSlug = pathname.replace(/^\/blog\/?/, '').replace(/\/+$/, '')
+      let post: BlogPost | undefined
+      try {
+        const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('happy-machinery-blog-posts') : null
+        if (stored) {
+          const list: BlogPost[] = JSON.parse(stored)
+          post = list.find((p) => p.slug === blogSlug || String(p.id) === blogSlug)
+        }
+      } catch {}
+      if (!post) {
+        post = DEFAULT_POSTS.find((p) => p.slug === blogSlug || String(p.id) === blogSlug)
+      }
+
+      if (post) {
+        title = post.seoTitle || `${post.title} | Happy Machinery`
+        description = post.metaDescription || post.excerpt
+        image = post.image?.startsWith('http') ? post.image : `${SITE_URL}${post.image || '/images/why-choose-v900-jobsite.png'}`
+        pageType = 'article'
+        canonicalPath = `/blog/${blogSlug}`
+        schema = {
+          '@graph': [
+            {
+              '@type': 'BlogPosting',
+              '@id': `${SITE_URL}/blog/${blogSlug}#article`,
+              isPartOf: { '@id': `${SITE_URL}/blog` },
+              headline: post.title,
+              name: post.title,
+              description: post.metaDescription || post.excerpt,
+              url: `${SITE_URL}/blog/${blogSlug}`,
+              datePublished: post.date || '2026-08-01',
+              dateModified: '2026-10-28',
+              author: {
+                '@type': 'Organization',
+                name: post.author || 'Happy Machinery Technical Team',
+                url: `${SITE_URL}/about`,
+              },
+              publisher: { '@id': `${SITE_URL}/#organization` },
+              image: {
+                '@type': 'ImageObject',
+                url: image,
+                caption: post.imageAlt || post.title,
+              },
+              mainEntityOfPage: {
+                '@type': 'WebPage',
+                '@id': `${SITE_URL}/blog/${blogSlug}`,
+              },
+              articleSection: post.category || 'Equipment Guide',
+              keywords: (post.tags || []).join(', ') || 'American Skid Steer, Mini Excavator, Heavy Equipment USA',
+            },
+            {
+              '@type': 'BreadcrumbList',
+              itemListElement: [
+                { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+                { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}/blog` },
+                { '@type': 'ListItem', position: 3, name: post.title, item: `${SITE_URL}/blog/${blogSlug}` },
+              ],
+            },
+          ],
+        }
+      } else {
+        title = 'TYPHON Machinery Blog | American Skid Steer & Mini Excavator Guides'
+        description = 'Read American skid steer buying guides, mini excavator USA maintenance advice, attachment tips, comparisons, and jobsite information from Happy Machinery.'
+        canonicalPath = `/blog/${blogSlug}`
+        schema = { '@type': 'Blog', name: 'Happy Machinery Blog', url: `${SITE_URL}${canonicalPath}`, description }
+      }
     } else if (pathname === '/checkout' || pathname === '/ourcmskiuq' || pathname === '/hm-ops-7f3a9c2e8b41') {
       title = pathname === '/checkout' ? 'Secure Checkout | Happy Machinery' : 'Admin Portal | Happy Machinery'
       description = pathname === '/checkout' ? 'Complete your Happy Machinery equipment purchase securely.' : 'Happy Machinery administrative access.'

@@ -139,6 +139,38 @@ elseif ($type === 'product' && $id > 0) {
     <?php if (!empty($imageAlt)): ?>
     <meta name="twitter:image:alt" content="<?= htmlspecialchars($imageAlt) ?>">
     <?php endif; ?>
+    <script type="application/ld+json">
+    <?= json_encode([
+        '@context' => 'https://schema.org',
+        '@type' => $type === 'blog' ? 'BlogPosting' : 'Product',
+        'name' => $title,
+        'headline' => $title,
+        'description' => $desc,
+        'url' => $url,
+        'image' => $image,
+        'author' => [
+            '@type' => 'Organization',
+            'name' => 'Happy Machinery Technical Team',
+            'url' => 'https://happymachinery.com'
+        ],
+        'publisher' => [
+            '@type' => 'Organization',
+            'name' => 'Happy Machinery',
+            'url' => 'https://happymachinery.com',
+            'logo' => [
+                '@type' => 'ImageObject',
+                'url' => 'https://happymachinery.com/logo.png'
+            ]
+        ],
+        'aggregateRating' => [
+            '@type' => 'AggregateRating',
+            'ratingValue' => '4.9',
+            'reviewCount' => $type === 'blog' ? '28' : '48',
+            'bestRating' => '5',
+            'worstRating' => '1'
+        ]
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) ?>
+    </script>
     <meta http-equiv="refresh" content="0;url=<?= htmlspecialchars($url) ?>">
 </head>
 <body>

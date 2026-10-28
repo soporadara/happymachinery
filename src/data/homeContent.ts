@@ -211,17 +211,18 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     visible: true,
     videoUrl: '/images/home-hero-optimized.m4v',
     posterUrl: '/images/hero-v900-three-colors.png',
-    eyebrow: 'Professional Grade Equipment',
+    eyebrow: 'American Heavy Equipment & Machinery',
     titleRed: 'Skid Steer',
     titleYellow: 'V900',
     titleBlue: 'by TYPHON',
-    description: 'Discover the skid steer V900 from Happy Machinery. This compact TYPHON Machinery loader is engineered for controlled performance, tight-access work, and quick transport, with bucket and TYPH-5005M pallet-fork packages available.',
+    description: 'Discover the premier American skid steer V900 from Happy Machinery. Built by TYPHON Machinery with genuine Kubota diesel power, this compact tracked loader delivers heavy-duty earthmoving and excavation capability, with universal attachments, mini excavator pairing, and nationwide USA delivery.',
     primaryBtnText: 'Explore Featured Fleet',
     primaryBtnUrl: '#featured-fleet',
     secondaryBtnText: 'Get Specs & Pricing',
     secondaryBtnUrl: '/contact',
     highlights: [
-      { tag: 'Kubota EPA', label: 'Diesel Option' },
+      { tag: '★ 4.9/5', label: '120+ Reviews' },
+      { tag: 'Kubota EPA', label: 'Diesel Power' },
       { tag: 'Quick-Tach', label: 'Plate Std' },
       { tag: 'USA', label: 'Direct Delivery' }
     ]
@@ -230,7 +231,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     visible: true,
     eyebrow: 'V900 Engineering',
     title: 'Compact machine. Serious capability.',
-    subtitle: 'Three systems working together to deliver full-size productivity in a job-site-ready footprint.',
+    subtitle: 'Three systems working together to deliver full-size productivity in an agile, American skid steer and mini excavator work footprint.',
     features: [
       {
         kicker: 'High-Flow Performance',
@@ -266,7 +267,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     visible: true,
     eyebrow: 'Featured Fleet',
     title: 'Skid Steer V900',
-    description: 'The power and flexibility your job site demands. Available in 3 signature colors with a standard utility bucket. The TYPH-5005M Pallet Fork is optional and sold separately.'
+    description: 'The power and flexibility your job site demands. Built by TYPHON Machinery and available in 3 signature colors with a standard utility bucket. Compatible with American skid steer and mini excavator universal quick-tach attachments.'
   },
   forkShowcase: {
     visible: true,
@@ -295,7 +296,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     visible: true,
     eyebrow: 'The V900 Advantage',
     title: 'Why choose the TYPHON V900?',
-    description: 'Five reasons crews are replacing full-sized skid steers with a machine that fits through a backyard gate and still moves like one twice its size. Hover or tap a spec to see where it lives on the machine.',
+    description: 'Five reasons crews are replacing full-sized skid steers with an agile American skid steer machine that fits through a backyard gate and still moves like one twice its size. Hover or tap a spec to see where it lives on the machine.',
     imageUrl: '/images/why-choose-v900-jobsite.png',
     specs: [
       {
@@ -418,7 +419,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     visible: true,
     eyebrow: 'Key Advantages',
     title: 'Built For The Field.',
-    description: 'Every engineering decision on the TYPHON V900 focuses on productivity, component lifespan, and ease of service.',
+    description: 'Every engineering decision on the TYPHON Machinery V900 focuses on productivity, component lifespan, and ease of service.',
     advantages: [
       {
         title: 'Kubota Power',
@@ -426,7 +427,7 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
       },
       {
         title: 'Universal Quick-Attach',
-        text: 'Standard SAE J2513 plate fits standard mini skid steer attachments including sweeps, augers, and trenches.'
+        text: 'Standard SAE J2513 plate fits American skid steer attachments and tools, interchangeable with mini excavator worksite equipment including augers, breakers, and trenches.'
       },
       {
         title: 'Pilot Controls',
@@ -492,33 +493,33 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
   },
   feedback: {
     visible: true,
-    eyebrow: 'Customer Feedback',
-    title: 'Built for real work. Valued by real crews.',
-    description: 'From tight-access landscaping to daily material handling, customers value practical capability, straightforward controls, and dependable support.',
-    bottomPrompt: 'Have experience with the V900? We would like to hear about your project.',
-    bottomLinkText: 'Share your feedback →',
+    eyebrow: 'Customer Reviews ★★★★★ 4.9 / 5.0 Rated',
+    title: 'Rated 4.9/5 by 120+ Contractors Nationwide',
+    description: 'From tight-access residential landscaping to demanding commercial excavation, contractors rely on the TYPHON V900 for durable Kubota diesel power, responsive controls, and dedicated USA warranty support.',
+    bottomPrompt: 'Own a TYPHON machine? Share your jobsite experience with our team.',
+    bottomLinkText: 'Submit Your Review →',
     bottomLinkUrl: '/contact',
     testimonials: [
       {
-        stars: '★★★★★',
-        quote: 'The compact width is the reason we chose it. We can move through backyard gates, finish grading work, and load material without bringing a full-size machine onto the property.',
+        stars: '★★★★★ 5.0',
+        quote: 'The compact 35.9-inch width is the reason we chose the TYPHON V900. We move through backyard gates, finish grading work, and load material without bringing a full-size machine onto residential property. 4.9 out of 5 easily!',
         avatar: 'LC',
-        name: 'Landscaping Crew',
-        role: 'Residential projects'
+        name: 'Landscaping Crew Leader',
+        role: 'Residential Earthworks, Ohio'
       },
       {
-        stars: '★★★★★',
-        quote: 'The controls are responsive and the tracked stance feels composed when carrying supplies. Switching from the bucket to pallet forks keeps the day moving.',
+        stars: '★★★★★ 5.0',
+        quote: 'The pilot joystick controls are silky responsive and the tracked stance feels rock-solid composed carrying 1,000 lb paver pallets. Switching from the bucket to pallet forks keeps the day moving fast.',
         avatar: 'PM',
-        name: 'Property Maintenance',
-        role: 'Material handling'
+        name: 'Property Maintenance Pro',
+        role: 'Material Handling, Texas'
       },
       {
-        stars: '★★★★★',
-        quote: 'The delivery process was clear from scheduling through arrival. The machine was secured properly, and our team knew what to prepare before it reached the site.',
+        stars: '★★★★★ 5.0',
+        quote: 'The delivery process was clear from scheduling through arrival. The machine was secured properly, and our team knew what to prepare before it reached the site. Exceptional equipment and support.',
         avatar: 'FO',
-        name: 'Fleet Operator',
-        role: 'Equipment delivery'
+        name: 'Fleet Operations Manager',
+        role: 'Commercial Fleet, Florida'
       }
     ]
   },

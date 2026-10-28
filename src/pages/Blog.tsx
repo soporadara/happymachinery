@@ -571,6 +571,66 @@ export default function Blog() {
     }
     canonical.href = articleUrl
 
+    const originalJsonLd = document.head.querySelector<HTMLScriptElement>('#seo-jsonld')?.textContent || ''
+    let jsonLd = document.head.querySelector<HTMLScriptElement>('#seo-jsonld')
+    if (!jsonLd) {
+      jsonLd = document.createElement('script')
+      jsonLd.id = 'seo-jsonld'
+      jsonLd.type = 'application/ld+json'
+      document.head.appendChild(jsonLd)
+    }
+
+    const blogPostingSchema = {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'BlogPosting',
+          '@id': `${articleUrl}#article`,
+          isPartOf: { '@id': `${SITE_URL}/blog` },
+          headline: selectedPost.title,
+          name: selectedPost.title,
+          description: seoDesc,
+          url: articleUrl,
+          datePublished: selectedPost.date || '2026-08-01',
+          dateModified: '2026-10-28',
+          author: {
+            '@type': 'Organization',
+            name: selectedPost.author || 'Happy Machinery Technical Team',
+            url: `${SITE_URL}/about`,
+          },
+          publisher: {
+            '@type': 'Organization',
+            name: 'Happy Machinery',
+            url: SITE_URL,
+            logo: {
+              '@type': 'ImageObject',
+              url: `${SITE_URL}/logo.png`,
+            },
+          },
+          image: {
+            '@type': 'ImageObject',
+            url: seoImage,
+            caption: seoImageAlt,
+          },
+          mainEntityOfPage: {
+            '@type': 'WebPage',
+            '@id': articleUrl,
+          },
+          articleSection: selectedPost.category || 'Equipment Guide',
+          keywords: (selectedPost.tags || []).join(', ') || 'American Skid Steer, Mini Excavator, Heavy Equipment USA',
+        },
+        {
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+            { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}/blog` },
+            { '@type': 'ListItem', position: 3, name: selectedPost.title, item: articleUrl },
+          ],
+        },
+      ],
+    }
+    jsonLd.textContent = JSON.stringify(blogPostingSchema)
+
     return () => {
       document.title = originalTitle
       const restoreMeta = (selector: string, value: string) => {
@@ -588,6 +648,9 @@ export default function Blog() {
 
       const c = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
       if (c) c.href = originalCanonical
+
+      const jl = document.head.querySelector<HTMLScriptElement>('#seo-jsonld')
+      if (jl && originalJsonLd) jl.textContent = originalJsonLd
     }
   }, [selectedPost])
 
@@ -1967,10 +2030,10 @@ export default function Blog() {
       <div className="raf-blog-container">
         {/* Editorial Header */}
         <header className="raf-index-hero">
-          <span className="raf-hero-eyebrow">HAPPY MACHINERY EDITORIAL & KNOWLEDGE</span>
-          <h1 className="raf-hero-title">Heavy Machinery & Jobsite Insights</h1>
+          <span className="raf-hero-eyebrow">HAPPY MACHINERY &amp; TYPHON EDITORIAL</span>
+          <h1 className="raf-hero-title">Skid Steer &amp; Mini Excavator Guides</h1>
           <p className="raf-hero-desc">
-            Technical equipment breakdowns, skid steer comparisons, hydraulic maintenance, and expert field advice.
+            Technical equipment breakdowns, American skid steer comparisons, mini excavator USA insights, hydraulic maintenance, and expert field advice.
           </p>
 
           {/* Quick Search */}
@@ -1981,7 +2044,7 @@ export default function Blog() {
             </svg>
             <input
               type="text"
-              placeholder="Search machinery guides, hydraulics, skid steers..."
+              placeholder="Search mini excavator guides, American skid steers, TYPHON equipment..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="raf-hero-search-input"

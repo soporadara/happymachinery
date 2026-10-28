@@ -27,8 +27,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   businessHours: 'Monday – Friday: 8:00 AM – 6:00 PM CST',
   logo: '/images/header-logo.webp',
   favicon: 'https://lh3.googleusercontent.com/-UDuMZS2bji_GLgC69Z9-vrD4uLHxcqGQIYEHW3O85aWYN4nXhiAMjnQikFFbyOhUnfl',
-  defaultSeoTitle: 'Happy Machinery | Compact Heavy Equipment Dealer',
-  defaultSeoDescription: 'Discover compact excavators, mini track loaders, and electric machinery from Happy Machinery. Compare models, specs, and pricing today.',
+  defaultSeoTitle: 'TYPHON Machinery | American Skid Steer & Mini Excavator USA | Happy Machinery',
+  defaultSeoDescription: 'Official USA dealer for TYPHON Machinery. Explore American skid steer loaders, mini excavator attachments, compact track loaders & Kubota diesel equipment with nationwide delivery.',
   socialLinks: {
     facebook: 'https://facebook.com/happymachinery',
     twitter: 'https://twitter.com/happymachinery',
@@ -65,10 +65,10 @@ export const DEFAULT_SITE_PAGES: SitePage[] = [
     id: 'page-home',
     slug: '',
     title: 'Home Page',
-    seoTitle: 'Happy Machinery | Compact Heavy Equipment Dealer',
-    seoDescription: 'Discover compact excavators, mini track loaders, and electric machinery from Happy Machinery. Compare models, specs, and pricing today.',
+    seoTitle: 'TYPHON Machinery | American Skid Steer & Mini Excavator USA | Happy Machinery',
+    seoDescription: 'Official USA dealer for TYPHON Machinery. Explore American skid steer loaders, mini excavator attachments, compact track loaders & Kubota diesel equipment with nationwide delivery.',
     status: 'Published',
-    updatedAt: '2026-08-18T00:00:00Z',
+    updatedAt: '2026-10-27T00:00:00Z',
     sections: [
       {
         id: 'sec-hero',

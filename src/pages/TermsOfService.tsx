@@ -71,8 +71,8 @@ export default function TermsOfService() {
           <section id="machinery-orders" className="legal-section">
             <h2><span className="legal-section-num">2</span> Equipment Sales, Specifications & Orders</h2>
             <p>
-              Happy Machinery is an authorized dealer of compact heavy equipment, mini skid steers (including the TYPHON V900 Series), 
-              mini excavators, genuine Kubota diesel engines, hydraulic attachments, and original replacement components.
+              Happy Machinery is an authorized dealer of official TYPHON Machinery compact heavy equipment, American skid steer loaders (including the TYPHON STOMP V900 Series), 
+              mini excavators USA, American excavators, genuine Kubota diesel engines, hydraulic attachments, and original replacement components.
             </p>
             <ul>
               <li><strong>Specification Accuracy:</strong> We endeavor to display technical specifications, dimensions, hydraulic flow rates, and operating capacities as accurately as possible. However, manufacturers continuously improve engineering designs; minor variations in factory hardware or paint hue may occur without prior notice.</li>

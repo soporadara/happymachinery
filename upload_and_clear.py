@@ -320,6 +320,10 @@ def main():
     log_info("Ensuring PHP endpoints, API, and .htaccess are in sync...")
     backend_files = [
         ("public/api/content.php", f"{REMOTE_PUBLIC}/api/content.php"),
+        ("public/api/sitemap.php", f"{REMOTE_PUBLIC}/api/sitemap.php"),
+        ("public/sitemap.xml", f"{REMOTE_PUBLIC}/sitemap.xml"),
+        ("public/sitemap.xsl", f"{REMOTE_PUBLIC}/sitemap.xsl"),
+        ("public/robots.txt", f"{REMOTE_PUBLIC}/robots.txt"),
         ("public/share_preview.php", f"{REMOTE_PUBLIC}/share_preview.php"),
         ("public/share_image.php", f"{REMOTE_PUBLIC}/share_image.php"),
         ("public/.htaccess", f"{REMOTE_PUBLIC}/.htaccess"),
@@ -364,11 +368,13 @@ def main():
 
     homepage_ok = check_endpoint(LIVE_SITE_URL, "Live Homepage (https://happymachinery.com/)")
     api_ok = check_endpoint(f"{LIVE_SITE_URL}/api/content.php?key=products", "Products Content API")
+    sitemap_ok = check_endpoint(f"{LIVE_SITE_URL}/sitemap.xml", "XML Sitemap (https://happymachinery.com/sitemap.xml)")
 
     print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.RESET}")
-    if homepage_ok and api_ok:
+    if homepage_ok and api_ok and sitemap_ok:
         print(f"{Colors.BOLD}{Colors.GREEN} ✔ DEPLOYMENT SUCCESSFUL — ALL SYSTEMS LIVE & HEALTHY! {Colors.RESET}")
         print(f"{Colors.DIM} Live URL:          {LIVE_SITE_URL}{Colors.RESET}")
+        print(f"{Colors.DIM} XML Sitemap:       {LIVE_SITE_URL}/sitemap.xml{Colors.RESET}")
         print(f"{Colors.DIM} Rollback Snapshot: {backup_file}{Colors.RESET}")
     else:
         print(f"{Colors.BOLD}{Colors.YELLOW} ⚠ DEPLOYMENT FINISHED WITH HEALTH CHECK WARNINGS! {Colors.RESET}")

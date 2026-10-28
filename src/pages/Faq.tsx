@@ -13,8 +13,8 @@ const FAQ_DATA: FaqItem[] = [
   {
     id: 'faq-1',
     category: 'Equipment',
-    question: 'What engine powers the Happy Machinery Skid Steer V900?',
-    answer: 'The Skid Steer V900 is equipped with a genuine Kubota D1105 3-cylinder liquid-cooled diesel engine delivering 25 HP. Kubota engines are globally renowned for fuel efficiency, low vibration, and widespread service/parts availability across North America.'
+    question: 'What engine powers the TYPHON Machinery Skid Steer V900?',
+    answer: 'The TYPHON Skid Steer V900 is equipped with a genuine Kubota D1105 3-cylinder liquid-cooled diesel engine delivering 25 HP. Widely trusted for American skid steer and mini excavator applications, Kubota engines provide exceptional fuel efficiency, low vibration, and widespread service/parts availability across the USA.'
   },
   {
     id: 'faq-2',
@@ -25,8 +25,8 @@ const FAQ_DATA: FaqItem[] = [
   {
     id: 'faq-3',
     category: 'Equipment',
-    question: 'Are Happy Machinery attachments universal standard quick-tach?',
-    answer: 'Yes. The V900 features an industry-standard mini universal quick-attach mounting plate. It is compatible with a wide assortment of attachments including pallet forks, post hole augers, hydraulic trenchers, grapple buckets, 4-in-1 buckets, snow blowers, and hydraulic sweepers.'
+    question: 'Are attachments compatible across American skid steers and mini excavators?',
+    answer: 'Yes. The V900 features an industry-standard mini universal quick-attach mounting plate (SAE J2513). We also supply a comprehensive lineup of mini excavator attachments (including hydraulic thumb clips, plate compactors, trenching buckets, and augers) and skid steer tools with universal compatibility for fast swaps on the jobsite.'
   },
   {
     id: 'faq-4',
@@ -99,7 +99,7 @@ export default function Faq() {
         <span className="faq-eyebrow">💡 Help Center & Knowledge Base</span>
         <h1>Frequently Asked Questions</h1>
         <p>
-          Find clear answers regarding the Kubota V900 Skid Steer, nationwide freight delivery, factory warranties, commercial financing, and genuine parts support.
+          Find clear answers regarding TYPHON Machinery, American skid steer loaders, mini excavator attachments, nationwide USA freight delivery, factory warranties, commercial financing, and genuine parts support.
         </p>
 
         <div className="faq-search-box">

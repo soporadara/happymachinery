@@ -764,15 +764,27 @@
 .pdp-rating-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   white-space: nowrap;
   margin-top: 6px;
   flex-shrink: 0;
 }
 
+.pdp-rating-number {
+  font-weight: 700;
+  font-size: 0.88rem;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #fde68a;
+  line-height: 1.1;
+  display: inline-block;
+}
+
 .pdp-stars-gold {
   color: #f59e0b;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   letter-spacing: 1px;
 }
 

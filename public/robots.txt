@@ -2,6 +2,27 @@ User-agent: *
 Allow: /
 Disallow: /hm-ops-7f3a9c2e8b41
 Disallow: /api/content.php
+Disallow: /admin
+Disallow: /checkout
+
+# AI Search Engine & Large Language Model Crawlers (Permit Content Indexing)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot
+Allow: /
 
 # Search Engine Sitemap Index
 Sitemap: https://happymachinery.com/sitemap.xml

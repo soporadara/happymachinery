@@ -82,8 +82,8 @@ export default function Footer() {
             />
           </Link>
           <p className="footer-desc">
-            Authorized distributor of high-performance mini skid steers, compact excavators, 
-            and heavy-duty attachments. Engineered for contractor reliability and residential tight-access.
+            Official USA distributor of TYPHON Machinery, American skid steer loaders, mini excavator USA equipment, 
+            and heavy-duty attachments. Engineered for contractor reliability, residential tight-access, and heavy earthmoving.
           </p>
         </div>
 
@@ -98,7 +98,7 @@ export default function Footer() {
                   to="/store?search=Mini+Excavators"
                   onClick={(e) => handleCategoryClick(e, 'Mini Excavators')}
                 >
-                  Mini Excavators
+                  Mini Excavators USA
                 </Link>
               </li>
               <li>
@@ -106,7 +106,7 @@ export default function Footer() {
                   to="/store?search=Mini+Skid+Steers"
                   onClick={(e) => handleCategoryClick(e, 'Mini Skid Steers')}
                 >
-                  Mini Skid Steers
+                  American Skid Steers
                 </Link>
               </li>
               <li>
@@ -114,7 +114,7 @@ export default function Footer() {
                   to="/store?search=Attachments"
                   onClick={(e) => handleCategoryClick(e, 'Attachments')}
                 >
-                  Attachments
+                  Excavator & Skid Attachments
                 </Link>
               </li>
               <li>

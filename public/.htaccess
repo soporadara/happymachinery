@@ -4,16 +4,16 @@
   RewriteBase /
 
   # Intercept crawlers requesting a blog article query param
-  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare) [NC]
+  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare|GPTBot|ChatGPT-User|PerplexityBot|ClaudeBot|Applebot|Bytespider) [NC]
   RewriteCond %{QUERY_STRING} (?:^|&)post=(\d+)
   RewriteRule ^blog$ share_preview.php?type=blog&id=%1 [L,QSA]
 
   # Rich previews for readable blog article URLs
-  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare) [NC]
+  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare|GPTBot|ChatGPT-User|PerplexityBot|ClaudeBot|Applebot|Bytespider) [NC]
   RewriteRule ^blog/([a-z0-9-]+)/?$ share_preview.php?type=blog&slug=$1 [L,QSA]
 
   # Intercept crawlers requesting a product details path
-  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare) [NC]
+  RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare|GPTBot|ChatGPT-User|PerplexityBot|ClaudeBot|Applebot|Bytespider) [NC]
   RewriteRule ^product/(\d+)$ share_preview.php?type=product&id=$1 [L,QSA]
 
   # Serve deployed assets, PHP endpoints, and other real files normally.
@@ -42,5 +42,6 @@
 <IfModule mod_mime.c>
   AddType model/gltf-binary .glb
   AddType model/gltf+json .gltf
+  AddType video/mp4 .mp4 .m4v
 </IfModule>
 

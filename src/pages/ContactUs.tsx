@@ -83,7 +83,7 @@ export default function ContactUs() {
       <PageBanner
         badgeText="DIRECT SALES & TECHNICAL SERVICE"
         title="Contact Us"
-        description="Inquire about mini skid steers, track loaders, accessories, bulk pricing, or schedule local technical support and nationwide freight delivery."
+        description="Inquire about official TYPHON Machinery, American skid steers, mini excavators USA, commercial attachments, or schedule technical support and nationwide freight delivery."
         features={[
           { icon: '📞', text: 'Direct US & Global Phone Support' },
           { icon: '🚚', text: 'Freight & Liftgate Delivery Quotes' },
@@ -98,7 +98,7 @@ export default function ContactUs() {
       <div className="contact-split">
         <div className="contact-info-panel">
           <h2>Get in Touch</h2>
-          <p>Whether you need a quick quote on shipping or want custom specifications for stand-on skid steers, our local engineering and sales team is here to assist.</p>
+          <p>Whether you need a quick quote on shipping or want custom specifications for TYPHON Machinery American skid steers, mini excavators, and attachments, our local engineering and sales team is here to assist.</p>
 
           <div className="info-detail-row">
             <span className="info-icon">📍</span>

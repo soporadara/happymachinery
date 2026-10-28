@@ -58,18 +58,18 @@ export default function AboutUs() {
         <div className="values-grid">
           <article className="value-card">
             <div className="value-icon">🚜</div>
-            <h3>Mini Excavators</h3>
-            <p>Our compact and versatile mini excavators are expertly designed for efficient digging in tight spaces, making them perfect for a wide range of construction and landscaping projects.</p>
+            <h3>Mini Excavators USA</h3>
+            <p>Our compact and versatile mini excavator USA fleet is expertly designed for efficient trenching and digging in tight spaces, making them perfect for construction, plumbing, and landscaping projects.</p>
           </article>
           <article className="value-card">
             <div className="value-icon">⚙️</div>
-            <h3>Skid Steer Loaders</h3>
-            <p>Our strong and flexible skid steer loaders are designed to handle a variety of construction and loading jobs with ease, providing outstanding dependability and flexibility.</p>
+            <h3>American Skid Steers</h3>
+            <p>Official TYPHON Machinery American skid steer loaders and compact track loaders equipped with genuine Kubota diesel engines for heavy-duty earthmoving, grading, and material loading.</p>
           </article>
           <article className="value-card">
             <div className="value-icon">🔧</div>
-            <h3>Attachments & Spares</h3>
-            <p>Upgrade your excavators and skid steer loaders with our wide range of unique attachments, made to boost productivity and expand versatility on any job site.</p>
+            <h3>Excavator & Skid Attachments</h3>
+            <p>Upgrade your American excavator and skid steer loaders with our wide range of hydraulic thumb clips, augers, trenchers, breakers, and pallet forks engineered to boost productivity on any job site.</p>
           </article>
         </div>
       </section>
@@ -128,7 +128,7 @@ export default function AboutUs() {
       <section className="promise-band">
         <h2>Our Commitment</h2>
         <p>
-          Our team at Happy Machinery is dedicated to providing premium mini excavators and heavy equipment, redefining dependability, performance, and durability. Our machinery is built to satisfy the highest requirements of construction and excavation, therefore guaranteeing the power and accuracy required to approach any project with assurance. Learn more at http://happymachinery.com.
+          Our team at Happy Machinery is dedicated to providing premium mini excavators, American skid steers, and official TYPHON Machinery heavy equipment, redefining dependability, performance, and durability. Our machinery is built to satisfy the highest requirements of American construction and excavation, guaranteeing the power and accuracy required to approach any project with confidence. Learn more at https://happymachinery.com.
         </p>
       </section>
     </div>
