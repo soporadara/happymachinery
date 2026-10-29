@@ -39,13 +39,40 @@ export function isMiniexcavatorUrl(url: string): boolean {
 }
 
 /**
- * Check if a string is an image URL (including webp, png, jpg, miniexcavator)
+ * Check if a string is an image URL (including webp, png, jpg, miniexcavator, unsplash, cdn, uploads, etc.)
  */
 export function isImageUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
   if (isMiniexcavatorUrl(trimmed)) return true;
-  return /\.(webp|png|jpe?g|gif|svg)(\?.*)?$/i.test(trimmed) || /googleusercontent\.com/i.test(trimmed);
+  if (/^data:image\//i.test(trimmed)) return true;
+  if (/\.(webp|png|jpe?g|gif|svg|avif|bmp|ico)(\?.*)?$/i.test(trimmed)) return true;
+  if (/images\.unsplash\.com/i.test(trimmed)) return true;
+  if (/googleusercontent\.com/i.test(trimmed)) return true;
+  if (/cloudinary\.com/i.test(trimmed)) return true;
+  if (/imgur\.com/i.test(trimmed)) return true;
+  if (/blob\.core\.windows\.net/i.test(trimmed)) return true;
+  if (/(?:\/|^)(?:images|storage|media|uploads|assets)\/.*\.(webp|png|jpe?g|gif|svg|avif)/i.test(trimmed)) return true;
+  if (/https?:\/\/[^\s<>]+\/(?:[^\s<>]+\/)*(?:image|photo|picture|upload|gallery|media)[^\s<>]*/i.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Extract 11-character video ID from YouTube watch, share, embed, shorts, or markdown/HTML link
+ */
+export function getYoutubeVideoId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  let target = trimmed;
+  const mdMatch = trimmed.match(/^\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/i);
+  if (mdMatch) target = mdMatch[2];
+  const aMatch = trimmed.match(/^<a\s+[^>]*href=["'](https?:\/\/[^"']+)["']/i);
+  if (aMatch) target = aMatch[1];
+  const iframeMatch = trimmed.match(/<iframe\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i);
+  if (iframeMatch) target = iframeMatch[1];
+
+  const match = target.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i);
+  return match ? match[1] : null;
 }
 
 /**
@@ -315,13 +342,11 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
     }
   }
 
-  // 7. Plain URL on standalone line: https://img.miniexcavator.org/... or https://...webp
-  const plainUrl = trimmed.match(/^(https?:\/\/[^\s<>]+\.(?:webp|png|jpe?g|gif|svg)(?:\?[^\s<>]*)?)$/i) ||
-                   (isMiniexcavatorUrl(trimmed) ? trimmed.match(/^(https?:\/\/[^\s<>]+)$/i) : null);
-  if (plainUrl) {
+  // 7. Plain URL on standalone line: https://img.miniexcavator.org/..., Unsplash, WebP, JPG, CDN
+  if (isImageUrl(trimmed) && /^https?:\/\//i.test(trimmed)) {
     return {
-      url: plainUrl[1].trim(),
-      alt: cleanImageTitle(plainUrl[1]),
+      url: trimmed,
+      alt: cleanImageTitle(trimmed),
       caption: '',
     };
   }
@@ -514,8 +539,9 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
-  // Check if content has embedded tables
+  // Check if content has embedded tables or YouTube
   const hasTable = rawBlocks.some(b => /<table[\s>]/i.test(b) || isTsvTable(b) || isMarkdownTable(b));
+  const hasYoutube = rawBlocks.some(b => Boolean(getYoutubeVideoId(b)));
 
   // Check if we should consider this a full blog import
   const isFullBlog = Boolean(foundTitle) || (rawBlocks.length >= 3 && hasMiniexcavator) || (rawBlocks.length >= 2 && hasTable);
@@ -559,9 +585,9 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
-  const detected = hasMiniexcavator || (isFullBlog && (detectedImages.length > 0 || hasTable || rawBlocks.length >= 2)) || detectedImages.length > 0 || hasTable;
+  const detected = hasMiniexcavator || (isFullBlog && (detectedImages.length > 0 || hasTable || rawBlocks.length >= 2)) || detectedImages.length > 0 || hasTable || hasYoutube;
 
-  if (!detected && detectedImages.length === 0 && !hasTable) {
+  if (!detected && detectedImages.length === 0 && !hasTable && !hasYoutube) {
     return {
       detected: false,
       hasMiniexcavatorLinks: false,
@@ -576,35 +602,38 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   let coverImage: { url: string; alt: string } | undefined;
   const remainingImages: DetectedImage[] = [];
 
-  if (isFullBlog && detectedImages.length > 0) {
-    // The FIRST image is auto-filled to Featured Cover Image and REMOVED from article content
+  if (detectedImages.length > 0) {
+    // The FIRST image is ALWAYS auto-filled to Featured Cover Image!
     const firstImg = detectedImages[0];
     coverImage = {
       url: firstImg.url,
       alt: firstImg.alt || firstImg.caption || foundTitle || cleanImageTitle(firstImg.url),
     };
-    // Mark as processed so it's not rendered in content body
-    processedBlockIndices.add(firstImg.blockIndex);
-    if (firstImg.consumedNextIndex !== undefined) {
-      processedBlockIndices.add(firstImg.consumedNextIndex);
-    }
 
-    // Remaining images stay in the body
-    for (let k = 1; k < detectedImages.length; k++) {
-      remainingImages.push({
-        url: detectedImages[k].url,
-        alt: detectedImages[k].alt,
-        caption: detectedImages[k].caption,
-      });
-    }
-  } else {
-    // If not full blog import (e.g. user pasted an image link or gallery snippet), keep all images in body
-    for (let k = 0; k < detectedImages.length; k++) {
-      remainingImages.push({
-        url: detectedImages[k].url,
-        alt: detectedImages[k].alt,
-        caption: detectedImages[k].caption,
-      });
+    if (isFullBlog) {
+      // Mark as processed so it's not duplicated in content body if full blog import
+      processedBlockIndices.add(firstImg.blockIndex);
+      if (firstImg.consumedNextIndex !== undefined) {
+        processedBlockIndices.add(firstImg.consumedNextIndex);
+      }
+
+      // Remaining images stay in the body
+      for (let k = 1; k < detectedImages.length; k++) {
+        remainingImages.push({
+          url: detectedImages[k].url,
+          alt: detectedImages[k].alt,
+          caption: detectedImages[k].caption,
+        });
+      }
+    } else {
+      // Keep all images in body too if not a full blog layout
+      for (let k = 0; k < detectedImages.length; k++) {
+        remainingImages.push({
+          url: detectedImages[k].url,
+          alt: detectedImages[k].alt,
+          caption: detectedImages[k].caption,
+        });
+      }
     }
   }
 
@@ -656,6 +685,15 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
         bodyOut.push(mdRes.html);
         continue;
       }
+    }
+
+    // Check if block is a YouTube video link (e.g. https://www.youtube.com/watch?v=... or https://youtu.be/... or markdown link)
+    const ytId = getYoutubeVideoId(block);
+    if (ytId) {
+      bodyOut.push(
+        `<div data-youtube-video="" class="article-youtube-wrapper my-8 w-full max-w-4xl mx-auto"><iframe class="article-youtube-iframe w-full aspect-video rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800" src="https://www.youtube-nocookie.com/embed/${ytId}?rel=0&modestbranding=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
+      );
+      continue;
     }
 
     // Check if block is a heading (markdown, html, numbered, or standalone)

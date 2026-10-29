@@ -8,11 +8,11 @@ import Underline from '@tiptap/extension-underline';
 import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table';
 import Youtube, { getEmbedUrlFromYoutubeUrl } from '@tiptap/extension-youtube';
 import ImageNodeView from './ImageNodeView';
-import YoutubeNodeView, { getYoutubeVideoId } from './YoutubeNodeView';
+import YoutubeNodeView from './YoutubeNodeView';
 import TerminalNodeView from './TerminalNodeView';
 import LinkCardNodeView from './LinkCardNodeView';
 import { convertContentToHtml, isStandaloneHeading } from '../../utils/editorContentHelper';
-import { processPastedBlog, cleanImageTitle } from '../../utils/blogImportHelper';
+import { processPastedBlog, cleanImageTitle, isImageUrl, getYoutubeVideoId } from '../../utils/blogImportHelper';
 import { detectAndConvertTable, isTsvTable, isMarkdownTable } from '../../utils/tablePasteHelper';
 import './TiptapEditor.css';
 
@@ -940,6 +940,48 @@ export default function TiptapEditor({
         // Check text or HTML for miniexcavator links, blog import, or tables
         const textData = event.clipboardData?.getData('text/plain') || '';
         const htmlData = event.clipboardData?.getData('text/html') || '';
+        const trimmedText = textData.trim();
+
+        // 0. DIRECT STANDALONE YOUTUBE LINK PASTE: Auto-convert to embedded playable video in this paragraph/section
+        const directYtId = getYoutubeVideoId(trimmedText);
+        if (directYtId && !trimmedText.includes('\n')) {
+          event.preventDefault();
+          editorRef.current?.commands.insertContent({
+            type: 'youtube',
+            attrs: {
+              src: trimmedText.match(/https?:\/\/[^\s)]+/)?.[0] || trimmedText,
+              alignment: 'center',
+              caption: '',
+            },
+          });
+          return true;
+        }
+
+        // 0.5. DIRECT STANDALONE IMAGE URL PASTE: Auto-fill cover image, save to Media Library, and insert into editor
+        if (isImageUrl(trimmedText) && !trimmedText.includes('\n') && /^https?:\/\//i.test(trimmedText)) {
+          event.preventDefault();
+          if (onAutoExtractCoverImageRef.current) {
+            onAutoExtractCoverImageRef.current(trimmedText, cleanImageTitle(trimmedText));
+          }
+          if (onMediaUploadedRef.current) {
+            onMediaUploadedRef.current({
+              id: `media-auto-${Date.now()}-0`,
+              title: cleanImageTitle(trimmedText),
+              url: trimmedText,
+              folder: 'galleries',
+              dateAdded: new Date().toISOString().split('T')[0],
+              size: '150 KB',
+            });
+          }
+          editorRef.current?.commands.insertContent({
+            type: 'image',
+            attrs: {
+              src: trimmedText,
+              alt: cleanImageTitle(trimmedText),
+            },
+          });
+          return true;
+        }
 
         // 1. FULL BLOG IMPORT FIRST: Detect article title, featured cover image, media gallery images, AND tables
         // HTML is prioritized over plain text because plain text from Google Docs loses table structures!
@@ -951,22 +993,24 @@ export default function TiptapEditor({
           }
 
           const hasMiniexcavator = /img\.miniexcavator\.org/i.test(payload);
-          const hasImage = /\.(webp|png|jpe?g|gif|svg)/i.test(payload) || /<img/i.test(payload);
+          const hasImage = /\.(webp|png|jpe?g|gif|svg|avif)/i.test(payload) || /<img/i.test(payload) || isImageUrl(payload);
           const hasTable = /<table[\s>]/i.test(payload) || isTsvTable(payload) || isMarkdownTable(payload);
           const hasArticleMarkers = /^(?:#+\s|<h[1-3]|title:)/im.test(payload) || /docs-internal-guid/i.test(payload);
           const isGoogleDocs = /docs-internal-guid/i.test(payload);
+          const hasYoutube = Boolean(getYoutubeVideoId(payload));
 
           // Trigger full blog import if content has:
-          // - miniexcavator assets
-          // - article headings with either images or tables
-          // - Google Docs documents containing tables, images, or paragraphs
-          // - HTML containing tables and article paragraphs
+          // - miniexcavator assets or any images
+          // - YouTube video links
+          // - tables
+          // - article headings or Google Docs paragraphs
           if (
             hasMiniexcavator ||
-            (hasArticleMarkers && (hasImage || hasTable)) ||
-            (isGoogleDocs && (hasTable || hasImage || /<p[\s>]/i.test(payload))) ||
-            (hasTable && (/<p[\s>]/i.test(payload) || payload.includes('\n'))) ||
-            (hasArticleMarkers && hasImage)
+            hasImage ||
+            hasYoutube ||
+            hasTable ||
+            hasArticleMarkers ||
+            isGoogleDocs
           ) {
             const res = processPastedBlog(payload);
             if (res.detected) {
@@ -1199,6 +1243,21 @@ export default function TiptapEditor({
     let finalUrl = trimmed;
     if (!/^https?:\/\//i.test(finalUrl) && !finalUrl.startsWith('/') && !finalUrl.startsWith('#') && !finalUrl.startsWith('mailto:')) {
       finalUrl = 'https://' + finalUrl;
+    }
+
+    // Auto-convert YouTube link to playable embedded video
+    const ytId = getYoutubeVideoId(finalUrl);
+    if (ytId) {
+      editor.chain().focus().insertContent({
+        type: 'youtube',
+        attrs: {
+          src: finalUrl,
+          alignment: 'center',
+          caption: linkCardTitle.trim() || '',
+        },
+      }).run();
+      setLinkModalOpen(false);
+      return;
     }
 
     if (linkTab === 'card') {
@@ -1589,6 +1648,11 @@ export default function TiptapEditor({
         .filter(img => Boolean(img.src));
 
       if (!validImages.length) return;
+
+      // Auto-extract first inserted image to Featured Cover Image
+      if (onAutoExtractCoverImageRef.current) {
+        onAutoExtractCoverImageRef.current(validImages[0].src, validImages[0].alt);
+      }
 
       const imageNodes = validImages.map(img => 
         imageType.create({

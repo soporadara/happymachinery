@@ -372,4 +372,52 @@ test('Blog article reader has large scroll screen, independent primary scroll co
   );
 });
 
+test('First image as link is always detected as cover image even without full blog headings', async () => {
+  const { processPastedBlog, isImageUrl } = await import('../src/utils/blogImportHelper.ts');
+
+  // Test 1: Unsplash image link
+  const unsplashUrl = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=800';
+  assert.ok(isImageUrl(unsplashUrl), 'isImageUrl must detect unsplash.com URLs');
+
+  // Test 2: Text containing image link without # heading or table
+  const pastedText = `Check out our new equipment fleet:\n${unsplashUrl}\nThis machine operates at high efficiency.`;
+  const res = processPastedBlog(pastedText);
+
+  assert.strictEqual(res.detected, true, 'Must detect as content import');
+  assert.ok(res.coverImage, 'coverImage must ALWAYS be populated from the first image');
+  assert.strictEqual(res.coverImage.url, unsplashUrl);
+
+  // Test 3: Markdown image without heading
+  const mdSnippet = `![Heavy Duty Excavator](https://img.miniexcavator.org/t18.webp)\nPowerful Kubota engine.`;
+  const res2 = processPastedBlog(mdSnippet);
+  assert.ok(res2.coverImage, 'coverImage must be extracted from markdown image');
+  assert.strictEqual(res2.coverImage.url, 'https://img.miniexcavator.org/t18.webp');
+});
+
+test('YouTube links auto-convert to responsive video embeds across any paragraph or section', async () => {
+  const { getYoutubeVideoId } = await import('../src/utils/blogImportHelper.ts');
+  const { convertContentToHtml } = await import('../src/utils/editorContentHelper.ts');
+  const { processPastedBlog } = await import('../src/utils/blogImportHelper.ts');
+
+  // 1. Test YouTube video ID extraction from all URL shapes
+  assert.strictEqual(getYoutubeVideoId('https://www.youtube.com/watch?v=eqOfmtTJD1A'), 'eqOfmtTJD1A');
+  assert.strictEqual(getYoutubeVideoId('https://youtu.be/eqOfmtTJD1A'), 'eqOfmtTJD1A');
+  assert.strictEqual(getYoutubeVideoId('https://www.youtube.com/shorts/eqOfmtTJD1A'), 'eqOfmtTJD1A');
+  assert.strictEqual(getYoutubeVideoId('[Watch Video](https://www.youtube.com/watch?v=eqOfmtTJD1A)'), 'eqOfmtTJD1A');
+
+  // 2. Test convertContentToHtml auto-converts YouTube link in paragraph
+  const textWithYoutube = 'Here is the demonstration:\nhttps://www.youtube.com/watch?v=eqOfmtTJD1A\nEnd of section.';
+  const html = convertContentToHtml(textWithYoutube);
+
+  assert.ok(html.includes('data-youtube-video=""'), 'Must contain data-youtube-video wrapper');
+  assert.ok(html.includes('https://www.youtube-nocookie.com/embed/eqOfmtTJD1A'), 'Must embed iframe with video ID');
+  assert.ok(html.includes('article-youtube-iframe'), 'Must have article-youtube-iframe class');
+
+  // 3. Test processPastedBlog auto-converts YouTube link
+  const blogWithVideo = '# Video Showcase\nWatch our machine in action:\nhttps://youtu.be/eqOfmtTJD1A\nGreat jobsite reliability.';
+  const blogRes = processPastedBlog(blogWithVideo);
+  assert.ok(blogRes.cleanedHtml.includes('data-youtube-video=""'), 'processPastedBlog must convert YouTube link into video embed');
+  assert.ok(blogRes.cleanedHtml.includes('embed/eqOfmtTJD1A'), 'Must have embed URL');
+});
+
 

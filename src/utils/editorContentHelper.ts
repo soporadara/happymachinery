@@ -5,6 +5,7 @@
  */
 
 import { isTsvTable, convertTsvToTableHtml, isMarkdownTable, convertMarkdownTableToHtml, cleanHtmlTable } from './tablePasteHelper.ts'
+import { getYoutubeVideoId } from './blogImportHelper.ts'
 
 export function renderInlineMarkdownToHtml(text: string): string {
   if (!text) return ''
@@ -401,6 +402,15 @@ export function convertContentToHtml(content: string | string[] | any): string {
     if (/<table[\s>]/i.test(raw)) {
       const cleaned = cleanHtmlTable(raw)
       out.push(cleaned ? cleaned.html : raw)
+      continue
+    }
+
+    // 8.8. YouTube Video Link: Auto-convert to responsive video embed
+    const ytId = getYoutubeVideoId(raw)
+    if (ytId) {
+      out.push(
+        `<div data-youtube-video="" class="article-youtube-wrapper my-8 w-full max-w-4xl mx-auto"><iframe class="article-youtube-iframe w-full aspect-video rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800" src="https://www.youtube-nocookie.com/embed/${ytId}?rel=0&modestbranding=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
+      )
       continue
     }
 
