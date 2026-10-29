@@ -257,12 +257,15 @@ export function cleanHtmlTable(html: string): DetectedTableResult | null {
 
             // Extract inner HTML or text
             let innerHtml = cell.innerHTML.trim();
-            // Remove empty spans or paragraphs
+            // Remove empty spans or styled wrappers
             innerHtml = innerHtml.replace(/<span[^>]*>(.*?)<\/span>/gi, '$1');
             
-            // Clean up wrapping paragraph if present
-            const pMatch = innerHtml.match(/^<p[^>]*>(.*?)<\/p>$/i);
-            const content = pMatch ? pMatch[1].trim() : innerHtml;
+            // Strip any nested or wrapping paragraphs to guarantee no nested <p>
+            const content = innerHtml
+              .replace(/<p(?:\s+[^>]*)?>/gi, '')
+              .replace(/<\/p>/gi, '<br />')
+              .replace(/<br\s*\/?>\s*$/i, '')
+              .trim();
 
             // Make sure column 0 in body rows is bold if it was bold in Google Docs or is a label
             let finalContent = content || '&nbsp;';
@@ -320,13 +323,24 @@ export function cleanHtmlTable(html: string): DetectedTableResult | null {
         .replace(/width="[^"]*"/gi, '')
         .replace(/height="[^"]*"/gi, '');
 
-      // If no <th> in first row, convert first <tr>'s <td> to <th>
-      if (!/<th[\s>]/i.test(t)) {
-        t = t.replace(/<tr[^>]*>([\s\S]*?)<\/tr>/i, (_m, firstRowInner) => {
-          const ths = firstRowInner.replace(/<td[^>]*>([\s\S]*?)<\/td>/gi, '<th class="editor-th p-3 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-left font-bold text-slate-900 dark:text-slate-100"><p><strong>$1</strong></p></th>');
+      let rowIndex = 0;
+      t = t.replace(/<tr[^>]*>([\s\S]*?)<\/tr>/gi, (rowMatch: string, inner: string) => {
+        if (rowIndex === 0 && !/<th[\s>]/i.test(rowMatch)) {
+          rowIndex++;
+          const ths = inner.replace(/<td[^>]*>([\s\S]*?)<\/td>/gi, (_c: string, cellInner: string) => {
+            const clean = cellInner.replace(/<[^>]+>/g, '').trim();
+            return `<th class="editor-th p-3 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-left font-bold text-slate-900 dark:text-slate-100"><p><strong>${clean || '&nbsp;'}</strong></p></th>`;
+          });
           return `<thead><tr>${ths}</tr></thead>`;
+        }
+        rowIndex++;
+        const tds = inner.replace(/<td[^>]*>([\s\S]*?)<\/td>/gi, (_c: string, cellInner: string, colIdx: any) => {
+          const clean = cellInner.replace(/<[^>]+>/g, '').trim();
+          const bolded = (colIdx === 0 && clean) ? `<strong>${clean}</strong>` : (clean || '&nbsp;');
+          return `<td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>${bolded}</p></td>`;
         });
-      }
+        return `<tr>${tds}</tr>`;
+      });
 
       return t;
     });

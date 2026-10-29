@@ -250,6 +250,7 @@ def main():
     backup_cmd = (
         f"mkdir -p -m 700 '{REMOTE_BACKUP_DIR}' && "
         f"tar -czf '{backup_file}' -C '{REMOTE_BASE}' public_html && "
+        f"(ls -t {REMOTE_BACKUP_DIR}/pre_deploy_backup_*.tar.gz 2>/dev/null | sed -e '1,3d' | xargs rm -f 2>/dev/null || true) && "
         f"echo SNAPSHOT_CREATED"
     )
 

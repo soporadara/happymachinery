@@ -205,3 +205,80 @@ test('9. processPastedBlog detects full blog with HTML table and images', () => 
   assert.ok(res.cleanedHtml.includes('TYPHON T18'), 'Table content must be preserved');
   assert.ok(res.cleanedHtml.includes('t18-work.webp'), 'Body image must be preserved');
 });
+
+test('10. processPastedBlog accurately detects Google Docs blog with title, texts, and multi-column table (exact user scenario)', () => {
+  const gdocsBlog = `
+  <meta charset='utf-8'>
+  <b id="docs-internal-guid-789a-bcde" style="font-weight:normal;">
+    <h1>Heavy Compact Excavators Guide: 2.7-Ton to 4-Ton</h1>
+    <p>Learn how to size, specify, and evaluate 2.7-ton to 4-ton compact excavators for heavy residential construction.</p>
+    <table>
+      <tbody>
+        <tr>
+          <td>Specification</td>
+          <td>KUVUO 4.0</td>
+          <td>KUVUO 2.7</td>
+        </tr>
+        <tr>
+          <td>Main Pump Type</td>
+          <td>Axial piston variable pump</td>
+          <td>Gear pump</td>
+        </tr>
+        <tr>
+          <td>Hydraulic Flow</td>
+          <td>79.2 L/min (approx. 20.9 GPM)</td>
+          <td>17.91 GPM</td>
+        </tr>
+        <tr>
+          <td>Track Configuration</td>
+          <td>Metal tracks, 300 mm shoe, 1,720 mm overall width</td>
+          <td>Retractable metal tracks, 39.0 in to 51.2 in</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>In conclusion, evaluating your flow and track width guarantees the best ROI on the jobsite.</p>
+  </b>
+  `;
+
+  const res = processPastedBlog(gdocsBlog);
+
+  assert.strictEqual(res.detected, true, 'Must detect as blog import');
+  assert.strictEqual(res.isFullBlogImport, true, 'Must be flagged as full blog import');
+  assert.strictEqual(res.title, 'Heavy Compact Excavators Guide: 2.7-Ton to 4-Ton', 'Title must be extracted accurately');
+
+  // Verify column table is intact
+  assert.ok(res.cleanedHtml.includes('<table class="editor-table'), 'Must contain formatted column table');
+  assert.ok(res.cleanedHtml.includes('<th class="editor-th'), 'Must contain <th> column headers');
+  assert.ok(res.cleanedHtml.includes('KUVUO 4.0'), 'Must contain KUVUO 4.0 column');
+  assert.ok(res.cleanedHtml.includes('KUVUO 2.7'), 'Must contain KUVUO 2.7 column');
+  assert.ok(res.cleanedHtml.includes('79.2 L/min (approx. 20.9 GPM)'), 'Must contain hydraulic flow data in table');
+  assert.ok(res.cleanedHtml.includes('Retractable metal tracks, 39.0 in to 51.2 in'), 'Must contain track data in table');
+
+  // CRITICAL: Table cell labels must NEVER be converted to <h2> headings!
+  assert.ok(!res.cleanedHtml.includes('<h2>Hydraulic Flow</h2>'), 'Hydraulic Flow must NOT be <h2> heading');
+  assert.ok(!res.cleanedHtml.includes('<h2>Track Configuration</h2>'), 'Track Configuration must NOT be <h2> heading');
+  assert.ok(!res.cleanedHtml.includes('<h2>Axial piston variable pump</h2>'), 'Pump type must NOT be <h2> heading');
+
+  // Surrounding paragraphs must be preserved
+  assert.ok(res.cleanedHtml.includes('Learn how to size, specify, and evaluate'), 'Intro text must be preserved');
+  assert.ok(res.cleanedHtml.includes('In conclusion, evaluating your flow'), 'Conclusion text must be preserved');
+});
+
+test('11. convertContentToHtml protects HTML tables from having cells converted to <h2> headings', () => {
+  const htmlWithTable = `
+    <p>Introduction to excavator components.</p>
+    <table>
+      <tr><td>Specification</td><td>Rating</td></tr>
+      <tr><td>Hydraulic Flow</td><td>20.9 GPM</td></tr>
+      <tr><td>Track Configuration</td><td>Steel Tracks</td></tr>
+    </table>
+    <p>Final summary notes.</p>
+  `;
+
+  const output = convertContentToHtml(htmlWithTable);
+  assert.ok(output.includes('<table class="editor-table'), 'Output must contain table');
+  assert.ok(!output.includes('<h2>Hydraulic Flow</h2>'), 'Hydraulic Flow must NOT be turned into <h2>');
+  assert.ok(!output.includes('<h2>Track Configuration</h2>'), 'Track Configuration must NOT be turned into <h2>');
+  assert.ok(output.includes('Hydraulic Flow'), 'Hydraulic Flow must be preserved inside table');
+});
+

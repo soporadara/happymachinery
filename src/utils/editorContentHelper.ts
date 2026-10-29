@@ -4,7 +4,7 @@
  * Matches Rafelblog's clean editorial UX with pretty headings and rendered images
  */
 
-import { isTsvTable, convertTsvToTableHtml, isMarkdownTable, convertMarkdownTableToHtml } from './tablePasteHelper.ts'
+import { isTsvTable, convertTsvToTableHtml, isMarkdownTable, convertMarkdownTableToHtml, cleanHtmlTable } from './tablePasteHelper.ts'
 
 export function renderInlineMarkdownToHtml(text: string): string {
   if (!text) return ''
@@ -197,9 +197,17 @@ export function convertContentToHtml(content: string | string[] | any): string {
     if (trimmed.startsWith('{') && trimmed.includes('"type":"doc"')) {
       return content
     }
-    // If it's already full HTML, normalize images and headings inside paragraphs
-    if (trimmed.includes('</p>') || trimmed.includes('</h2>') || trimmed.includes('<h3') || trimmed.includes('<figure') || trimmed.includes('</div>')) {
-      const normalizedHtml = trimmed
+    // If it's already full HTML, normalize images and headings inside paragraphs, while PROTECTING tables
+    if (trimmed.includes('</p>') || trimmed.includes('</h2>') || trimmed.includes('<h3') || trimmed.includes('<figure') || trimmed.includes('</div>') || trimmed.includes('<table')) {
+      const tablePlaceholders: string[] = []
+      const protectedTables = trimmed.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+        const ph = `__HM_CONTENT_TABLE_${tablePlaceholders.length}__`
+        const cleaned = cleanHtmlTable(match)
+        tablePlaceholders.push(cleaned ? cleaned.html : match)
+        return `\n\n${ph}\n\n`
+      })
+
+      const normalizedHtml = protectedTables
         .replace(
           /<p>\s*(https?:\/\/[^\s<>]+\.(?:webp|png|jpe?g|gif|svg)(?:\?[^\s<>]*)?)\s*<\/p>/gi,
           '<img src="$1" alt="Jobsite Media Illustration" />'
@@ -216,7 +224,12 @@ export function convertContentToHtml(content: string | string[] | any): string {
           }
           return match
         })
-      return normalizedHtml
+
+      // Restore protected tables
+      const finalHtml = normalizedHtml.replace(/__HM_CONTENT_TABLE_(\d+)__/g, (_m, idx) => {
+        return tablePlaceholders[parseInt(idx, 10)] || ''
+      })
+      return finalHtml
     }
 
     // Split text into paragraphs, ensuring headings are separated into their own blocks while keeping tables intact
@@ -382,6 +395,13 @@ export function convertContentToHtml(content: string | string[] | any): string {
         out.push(mdRes.html)
         continue
       }
+    }
+
+    // 8.7. HTML Table
+    if (/<table[\s>]/i.test(raw)) {
+      const cleaned = cleanHtmlTable(raw)
+      out.push(cleaned ? cleaned.html : raw)
+      continue
     }
 
     // 9. Already an HTML block (tables, div, blockquote, etc.)

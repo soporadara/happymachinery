@@ -390,9 +390,15 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const hasMiniexcavator = /img\.miniexcavator\.org/i.test(normalized);
 
+  // Clean Google Docs container wrappers
+  const cleanedGdocs = normalized
+    .replace(/<meta[^>]*>/gi, '')
+    .replace(/<b\s+id=["']docs-internal-guid-[^>]*>/gi, '')
+    .replace(/<\/b>\s*$/gi, '');
+
   // Protect HTML tables so they are not fragmented by block splitting
   const tablePlaceholders: string[] = [];
-  const protectedTables = normalized.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+  const protectedTables = cleanedGdocs.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
     const placeholder = `__HM_HTML_TABLE_BLOCK_${tablePlaceholders.length}__`;
     tablePlaceholders.push(match);
     return `\n\n${placeholder}\n\n`;
@@ -400,13 +406,17 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
 
   // Split into raw lines / paragraphs
   let rawBlocks: string[] = [];
-  if (protectedTables.includes('</p>') || protectedTables.includes('</div>') || protectedTables.includes('</h1>')) {
+  if (protectedTables.includes('</p>') || protectedTables.includes('</div>') || protectedTables.includes('</h1>') || protectedTables.includes('</h2>') || protectedTables.includes('__HM_HTML_TABLE_BLOCK_')) {
     // Split HTML blocks
     rawBlocks = protectedTables
       .replace(/<\/p>/gi, '</p>\n')
       .replace(/<\/h([1-6])>/gi, '</h$1>\n')
       .replace(/<\/div>/gi, '</div>\n')
       .replace(/<\/figure>/gi, '</figure>\n')
+      .replace(/<\/li>/gi, '</li>\n')
+      .replace(/<\/ul>/gi, '</ul>\n')
+      .replace(/<\/ol>/gi, '</ol>\n')
+      .replace(/<\/blockquote>/gi, '</blockquote>\n')
       .split('\n')
       .map(b => b.trim())
       .filter(Boolean);
@@ -433,14 +443,16 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
-  // Restore protected HTML tables
-  rawBlocks = rawBlocks.map((b) => {
-    if (b.startsWith('__HM_HTML_TABLE_BLOCK_')) {
-      const idx = parseInt(b.replace('__HM_HTML_TABLE_BLOCK_', '').replace('__', ''), 10);
-      return tablePlaceholders[idx] || b;
-    }
-    return b;
-  });
+  // Restore protected HTML tables and filter orphaned wrapper tags
+  rawBlocks = rawBlocks
+    .map((b) => {
+      if (b.startsWith('__HM_HTML_TABLE_BLOCK_')) {
+        const idx = parseInt(b.replace('__HM_HTML_TABLE_BLOCK_', '').replace('__', ''), 10);
+        return tablePlaceholders[idx] || b;
+      }
+      return b;
+    })
+    .filter(b => b !== '<div>' && b !== '</div>' && !/^<div\s+id=["']docs-internal-guid-[^>]*>$/i.test(b) && b.length > 0);
 
   if (rawBlocks.length === 0) {
     return {
@@ -486,14 +498,15 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   // (e.g. short string, no URLs, no image tag, followed by an image or paragraph)
   if (!foundTitle && rawBlocks.length >= 2) {
     const first = rawBlocks[0];
+    const strippedFirst = first.replace(/<[^>]+>/g, '').trim();
     if (
-      first.length > 5 &&
-      first.length < 120 &&
-      !first.startsWith('http') &&
-      !first.includes('<img') &&
-      !first.includes('miniexcavator.org') &&
-      !first.endsWith('.') &&
-      !first.endsWith(':')
+      strippedFirst.length > 5 &&
+      strippedFirst.length < 140 &&
+      !strippedFirst.startsWith('http') &&
+      !strippedFirst.includes('<img') &&
+      !strippedFirst.includes('miniexcavator.org') &&
+      !strippedFirst.endsWith('.') &&
+      !strippedFirst.endsWith(':')
     ) {
       // Check if subsequent block is an image or paragraph
       foundTitle = cleanTitleText(first);
@@ -501,8 +514,11 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
+  // Check if content has embedded tables
+  const hasTable = rawBlocks.some(b => /<table[\s>]/i.test(b) || isTsvTable(b) || isMarkdownTable(b));
+
   // Check if we should consider this a full blog import
-  const isFullBlog = Boolean(foundTitle) || (rawBlocks.length >= 3 && hasMiniexcavator);
+  const isFullBlog = Boolean(foundTitle) || (rawBlocks.length >= 3 && hasMiniexcavator) || (rawBlocks.length >= 2 && hasTable);
 
   // 2. Scan and extract all images, pairing them with captions
   const detectedImages: Array<DetectedImage & { blockIndex: number; consumedNextIndex?: number }> = [];
@@ -543,9 +559,9 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
-  const detected = hasMiniexcavator || (isFullBlog && detectedImages.length > 0);
+  const detected = hasMiniexcavator || (isFullBlog && (detectedImages.length > 0 || hasTable || rawBlocks.length >= 2)) || detectedImages.length > 0 || hasTable;
 
-  if (!detected && detectedImages.length === 0) {
+  if (!detected && detectedImages.length === 0 && !hasTable) {
     return {
       detected: false,
       hasMiniexcavatorLinks: false,

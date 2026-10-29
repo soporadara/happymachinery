@@ -13,7 +13,7 @@ import TerminalNodeView from './TerminalNodeView';
 import LinkCardNodeView from './LinkCardNodeView';
 import { convertContentToHtml, isStandaloneHeading } from '../../utils/editorContentHelper';
 import { processPastedBlog, cleanImageTitle } from '../../utils/blogImportHelper';
-import { detectAndConvertTable } from '../../utils/tablePasteHelper';
+import { detectAndConvertTable, isTsvTable, isMarkdownTable } from '../../utils/tablePasteHelper';
 import './TiptapEditor.css';
 
 const CustomImage = Image.extend({
@@ -942,12 +942,31 @@ export default function TiptapEditor({
         const htmlData = event.clipboardData?.getData('text/html') || '';
 
         // 1. FULL BLOG IMPORT FIRST: Detect article title, featured cover image, media gallery images, AND tables
-        const candidatePayloads = [textData, htmlData].filter(Boolean);
+        // HTML is prioritized over plain text because plain text from Google Docs loses table structures!
+        const candidatePayloads = [htmlData, textData].filter(Boolean);
         for (const payload of candidatePayloads) {
+          // If htmlData already has a table, NEVER process textData because textData loses the table tags
+          if (payload === textData && htmlData && /<table[\s>]/i.test(htmlData)) {
+            continue;
+          }
+
+          const hasMiniexcavator = /img\.miniexcavator\.org/i.test(payload);
+          const hasImage = /\.(webp|png|jpe?g|gif|svg)/i.test(payload) || /<img/i.test(payload);
+          const hasTable = /<table[\s>]/i.test(payload) || isTsvTable(payload) || isMarkdownTable(payload);
+          const hasArticleMarkers = /^(?:#+\s|<h[1-3]|title:)/im.test(payload) || /docs-internal-guid/i.test(payload);
+          const isGoogleDocs = /docs-internal-guid/i.test(payload);
+
+          // Trigger full blog import if content has:
+          // - miniexcavator assets
+          // - article headings with either images or tables
+          // - Google Docs documents containing tables, images, or paragraphs
+          // - HTML containing tables and article paragraphs
           if (
-            /img\.miniexcavator\.org/i.test(payload) ||
-            (/^(?:#+\s|<h[1-3]|title:)/im.test(payload) && /\.(webp|png|jpe?g|gif|svg)/i.test(payload)) ||
-            (/<h[1-3]/i.test(payload) && /<img/i.test(payload))
+            hasMiniexcavator ||
+            (hasArticleMarkers && (hasImage || hasTable)) ||
+            (isGoogleDocs && (hasTable || hasImage || /<p[\s>]/i.test(payload))) ||
+            (hasTable && (/<p[\s>]/i.test(payload) || payload.includes('\n'))) ||
+            (hasArticleMarkers && hasImage)
           ) {
             const res = processPastedBlog(payload);
             if (res.detected) {
@@ -1020,7 +1039,23 @@ export default function TiptapEditor({
           }
           return true;
         }
+
         // 3. Structured text with standalone headings or numbered sections
+        // Note: If htmlData has a table, NEVER fall back to plain textData which destroyed the table!
+        if (htmlData && /<table[\s>]/i.test(htmlData)) {
+          const res = processPastedBlog(htmlData);
+          if (res.cleanedHtml) {
+            event.preventDefault();
+            const currentContent = view.state.doc.textContent.trim();
+            if (currentContent.length === 0) {
+              editorRef.current?.commands.setContent(res.cleanedHtml);
+            } else {
+              editorRef.current?.commands.insertContent(res.cleanedHtml);
+            }
+            return true;
+          }
+        }
+
         if (textData && textData.includes('\n')) {
           const lines = textData.split('\n').map(l => l.trim()).filter(Boolean);
           const hasHeading = lines.some(l => isStandaloneHeading(l) || /^#{1,6}\s+/.test(l) || /^\d+\.\s+[A-Z]/.test(l));
