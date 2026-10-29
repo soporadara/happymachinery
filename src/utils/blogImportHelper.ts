@@ -237,6 +237,8 @@ export function hasImageLink(content: string): boolean {
 export function getYoutubeVideoId(url: string): string | null {
   if (!url || typeof url !== 'string') return null;
   const trimmed = url.trim();
+  if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
+
   let target = trimmed;
   const mdMatch = trimmed.match(/^\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/i);
   if (mdMatch) target = mdMatch[2];
@@ -245,8 +247,24 @@ export function getYoutubeVideoId(url: string): string | null {
   const iframeMatch = trimmed.match(/<iframe\s+[^>]*src=["'](https?:\/\/[^"']+)["']/i);
   if (iframeMatch) target = iframeMatch[1];
 
-  const match = target.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i);
-  return match ? match[1] : null;
+  const match = target.match(/(?:youtu\.be\/|(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:embed\/|v\/|watch\?(?:[^&]+&)*v=|shorts\/|live\/))([\w-]{11})/i);
+  if (match && match[1]) return match[1];
+
+  try {
+    const parsed = new URL(target.startsWith('http') ? target : `https://${target}`);
+    if (parsed.hostname.includes('youtube.com') || parsed.hostname.includes('youtube-nocookie.com')) {
+      const v = parsed.searchParams.get('v');
+      if (v && /^[\w-]{11}$/.test(v)) return v;
+      const pathParts = parsed.pathname.split('/').filter(Boolean);
+      const last = pathParts[pathParts.length - 1];
+      if (last && /^[\w-]{11}$/.test(last)) return last;
+    } else if (parsed.hostname === 'youtu.be') {
+      const last = parsed.pathname.replace(/^\//, '');
+      if (last && /^[\w-]{11}$/.test(last)) return last;
+    }
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -412,8 +430,15 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
   let trimmed = line.trim();
   if (!trimmed) return null;
 
-  // Strip wrapping <p> or <div> tag if it wraps an image or link
-  trimmed = trimmed.replace(/^<(?:p|div)(?:\s+[^>]*)?>\s*/i, '').replace(/\s*<\/(?:p|div)>$/i, '').trim();
+  // Strip all outer wrapper tags (p, div, span, b, strong, em, i) repeatedly
+  let prevTrimmed = '';
+  while (prevTrimmed !== trimmed) {
+    prevTrimmed = trimmed;
+    trimmed = trimmed
+      .replace(/^<(?:p|div|span|b|strong|em|i)(?:\s+[^>]*)?>\s*/i, '')
+      .replace(/\s*<\/(?:p|div|span|b|strong|em|i)>$/i, '')
+      .trim();
+  }
   if (!trimmed) return null;
 
   // 0. HTML <figure> tag: <figure><img src="..." alt="..."><figcaption>...</figcaption></figure>
@@ -486,7 +511,7 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
   }
 
   // 5. HTML <a> tag: <a href="url">text</a>
-  const htmlLink = trimmed.match(/^<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>(.*?)<\/a>$/i);
+  const htmlLink = trimmed.match(/^<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>$/i);
   if (htmlLink && (isMiniexcavatorUrl(htmlLink[1]) || isImageUrl(htmlLink[1]))) {
     const text = htmlLink[2].replace(/<[^>]+>/g, '').trim();
     const isUrlText = text.startsWith('http://') || text.startsWith('https://');
@@ -495,6 +520,7 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
       url: htmlLink[1].trim(),
       alt: label || cleanImageTitle(htmlLink[1]),
       caption: label,
+      href: htmlLink[1].trim(),
     };
   }
 
@@ -525,6 +551,21 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
     };
   }
 
+  // 8. Fallback: If line contains an image link and the text is predominantly the image/label
+  const fallback = extractFirstImageFromArticle(trimmed);
+  if (fallback && fallback.url) {
+    const cleanText = trimmed.replace(/<[^>]+>/g, '').trim();
+    const isUrlText = cleanText.startsWith('http://') || cleanText.startsWith('https://');
+    if (isUrlText || cleanText.length <= 120) {
+      return {
+        url: fallback.url,
+        alt: fallback.alt || cleanImageTitle(fallback.url),
+        caption: fallback.caption || fallback.alt || '',
+        href: fallback.href,
+      };
+    }
+  }
+
   return null;
 }
 
@@ -535,15 +576,33 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
 function isLikelyCaptionLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  if (trimmed.length > 200) return false; // captions are concise
-  if (trimmed.startsWith('#')) return false; // not heading
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return false; // not url
+  // Strip outer tags to evaluate text length and structure
+  const clean = trimmed
+    .replace(/^<(?:p|div|span|figcaption)(?:\s+[^>]*)?>\s*/i, '')
+    .replace(/\s*<\/(?:p|div|span|figcaption)>$/i, '')
+    .replace(/<[^>]+>/g, '')
+    .trim();
+
+  if (!clean) return false;
+  if (clean.length > 120) return false; // Captions are concise
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length > 18) return false; // Paragraphs have many words
+
+  // If it contains multiple sentences (sentence separator), it's a paragraph
+  if (/[.!?]\s+[A-Z]/.test(clean)) return false;
+
+  // If it ends with period and has 10+ words, it is almost certainly a body paragraph
+  if (/[.!?]$/.test(clean) && words.length >= 10) return false;
+
+  if (clean.startsWith('#')) return false;
+  if (clean.startsWith('http://') || clean.startsWith('https://')) return false;
   if (/^<h[1-6]/i.test(trimmed)) return false;
   if (/^<img/i.test(trimmed)) return false;
   if (/^<div/i.test(trimmed)) return false;
   if (/^<table/i.test(trimmed)) return false;
-  if (/^[-*•]\s+/.test(trimmed)) return false; // not list
-  if (/^\d+\.\s+/.test(trimmed)) return false; // not numbered list
+  if (/^[-*•]\s+/.test(clean)) return false;
+  if (/^\d+\.\s+/.test(clean)) return false;
+
   return true;
 }
 
@@ -830,6 +889,9 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     if (isFullBlog && i === titleIndex) continue;
     if (isFullBlog && coverImage && detectedImages[0]?.blockIndex === i) continue;
     if (isFullBlog && coverImage && detectedImages[0]?.consumedNextIndex === i) continue;
+    if (isFullBlog && coverImage && !detectedImages[0] && rawBlocks[i].includes(coverImage.url) && (rawBlocks[i].includes('<img') || rawBlocks[i].includes('<a ') || isImageUrl(rawBlocks[i]))) {
+      continue;
+    }
 
     // Check if this block is one of the remaining images
     const matchingImg = detectedImages.find(img => img.blockIndex === i);

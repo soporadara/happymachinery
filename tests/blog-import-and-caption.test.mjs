@@ -478,4 +478,60 @@ test('extractFirstImageFromArticle accurately extracts first image link from any
   assert.ok(adminTsx.includes('userExplicitlyClearedCoverRef'), 'AdminDashboard must track manual clear state');
 });
 
+test('YouTube video embed ID works with youtube-nocookie and Google Docs image imports seamlessly', async () => {
+  const { getYoutubeVideoId, parseImageLine, processPastedBlog } = await import('../src/utils/blogImportHelper.ts');
+
+  // 1. YouTube nocookie embed parsing
+  assert.strictEqual(
+    getYoutubeVideoId('https://www.youtube-nocookie.com/embed/eqOfmtTJD1A?rel=0&modestbranding=1'),
+    'eqOfmtTJD1A',
+    'Must parse video ID from youtube-nocookie.com embed with query params'
+  );
+  assert.strictEqual(
+    getYoutubeVideoId('https://youtube-nocookie.com/embed/eqOfmtTJD1A'),
+    'eqOfmtTJD1A'
+  );
+  assert.strictEqual(
+    getYoutubeVideoId('https://m.youtube.com/watch?v=eqOfmtTJD1A'),
+    'eqOfmtTJD1A'
+  );
+  assert.strictEqual(
+    getYoutubeVideoId('eqOfmtTJD1A'),
+    'eqOfmtTJD1A'
+  );
+
+  // 2. Google Docs HTML copied image line with nested spans and an anchor
+  const gdocsHtml = '<p class="c1"><span class="c2"><a class="c3" href="https://img.miniexcavator.org/ebay/Website%20upload/Typhon%20Matador%20V900%20(7).webp">HEAVY COMPACT EXCAVATORS GUIDE: 2.7-TON TO 4-TON CLASS</a></span></p>';
+  const parsedImg = parseImageLine(gdocsHtml);
+  assert.ok(parsedImg, 'parseImageLine must parse Google Docs nested link');
+  assert.strictEqual(parsedImg.url, 'https://img.miniexcavator.org/ebay/Website%20upload/Typhon%20Matador%20V900%20(7).webp');
+  assert.strictEqual(parsedImg.alt, 'HEAVY COMPACT EXCAVATORS GUIDE: 2.7-TON TO 4-TON CLASS');
+
+  // 3. Full article copied from Google Docs with Title, Image, Paragraph, and YouTube link
+  const fullArticle = `
+    <p class="title"><span>The Downtime Cost Equation</span></p>
+    <p class="c1"><span class="c2"><a class="c3" href="https://img.miniexcavator.org/ebay/Website%20upload/Typhon%20Matador%20V900%20(7).webp">HEAVY COMPACT EXCAVATORS GUIDE: 2.7-TON TO 4-TON CLASS</a></span></p>
+    <p class="body"><span>Compact excavators in the 2.7-ton to 4-ton class represent the sweet spot for utility contractors, landscapers, and residential excavators.</span></p>
+    <p class="video"><span>https://www.youtube.com/watch?v=eqOfmtTJD1A</span></p>
+    <p class="conclusion"><span>From a fleet management perspective, protected engineering is a total cost of ownership win.</span></p>
+  `;
+
+  const res = processPastedBlog(fullArticle);
+  assert.strictEqual(res.detected, true);
+  assert.ok(res.coverImage, 'Must detect cover image');
+  assert.strictEqual(res.coverImage.url, 'https://img.miniexcavator.org/ebay/Website%20upload/Typhon%20Matador%20V900%20(7).webp');
+  assert.strictEqual(res.coverImage.alt, 'HEAVY COMPACT EXCAVATORS GUIDE: 2.7-TON TO 4-TON CLASS');
+
+  // Cover image must NOT be duplicated in the body
+  assert.ok(!res.cleanedHtml.includes('<h2>HEAVY COMPACT EXCAVATORS GUIDE'), 'Cover image must not be converted to h2 or duplicated in body');
+  
+  // First body paragraph must be preserved and NOT swallowed as caption
+  assert.ok(res.cleanedHtml.includes('Compact excavators in the 2.7-ton to 4-ton class represent the sweet spot'), 'First body paragraph must be preserved');
+
+  // YouTube video must be converted to playable embed
+  assert.ok(res.cleanedHtml.includes('data-youtube-video=""'), 'Must contain YouTube embed wrapper');
+  assert.ok(res.cleanedHtml.includes('embed/eqOfmtTJD1A'), 'Must have YouTube embed src');
+});
+
+
 

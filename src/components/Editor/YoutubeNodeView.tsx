@@ -6,18 +6,8 @@ import {
   Maximize2, ExternalLink, RefreshCw, X, Check, AlertCircle, Video
 } from 'lucide-react';
 
-export const getYoutubeVideoId = (url: string): string | null => {
-  if (!url) return null;
-  const trimmed = url.trim();
-  const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/);
-  if (match && match[1]) {
-    return match[1];
-  }
-  if (/^[\w-]{11}$/.test(trimmed)) {
-    return trimmed;
-  }
-  return null;
-};
+import { getYoutubeVideoId } from '../../utils/blogImportHelper';
+export { getYoutubeVideoId };
 
 interface YoutubeNodeViewProps {
   editor: any;
