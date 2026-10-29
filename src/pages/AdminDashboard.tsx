@@ -58,7 +58,7 @@ import TopBlogsManager from '../components/TopBlogsManager'
 import TiptapEditor from '../components/Editor/TiptapEditor'
 import { renderMarkdownToReact } from './Blog'
 import { convertContentToHtml, splitContentIntoBlocks, getHeadingMatch } from '../utils/editorContentHelper'
-import { processPastedBlog, cleanImageTitle } from '../utils/blogImportHelper'
+import { processPastedBlog, cleanImageTitle, extractFirstImageFromArticle, isImageUrl } from '../utils/blogImportHelper'
 import { cacheSiteSettings, updateBrowserFavicon } from '../data/siteBranding'
 import './AdminDashboard.css'
 
@@ -1375,6 +1375,20 @@ export default function AdminDashboard() {
   const [editorSeoTitle, setEditorSeoTitle] = useState('')
   const [editorSeoDesc, setEditorSeoDesc] = useState('')
   const [editorScheduledAt, setEditorScheduledAt] = useState('')
+  const userExplicitlyClearedCoverRef = useRef(false)
+
+  // Auto-insert first image link found in article content into Featured Cover Image
+  useEffect(() => {
+    if (!editorCoverImage.trim() && editorContent.trim() && !userExplicitlyClearedCoverRef.current) {
+      const first = extractFirstImageFromArticle(editorContent)
+      if (first && first.url) {
+        setEditorCoverImage(first.url)
+        if (!editorCoverAlt.trim() && first.alt) {
+          setEditorCoverAlt(first.alt)
+        }
+      }
+    }
+  }, [editorContent, editorCoverImage, editorCoverAlt])
 
   // Rich WYSIWYG & Media Editor States (Matches Image 2)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -2561,6 +2575,7 @@ export default function AdminDashboard() {
     setEditingBlockIndex(null)
     setEditorCategory(blogCategories[0]?.name || 'Jobsite Productivity')
     setEditorStatus('Draft')
+    userExplicitlyClearedCoverRef.current = false
     setEditorCoverImage('')
     setEditorCoverAlt('')
     setEditorVideoUrl('')
@@ -2572,6 +2587,7 @@ export default function AdminDashboard() {
   }
 
   const openEditArticle = (post: BlogPost) => {
+    userExplicitlyClearedCoverRef.current = false
     setEditingArticle(post)
     setEditorTitle(post.title)
     setEditorSlug(post.slug || '')
@@ -2584,8 +2600,17 @@ export default function AdminDashboard() {
     setEditingBlockIndex(null)
     setEditorCategory(post.category)
     setEditorStatus('Published')
-    setEditorCoverImage(post.image)
-    setEditorCoverAlt(post.imageAlt || (post as any).alt || '')
+    let initialCover = post.image || ''
+    const postBodyText = Array.isArray(post.content) ? post.content.join('\n\n') : (post.content || '')
+    if (!initialCover && postBodyText) {
+      const first = extractFirstImageFromArticle(postBodyText)
+      if (first && first.url) {
+        initialCover = first.url
+      }
+    }
+    setEditorCoverImage(initialCover)
+    const detectedAlt = (!post.image && postBodyText) ? (extractFirstImageFromArticle(postBodyText)?.alt || '') : ''
+    setEditorCoverAlt(post.imageAlt || (post as any).alt || detectedAlt || '')
     setEditorVideoUrl('')
     setEditorSeoTitle((post as any).seoTitle || post.title)
     setEditorSeoDesc((post as any).metaDescription || post.excerpt)
@@ -2655,6 +2680,7 @@ export default function AdminDashboard() {
       const updated = [newMedia, ...mediaList]
       setMediaList(updated)
       await writeSharedContent('media-library', updated)
+      userExplicitlyClearedCoverRef.current = false
       setEditorCoverImage(res.dataUrl)
       if (!editorCoverAlt.trim()) {
         setEditorCoverAlt(cleanTitle)
@@ -2669,6 +2695,7 @@ export default function AdminDashboard() {
   }
 
   const handleSelectCoverFromLibrary = (media: MediaItem) => {
+    userExplicitlyClearedCoverRef.current = false
     setEditorCoverImage(media.url)
     if (!editorCoverAlt.trim()) {
       setEditorCoverAlt(media.title)
@@ -2830,9 +2857,18 @@ export default function AdminDashboard() {
 
   const handleSmartBlogImport = async (text: string) => {
     if (!text || !text.trim()) return
+    userExplicitlyClearedCoverRef.current = false
     const res = processPastedBlog(text)
     if (!res.detected) {
-      showToast('No structured blog or miniexcavator images detected.', 'info' as any)
+      // Fallback: check if text has any image
+      const first = extractFirstImageFromArticle(text)
+      if (first && first.url) {
+        setEditorCoverImage(first.url)
+        if (!editorCoverAlt.trim() && first.alt) setEditorCoverAlt(first.alt)
+        showToast('First image auto-inserted into Featured Cover Image!', 'success')
+      } else {
+        showToast('No structured blog or miniexcavator images detected.', 'info' as any)
+      }
       return
     }
 
@@ -2843,10 +2879,20 @@ export default function AdminDashboard() {
       }
     }
 
-    if (res.coverImage) {
-      setEditorCoverImage(res.coverImage.url)
-      if (!editorCoverAlt.trim()) {
-        setEditorCoverAlt(res.coverImage.alt)
+    let finalCoverUrl = res.coverImage?.url || ''
+    let finalCoverAlt = res.coverImage?.alt || ''
+    if (!finalCoverUrl) {
+      const first = extractFirstImageFromArticle(text)
+      if (first) {
+        finalCoverUrl = first.url
+        finalCoverAlt = first.alt
+      }
+    }
+
+    if (finalCoverUrl) {
+      setEditorCoverImage(finalCoverUrl)
+      if (!editorCoverAlt.trim() && finalCoverAlt) {
+        setEditorCoverAlt(finalCoverAlt)
       }
     }
 
@@ -6081,6 +6127,7 @@ export default function AdminDashboard() {
                                 showToast(`Auto-detected Article Title: "${title}"`, 'success')
                               }}
                               onAutoExtractCoverImage={(url, alt) => {
+                                userExplicitlyClearedCoverRef.current = false
                                 setEditorCoverImage(url)
                                 if (alt) {
                                   setEditorCoverAlt(alt)
@@ -6113,8 +6160,18 @@ export default function AdminDashboard() {
                                 setSavedCursorPos({ start: target.selectionStart, end: target.selectionEnd })
                               }}
                               onChange={(e) => {
-                                setEditorContent(e.target.value)
-                                pushContentHistory(e.target.value)
+                                const val = e.target.value
+                                setEditorContent(val)
+                                pushContentHistory(val)
+                                if (!editorCoverImage.trim() && !userExplicitlyClearedCoverRef.current) {
+                                  const first = extractFirstImageFromArticle(val)
+                                  if (first && first.url) {
+                                    setEditorCoverImage(first.url)
+                                    if (!editorCoverAlt.trim() && first.alt) {
+                                      setEditorCoverAlt(first.alt)
+                                    }
+                                  }
+                                }
                               }}
                               onPaste={async (e) => {
                                 const items = e.clipboardData?.items
@@ -6135,6 +6192,10 @@ export default function AdminDashboard() {
                                             ctx?.drawImage(img, 0, 0)
                                             const webpUrl = canvas.toDataURL('image/webp', 0.88)
                                             insertMediaAtSavedCursor(`\n\n![Pasted Image](${webpUrl})\n\n`)
+                                            if (!editorCoverImage.trim() && !userExplicitlyClearedCoverRef.current) {
+                                              setEditorCoverImage(webpUrl)
+                                              if (!editorCoverAlt.trim()) setEditorCoverAlt('Featured Article Cover')
+                                            }
                                             showToast('Image pasted and converted to WebP.', 'success')
                                           }
                                           img.src = reader.result as string
@@ -6147,9 +6208,19 @@ export default function AdminDashboard() {
                                 }
 
                                 const text = e.clipboardData?.getData('text/plain') || ''
-                                if (text && (/img\.miniexcavator\.org/i.test(text) || (/^(?:#+\s|<h[1-3])/im.test(text) && /\.(webp|png|jpe?g)/i.test(text)))) {
-                                  e.preventDefault()
-                                  await handleSmartBlogImport(text)
+                                if (text) {
+                                  const first = extractFirstImageFromArticle(text)
+                                  if (first && first.url && (!editorCoverImage.trim() || !userExplicitlyClearedCoverRef.current)) {
+                                    if (!editorCoverImage.trim()) {
+                                      setEditorCoverImage(first.url)
+                                      if (!editorCoverAlt.trim() && first.alt) setEditorCoverAlt(first.alt)
+                                    }
+                                  }
+                                  if (/img\.miniexcavator\.org/i.test(text) || first !== null || isImageUrl(text.trim()) || /^(?:#+\s|<h[1-3])/im.test(text)) {
+                                    e.preventDefault()
+                                    await handleSmartBlogImport(text)
+                                    return
+                                  }
                                 }
                               }}
                               onDrop={async (e) => {
@@ -6169,6 +6240,10 @@ export default function AdminDashboard() {
                                         ctx?.drawImage(img, 0, 0)
                                         const webpUrl = canvas.toDataURL('image/webp', 0.88)
                                         insertMediaAtSavedCursor(`\n\n![Dropped Image](${webpUrl})\n\n`)
+                                        if (!editorCoverImage.trim() && !userExplicitlyClearedCoverRef.current) {
+                                          setEditorCoverImage(webpUrl)
+                                          if (!editorCoverAlt.trim()) setEditorCoverAlt('Featured Article Cover')
+                                        }
                                         showToast('Image dropped and converted to WebP.', 'success')
                                       }
                                       img.src = reader.result as string
@@ -6251,11 +6326,51 @@ export default function AdminDashboard() {
                               Featured Cover Image
                             </h3>
                           </div>
-                          {editorCoverImage && (
-                            <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 650 }}>
-                              Active Cover
-                            </span>
-                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                userExplicitlyClearedCoverRef.current = false
+                                const first = extractFirstImageFromArticle(editorContent)
+                                if (first && first.url) {
+                                  setEditorCoverImage(first.url)
+                                  if (first.alt) setEditorCoverAlt(first.alt)
+                                  showToast('First image link auto-inserted into Featured Cover Image!', 'success')
+                                } else {
+                                  showToast('No image link found in article content yet.', 'warning')
+                                }
+                              }}
+                              className="cms-cover-autodetect-btn"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#0284c7',
+                                background: '#f0f9ff',
+                                border: '1px solid #bae6fd',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title="Auto-detect first image link in article and insert as Featured Cover Image"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                <path d="M3 3v5h5" />
+                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                <path d="M16 21h5v-5" />
+                              </svg>
+                              Auto-detect
+                            </button>
+                            {editorCoverImage && (
+                              <span style={{ fontSize: '10px', color: '#16a34a', fontWeight: 650 }}>
+                                Active Cover
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -6344,6 +6459,7 @@ export default function AdminDashboard() {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    userExplicitlyClearedCoverRef.current = true
                                     setEditorCoverImage('')
                                     setEditorCoverAlt('')
                                   }}
@@ -6376,21 +6492,53 @@ export default function AdminDashboard() {
                                 Drag &amp; drop or click to upload
                               </span>
                               <span style={{ fontSize: '10px', color: 'var(--cms-text-muted, #94a3b8)' }}>
-                                Auto-compressed to WebP &amp; saved to library
+                                Auto-compressed to WebP &amp; saved to library • Auto-inserts 1st article image
                               </span>
                             </div>
                           )}
 
                           <div>
-                            <label className="cms-field-label-sm" style={{ marginBottom: '5px' }}>
-                              Image URL
-                            </label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                              <label className="cms-field-label-sm" style={{ margin: 0 }}>
+                                Image URL
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  userExplicitlyClearedCoverRef.current = false
+                                  const first = extractFirstImageFromArticle(editorContent)
+                                  if (first && first.url) {
+                                    setEditorCoverImage(first.url)
+                                    if (first.alt) setEditorCoverAlt(first.alt)
+                                    showToast('First image link auto-inserted!', 'success')
+                                  } else {
+                                    showToast('No image link found in article content', 'warning')
+                                  }
+                                }}
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#0284c7',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                  textDecoration: 'underline'
+                                }}
+                                title="Auto-insert first image link from article"
+                              >
+                                Auto-insert 1st image
+                              </button>
+                            </div>
                             <input
                               type="url"
                               className="cms-editor-input-sm"
                               placeholder="https://images.unsplash.com/... or /images/..."
                               value={editorCoverImage}
-                              onChange={(e) => setEditorCoverImage(e.target.value)}
+                              onChange={(e) => {
+                                userExplicitlyClearedCoverRef.current = false
+                                setEditorCoverImage(e.target.value)
+                              }}
                             />
                           </div>
 

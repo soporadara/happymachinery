@@ -420,4 +420,62 @@ test('YouTube links auto-convert to responsive video embeds across any paragraph
   assert.ok(blogRes.cleanedHtml.includes('embed/eqOfmtTJD1A'), 'Must have embed URL');
 });
 
+test('extractFirstImageFromArticle accurately extracts first image link from any format', async () => {
+  const { extractFirstImageFromArticle, isImageUrl, hasImageLink } = await import('../src/utils/blogImportHelper.ts');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const adminTsx = fs.readFileSync(path.resolve('src/pages/AdminDashboard.tsx'), 'utf8');
+
+  // 1. Plain Unsplash URL
+  const unsplash = 'https://images.unsplash.com/photo-1578844251758-2f71da64c96f?auto=format&fit=crop&w=1200';
+  const res1 = extractFirstImageFromArticle(`Check out this machinery:\n${unsplash}\nWorks efficiently.`);
+  assert.ok(res1, 'Must extract plain image URL');
+  assert.strictEqual(res1.url, unsplash);
+
+  // 2. Markdown image
+  const mdImg = '![Heavy Excavator](https://img.miniexcavator.org/excavator-v900.webp)';
+  const res2 = extractFirstImageFromArticle(`Some intro text\n\n${mdImg}\n\nConclusion.`);
+  assert.ok(res2, 'Must extract markdown image');
+  assert.strictEqual(res2.url, 'https://img.miniexcavator.org/excavator-v900.webp');
+  assert.strictEqual(res2.alt, 'Heavy Excavator');
+
+  // 3. Markdown linked image [![Alt](imgUrl)](linkUrl)
+  const mdLinked = '[![Typhon Matador](https://img.miniexcavator.org/matador.webp)](https://happymachinery.com/product/matador)';
+  const res3 = extractFirstImageFromArticle(`Overview paragraph\n${mdLinked}\nFeatures.`);
+  assert.ok(res3, 'Must extract markdown linked image');
+  assert.strictEqual(res3.url, 'https://img.miniexcavator.org/matador.webp');
+  assert.strictEqual(res3.alt, 'Typhon Matador');
+  assert.strictEqual(res3.href, 'https://happymachinery.com/product/matador');
+
+  // 4. HTML <figure> and <img>
+  const htmlImg = '<p>Intro</p><figure class="article-image-figure"><img src="/images/why-choose-v900-jobsite.png" alt="Jobsite Excavator" /><figcaption>Jobsite Excavator</figcaption></figure>';
+  const res4 = extractFirstImageFromArticle(htmlImg);
+  assert.ok(res4, 'Must extract HTML figure image');
+  assert.strictEqual(res4.url, '/images/why-choose-v900-jobsite.png');
+  assert.strictEqual(res4.alt, 'Jobsite Excavator');
+
+  // 5. Earliest appearing image is strictly chosen
+  const multiImages = `
+    Introduction section with no images.
+    Here is our primary machine:
+    ![First Image](https://img.miniexcavator.org/first.webp)
+    And here is our secondary machine:
+    https://images.unsplash.com/photo-second-123.jpg
+  `;
+  const res5 = extractFirstImageFromArticle(multiImages);
+  assert.ok(res5);
+  assert.strictEqual(res5.url, 'https://img.miniexcavator.org/first.webp');
+  assert.strictEqual(res5.alt, 'First Image');
+
+  // 6. Verify hasImageLink helper
+  assert.strictEqual(hasImageLink('Just plain text without images'), false);
+  assert.strictEqual(hasImageLink('Text with https://img.miniexcavator.org/test.webp inside'), true);
+
+  // 7. Verify AdminDashboard wires reactive auto-detection and Auto-detect button
+  assert.ok(adminTsx.includes('extractFirstImageFromArticle(editorContent)'), 'AdminDashboard must use extractFirstImageFromArticle');
+  assert.ok(adminTsx.includes('cms-cover-autodetect-btn'), 'AdminDashboard must have Auto-detect button');
+  assert.ok(adminTsx.includes('Auto-insert 1st image'), 'AdminDashboard must have Auto-insert 1st image action');
+  assert.ok(adminTsx.includes('userExplicitlyClearedCoverRef'), 'AdminDashboard must track manual clear state');
+});
+
 

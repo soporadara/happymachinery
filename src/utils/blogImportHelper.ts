@@ -52,9 +52,183 @@ export function isImageUrl(url: string): boolean {
   if (/cloudinary\.com/i.test(trimmed)) return true;
   if (/imgur\.com/i.test(trimmed)) return true;
   if (/blob\.core\.windows\.net/i.test(trimmed)) return true;
+  if (/images\.pexels\.com/i.test(trimmed)) return true;
+  if (/cdn\.pixabay\.com/i.test(trimmed)) return true;
+  if (/upload\.wikimedia\.org/i.test(trimmed)) return true;
+  if (/wp-content\/uploads/i.test(trimmed)) return true;
   if (/(?:\/|^)(?:images|storage|media|uploads|assets)\/.*\.(webp|png|jpe?g|gif|svg|avif)/i.test(trimmed)) return true;
   if (/https?:\/\/[^\s<>]+\/(?:[^\s<>]+\/)*(?:image|photo|picture|upload|gallery|media)[^\s<>]*/i.test(trimmed)) return true;
   return false;
+}
+
+export interface ExtractedImageInfo {
+  url: string;
+  alt: string;
+  caption?: string;
+  href?: string;
+}
+
+/**
+ * Extract the first image link found anywhere in an article (Markdown, HTML, or raw image link)
+ * Guaranteed to find the earliest appearing image link in the content.
+ */
+export function extractFirstImageFromArticle(content: string): ExtractedImageInfo | null {
+  if (!content || typeof content !== 'string') return null;
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  interface FoundCandidate {
+    url: string;
+    alt: string;
+    caption?: string;
+    href?: string;
+    index: number;
+  }
+
+  const candidates: FoundCandidate[] = [];
+
+  // 1. HTML <figure> with <img src="...">
+  const figureRegex = /<figure[\s>][\s\S]*?<img\s+[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/figure>/gi;
+  for (const match of trimmed.matchAll(figureRegex)) {
+    const fullFig = match[0];
+    const src = match[1]?.trim();
+    if (src && isImageUrl(src)) {
+      const altMatch = fullFig.match(/alt=["']([^"']*)["']/i);
+      const capMatch = fullFig.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i) || fullFig.match(/data-caption=["']([^"']*)["']/i);
+      const hrefMatch = fullFig.match(/href=["']([^"']+)["']/i) || fullFig.match(/data-href=["']([^"']+)["']/i);
+      const alt = altMatch ? altMatch[1].trim() : '';
+      const cap = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+      candidates.push({
+        url: src,
+        alt: alt || cap || cleanImageTitle(src),
+        caption: cap || alt,
+        href: hrefMatch ? hrefMatch[1].trim() : undefined,
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  // 2. HTML <img> tags (including inside <p>, <a>, etc.)
+  const imgTagRegex = /<img\s+([^>]*?)>/gi;
+  for (const match of trimmed.matchAll(imgTagRegex)) {
+    const attrs = match[1];
+    const srcMatch = attrs.match(/src=["']([^"']+)["']/i);
+    const src = srcMatch ? srcMatch[1].trim() : '';
+    if (src && isImageUrl(src)) {
+      const altMatch = attrs.match(/alt=["']([^"']*)["']/i);
+      const capMatch = attrs.match(/data-caption=["']([^"']*)["']/i);
+      const hrefMatch = attrs.match(/data-href=["']([^"']+)["']/i);
+      const alt = altMatch ? altMatch[1].trim() : '';
+      const cap = capMatch ? capMatch[1].trim() : '';
+      candidates.push({
+        url: src,
+        alt: alt || cap || cleanImageTitle(src),
+        caption: cap || alt,
+        href: hrefMatch ? hrefMatch[1].trim() : undefined,
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  // 3. Markdown linked image: [![Alt](imgUrl)](linkUrl)
+  const mdLinkedRegex = /\[!\[(.*?)\]\(([^\s)]+)\)\]\(([^\s)]+)\)/g;
+  for (const match of trimmed.matchAll(mdLinkedRegex)) {
+    const alt = match[1].trim();
+    const imgUrl = match[2].trim();
+    const linkUrl = match[3].trim();
+    if (isImageUrl(imgUrl)) {
+      candidates.push({
+        url: imgUrl,
+        alt: alt || cleanImageTitle(imgUrl),
+        caption: alt,
+        href: linkUrl,
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  // 4. Markdown standard image: ![Alt](imgUrl)
+  const mdImgRegex = /!\[(.*?)\]\(([^\s)]+)\)/g;
+  for (const match of trimmed.matchAll(mdImgRegex)) {
+    const alt = match[1].trim();
+    const imgUrl = match[2].trim();
+    if (isImageUrl(imgUrl)) {
+      candidates.push({
+        url: imgUrl,
+        alt: alt || cleanImageTitle(imgUrl),
+        caption: alt,
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  // 5. HTML <a> tag pointing to an image link: <a href="imgUrl">...</a>
+  const aLinkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  for (const match of trimmed.matchAll(aLinkRegex)) {
+    const href = match[1].trim();
+    if (isImageUrl(href)) {
+      const text = match[2].replace(/<[^>]+>/g, '').trim();
+      const isUrlText = text.startsWith('http://') || text.startsWith('https://');
+      const label = isUrlText ? '' : text;
+      candidates.push({
+        url: href,
+        alt: label || cleanImageTitle(href),
+        caption: label,
+        href,
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  // 6. Markdown link where URL is an image link: [text](imgUrl)
+  const mdLinkRegex = /\[(.*?)\]\(([^\s)]+)\)/g;
+  for (const match of trimmed.matchAll(mdLinkRegex)) {
+    const text = match[1].trim();
+    const imgUrl = match[2].trim();
+    if (isImageUrl(imgUrl)) {
+      const isUrlText = text.startsWith('http://') || text.startsWith('https://');
+      const label = isUrlText ? '' : text;
+      candidates.push({
+        url: imgUrl,
+        alt: label || cleanImageTitle(imgUrl),
+        caption: label,
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  // 7. Standalone or in-line URLs that are image links
+  const urlRegex = /(?:https?:\/\/[^\s<>"')]+|\/(?:images|storage|media|uploads|assets)\/[^\s<>"')]+)/gi;
+  for (const match of trimmed.matchAll(urlRegex)) {
+    const rawUrl = match[0].replace(/[.,;:)]+$/, '');
+    if (isImageUrl(rawUrl)) {
+      candidates.push({
+        url: rawUrl,
+        alt: cleanImageTitle(rawUrl),
+        index: match.index ?? 0,
+      });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Sort by appearance index so the earliest image link in the content is selected
+  candidates.sort((a, b) => a.index - b.index);
+
+  const best = candidates[0];
+  return {
+    url: best.url,
+    alt: best.alt,
+    caption: best.caption,
+    href: best.href,
+  };
+}
+
+/**
+ * Check if article content has any image link
+ */
+export function hasImageLink(content: string): boolean {
+  return extractFirstImageFromArticle(content) !== null;
 }
 
 /**
@@ -637,14 +811,25 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
+  // Fallback: If no block matched single-line image parser, check full content with extractFirstImageFromArticle
+  if (!coverImage) {
+    const fallback = extractFirstImageFromArticle(content);
+    if (fallback) {
+      coverImage = {
+        url: fallback.url,
+        alt: fallback.alt || foundTitle || cleanImageTitle(fallback.url),
+      };
+    }
+  }
+
   // 4. Construct the clean HTML body
   const bodyOut: string[] = [];
 
   for (let i = 0; i < rawBlocks.length; i++) {
     // If block was the first title, or first image, or consumed caption, SKIP IT!
     if (isFullBlog && i === titleIndex) continue;
-    if (coverImage && detectedImages[0]?.blockIndex === i) continue;
-    if (coverImage && detectedImages[0]?.consumedNextIndex === i) continue;
+    if (isFullBlog && coverImage && detectedImages[0]?.blockIndex === i) continue;
+    if (isFullBlog && coverImage && detectedImages[0]?.consumedNextIndex === i) continue;
 
     // Check if this block is one of the remaining images
     const matchingImg = detectedImages.find(img => img.blockIndex === i);

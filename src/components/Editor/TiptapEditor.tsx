@@ -12,7 +12,7 @@ import YoutubeNodeView from './YoutubeNodeView';
 import TerminalNodeView from './TerminalNodeView';
 import LinkCardNodeView from './LinkCardNodeView';
 import { convertContentToHtml, isStandaloneHeading } from '../../utils/editorContentHelper';
-import { processPastedBlog, cleanImageTitle, isImageUrl, getYoutubeVideoId } from '../../utils/blogImportHelper';
+import { processPastedBlog, cleanImageTitle, isImageUrl, getYoutubeVideoId, extractFirstImageFromArticle, hasImageLink } from '../../utils/blogImportHelper';
 import { detectAndConvertTable, isTsvTable, isMarkdownTable } from '../../utils/tablePasteHelper';
 import './TiptapEditor.css';
 
@@ -958,7 +958,7 @@ export default function TiptapEditor({
         }
 
         // 0.5. DIRECT STANDALONE IMAGE URL PASTE: Auto-fill cover image, save to Media Library, and insert into editor
-        if (isImageUrl(trimmedText) && !trimmedText.includes('\n') && /^https?:\/\//i.test(trimmedText)) {
+        if (isImageUrl(trimmedText) && !trimmedText.includes('\n')) {
           event.preventDefault();
           if (onAutoExtractCoverImageRef.current) {
             onAutoExtractCoverImageRef.current(trimmedText, cleanImageTitle(trimmedText));
@@ -993,7 +993,7 @@ export default function TiptapEditor({
           }
 
           const hasMiniexcavator = /img\.miniexcavator\.org/i.test(payload);
-          const hasImage = /\.(webp|png|jpe?g|gif|svg|avif)/i.test(payload) || /<img/i.test(payload) || isImageUrl(payload);
+          const hasImage = hasImageLink(payload) || /\.(webp|png|jpe?g|gif|svg|avif)/i.test(payload) || /<img/i.test(payload) || isImageUrl(payload);
           const hasTable = /<table[\s>]/i.test(payload) || isTsvTable(payload) || isMarkdownTable(payload);
           const hasArticleMarkers = /^(?:#+\s|<h[1-3]|title:)/im.test(payload) || /docs-internal-guid/i.test(payload);
           const isGoogleDocs = /docs-internal-guid/i.test(payload);
@@ -1024,6 +1024,11 @@ export default function TiptapEditor({
               // 2. Auto-fill Featured Cover Image
               if (res.coverImage && onAutoExtractCoverImageRef.current) {
                 onAutoExtractCoverImageRef.current(res.coverImage.url, res.coverImage.alt);
+              } else {
+                const firstImg = extractFirstImageFromArticle(payload);
+                if (firstImg && onAutoExtractCoverImageRef.current) {
+                  onAutoExtractCoverImageRef.current(firstImg.url, firstImg.alt);
+                }
               }
 
               // 3. Auto-insert all detected images into the Media Library gallery
@@ -1116,6 +1121,12 @@ export default function TiptapEditor({
               return true;
             }
           }
+        }
+
+        // Check if pasted content has any image link and notify cover image if needed
+        const anyImg = extractFirstImageFromArticle(htmlData || textData);
+        if (anyImg && onAutoExtractCoverImageRef.current) {
+          onAutoExtractCoverImageRef.current(anyImg.url, anyImg.alt);
         }
 
         return false;
@@ -1714,6 +1725,9 @@ export default function TiptapEditor({
           const s = sanitizeImageUrl(img.src);
           if (s) {
             editor.chain().focus().setImage({ src: s, alt: img.alt?.trim() }).run();
+            if (onAutoExtractCoverImageRef.current) {
+              onAutoExtractCoverImageRef.current(s, img.alt?.trim());
+            }
           }
         });
       } catch (fallbackErr) {
