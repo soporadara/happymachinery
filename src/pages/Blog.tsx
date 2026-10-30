@@ -183,17 +183,18 @@ export function BlogVideoPlayer({
 
   const fallbackImg = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
   const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`
+  const displayTitle = title || caption || 'Equipment Video Walkaround'
 
   return (
-    <div className="blog-body-video-card-wrapper my-8 w-full max-w-4xl mx-auto">
+    <div className="blog-body-video-card-wrapper">
       <div
-        className="blog-body-video-card relative w-full aspect-video bg-slate-950 rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 group cursor-pointer"
+        className="blog-video-player-card"
         onClick={() => {
           if (!isPlaying) setIsPlaying(true)
         }}
         tabIndex={0}
         role="button"
-        aria-label={title || 'Play YouTube Equipment Video'}
+        aria-label={displayTitle}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
@@ -207,30 +208,33 @@ export function BlogVideoPlayer({
           onError={() => {
             if (imgSrc !== fallbackImg) setImgSrc(fallbackImg)
           }}
-          alt={title || 'Equipment Video Walkaround'}
-          className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
-            isPlaying && isIframeLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          }`}
+          alt={displayTitle}
+          className="blog-video-poster"
+          style={{
+            opacity: isPlaying && isIframeLoaded ? 0 : 1,
+            pointerEvents: isPlaying && isIframeLoaded ? 'none' : 'auto'
+          }}
           loading="lazy"
         />
 
-        {/* Ambient Dark Gradient Overlay */}
+        {/* Ambient Cinematic Vignette Overlay */}
         <div
-          className={`absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/25 transition-opacity duration-300 ${
-            isPlaying && isIframeLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          }`}
+          className="blog-video-gradient-overlay"
+          style={{
+            opacity: isPlaying && isIframeLoaded ? 0 : 1,
+            pointerEvents: 'none'
+          }}
         />
 
         {/* Top Header Controls (Brand Badge & Direct YouTube link) */}
         {!isPlaying && (
-          <div className="absolute top-3.5 left-4 right-4 flex items-center justify-between z-10">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-white/10 text-white shadow-lg pointer-events-none">
-              <svg className="w-4 h-4 fill-red-600 shrink-0" viewBox="0 0 24 24">
-                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          <div className="blog-video-header-bar">
+            <div className="blog-video-brand-pill">
+              <svg className="blog-video-yt-icon" viewBox="0 0 24 24">
+                <path fill="#ff0000" d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
+                <path fill="#ffffff" d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
               </svg>
-              <span className="text-xs font-semibold tracking-wide truncate max-w-[200px] sm:max-w-md">
-                {title || 'Equipment Video Walkaround'}
-              </span>
+              <span>{displayTitle}</span>
             </div>
 
             <a
@@ -238,11 +242,11 @@ export function BlogVideoPlayer({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-red-600 text-white text-xs font-medium backdrop-blur-md border border-white/10 transition-colors shadow-lg"
+              className="blog-video-external-btn"
               title="Watch directly on YouTube in new tab"
             >
               <span>Watch on YouTube</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                 <polyline points="15 3 21 3 21 9" />
                 <line x1="10" y1="14" x2="21" y2="3" />
@@ -251,13 +255,58 @@ export function BlogVideoPlayer({
           </div>
         )}
 
-        {/* Center Iconic Red Play Button */}
+        {/* Center Iconic Video Play Button with Animated Radar Rings */}
         {!isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-red-600/95 group-hover:bg-red-600 group-hover:scale-110 flex items-center justify-center text-white shadow-2xl shadow-red-600/60 backdrop-blur-xs transition-all duration-300">
-              <svg className="w-7 h-7 sm:w-8 sm:h-8 fill-current translate-x-0.5" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+          <div className="blog-video-center-container">
+            <div className="blog-video-play-btn-wrapper">
+              <div className="blog-video-pulse-ring" />
+              <div className="blog-video-pulse-ring" />
+              <div className="blog-video-play-box">
+                <svg className="blog-video-play-icon" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="blog-video-cta-pill">
+              <span className="blog-video-cta-pill-dot" />
+              <span>Click to Play Video</span>
+            </div>
+          </div>
+        )}
+
+        {/* YouTube Standard Duration / Quality Badge */}
+        {!isPlaying && (
+          <div className="blog-video-duration-badge">HD • 4K</div>
+        )}
+
+        {/* Realistic Video Scrubber & Player Controls Chrome */}
+        {!isPlaying && (
+          <div className="blog-video-bottom-chrome">
+            <div className="blog-video-scrubber-track">
+              <div className="blog-video-scrubber-fill">
+                <div className="blog-video-scrubber-dot" />
+              </div>
+            </div>
+            <div className="blog-video-controls-row">
+              <div className="blog-video-ctrls-left">
+                {/* Play mini icon */}
+                <svg className="blog-video-ctrl-icon" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                {/* Volume icon */}
+                <svg className="blog-video-ctrl-icon" viewBox="0 0 24 24">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <span className="blog-video-timecode">0:00 / 3:45</span>
+              </div>
+              <div className="blog-video-ctrls-right">
+                <span className="blog-video-badge-quality">4K ULTRA HD</span>
+                {/* Fullscreen icon */}
+                <svg className="blog-video-ctrl-icon" viewBox="0 0 24 24">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              </div>
             </div>
           </div>
         )}
@@ -266,8 +315,8 @@ export function BlogVideoPlayer({
         {isPlaying && (
           <iframe
             src={embedUrl}
-            title={title || 'Jobsite Equipment Video'}
-            className="absolute inset-0 w-full h-full border-0 rounded-2xl z-20 bg-slate-950"
+            title={displayTitle}
+            className="blog-video-active-iframe"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             onLoad={() => setIsIframeLoaded(true)}
@@ -276,8 +325,8 @@ export function BlogVideoPlayer({
       </div>
 
       {caption && (
-        <p className="blog-body-video-caption text-xs text-center text-slate-500 dark:text-slate-400 mt-2.5 font-medium italic">
-          {caption}
+        <p className="blog-video-caption-text">
+          <span>🎥</span> <span>{caption}</span>
         </p>
       )}
     </div>
@@ -321,10 +370,16 @@ export function renderMarkdownToReact(text: string, key: string | number) {
                      line.match(/<figcaption[^>]*>(.*?)<\/figcaption>/i) ||
                      line.match(/^\[(.*?)\]\(/)
     const caption = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : ''
+    const titleMatch = line.match(/data-title=["']([^"']*)["']/i) || line.match(/title=["']([^"']*)["']/i)
+    const rawTitle = titleMatch ? titleMatch[1].trim() : ''
+    const title = rawTitle && !rawTitle.toLowerCase().includes('jobsite equipment video') && !rawTitle.toLowerCase().includes('youtube video player')
+      ? rawTitle
+      : ''
     return (
       <BlogVideoPlayer
         key={key}
         videoId={ytVideoId}
+        title={title}
         caption={caption}
       />
     )
