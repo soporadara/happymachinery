@@ -1300,7 +1300,12 @@ export default function AdminDashboard() {
   const [inquiriesList, setInquiriesList] = useState<Inquiry[]>(() => {
     try {
       const saved = localStorage.getItem('happy-machinery-inquiries')
-      if (saved) return JSON.parse(saved)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed)) {
+          return parsed.filter((i) => i && typeof i.id === 'number' && i.id > 6 && !i.email?.includes('@millerbuilt.com'))
+        }
+      }
     } catch {}
     return DEFAULT_INQUIRIES
   })
@@ -1892,23 +1897,30 @@ export default function AdminDashboard() {
         localInquiries = rawLocal ? JSON.parse(rawLocal) : []
       } catch {}
 
+      const isDemoInquiry = (inq: any) =>
+        !inq ||
+        (typeof inq.id === 'number' && inq.id <= 6) ||
+        inq.email?.includes('@millerbuilt.com') ||
+        inq.email?.includes('@epiccontractors.com') ||
+        inq.email?.includes('@pacificbuilders.org') ||
+        inq.email?.includes('@vanceconcrete.com') ||
+        inq.email?.includes('@apexearth.com') ||
+        inq.email?.includes('@summitcivils.com')
+
       const inquiryMap = new Map<number, Inquiry>()
-      serverInquiries.forEach((item) => inquiryMap.set(item.id, item))
-      localInquiries.forEach((item) => {
+      serverInquiries.filter((item) => !isDemoInquiry(item)).forEach((item) => inquiryMap.set(item.id, item))
+      localInquiries.filter((item) => !isDemoInquiry(item)).forEach((item) => {
         if (!inquiryMap.has(item.id)) {
           inquiryMap.set(item.id, item)
         }
       })
-      let mergedInquiries = Array.from(inquiryMap.values()).sort((a, b) => b.id - a.id)
-      if (mergedInquiries.length === 0) {
-        mergedInquiries = DEFAULT_INQUIRIES
-      }
+      const mergedInquiries = Array.from(inquiryMap.values()).sort((a, b) => b.id - a.id)
       setInquiriesList(mergedInquiries)
       try {
         localStorage.setItem('happy-machinery-inquiries', JSON.stringify(mergedInquiries))
       } catch {}
 
-      if (mergedInquiries.length > serverInquiries.length) {
+      if (serverInquiries.some(isDemoInquiry) || mergedInquiries.length > serverInquiries.length) {
         void writeSharedContent('inquiries', mergedInquiries).catch(() => {})
       }
       if (fetchedOrders && Array.isArray(fetchedOrders) && fetchedOrders.length > 0) {
