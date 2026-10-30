@@ -52,12 +52,12 @@ export default function ImageNodeView({
   const [localCaption, setLocalCaption] = useState(caption);
   const lastSyncedCaptionRef = useRef(caption);
   const captionInputRef = useRef<HTMLInputElement>(null);
-  const [showCaptionInput, setShowCaptionInput] = useState(Boolean(caption));
+  const [showCaptionInput, setShowCaptionInput] = useState(true);
 
   const [localAlt, setLocalAlt] = useState(alt);
   const lastSyncedAltRef = useRef(alt);
   const altInputRef = useRef<HTMLInputElement>(null);
-  const [showAltInput, setShowAltInput] = useState(Boolean(alt));
+  const [showAltInput, setShowAltInput] = useState(true);
 
   const [localHref, setLocalHref] = useState(href);
   const lastSyncedHrefRef = useRef(href);

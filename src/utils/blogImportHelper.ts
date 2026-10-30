@@ -669,7 +669,7 @@ function isLikelyCaptionLine(line: string): boolean {
 export function buildImageFigureHtml(img: { url: string; alt?: string; caption?: string; href?: string }, alignment: string = 'center'): string {
   const alignClass = alignment === 'left' ? 'text-left mr-auto' : alignment === 'right' ? 'text-right ml-auto' : alignment === 'full' ? 'w-full' : 'text-center mx-auto';
   const cap = img.caption ? img.caption.trim() : '';
-  const alt = img.alt ? img.alt.trim() : (cap || cleanImageTitle(img.url));
+  const alt = img.alt ? img.alt.trim() : '';
   const href = img.href ? img.href.trim() : '';
   const isInternal = href.startsWith('/') || href.includes('happymachinery.com');
   const target = isInternal ? '_self' : '_blank';
@@ -863,7 +863,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   const isFullBlog = Boolean(foundTitle) || (rawBlocks.length >= 3 && hasMiniexcavator) || (rawBlocks.length >= 2 && hasTable);
 
   // 2. Scan and extract all images, pairing adjacent thumbnails/links and captions
-  const detectedImages: Array<DetectedImage & { blockIndex: number; consumedNextIndex?: number }> = [];
+  const detectedImages: Array<DetectedImage & { blockIndex: number; consumedNextIndex?: number; isExplicitCaption?: boolean }> = [];
 
   for (let i = 0; i < rawBlocks.length; i++) {
     if (processedBlockIndices.has(i)) continue;
@@ -875,6 +875,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
       let finalAlt = !isGarbageAltOrCaption(parsed.alt) ? parsed.alt : '';
       let finalCaption = !isGarbageAltOrCaption(parsed.caption) ? parsed.caption : '';
       let consumedIdx: number | undefined;
+      let isExplicitCap = false;
 
       // Check if NEXT block is an adjacent image link or embedded image for the SAME asset
       if (i + 1 < rawBlocks.length && !processedBlockIndices.has(i + 1)) {
@@ -903,7 +904,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
         }
       }
 
-      // If caption is empty, check if NEXT block is a caption line
+      // If caption is empty, check if NEXT block is an explicit caption line
       if (!finalCaption && consumedIdx === undefined && i + 1 < rawBlocks.length) {
         const nextBlock = rawBlocks[i + 1];
         if (!processedBlockIndices.has(i + 1) && !parseImageLine(nextBlock) && isLikelyCaptionLine(nextBlock)) {
@@ -911,6 +912,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
           if (!isGarbageAltOrCaption(rawCap)) {
             finalCaption = rawCap;
             consumedIdx = i + 1;
+            isExplicitCap = true;
             processedBlockIndices.add(i + 1);
           }
         }
@@ -924,6 +926,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
         caption: finalCaption,
         blockIndex: i,
         consumedNextIndex: consumedIdx,
+        isExplicitCaption: isExplicitCap,
       });
 
       processedBlockIndices.add(i);
@@ -962,12 +965,12 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
         processedBlockIndices.add(firstImg.consumedNextIndex);
       }
 
-      // Remaining images stay in the body
+      // Remaining images stay in the body with empty alt and caption unless an explicit caption line was parsed
       for (let k = 1; k < detectedImages.length; k++) {
         remainingImages.push({
           url: detectedImages[k].url,
-          alt: detectedImages[k].alt,
-          caption: detectedImages[k].caption,
+          alt: '',
+          caption: detectedImages[k].isExplicitCaption ? detectedImages[k].caption : '',
         });
       }
     } else {
@@ -1007,7 +1010,16 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
       if (isFullBlog && coverImage && matchingImg.url === coverImage.url) {
         continue;
       }
-      bodyOut.push(buildImageFigureHtml(matchingImg, 'center'));
+      // For images inside the blog body, keep alt empty and caption empty unless an explicit separate caption line was parsed
+      const bodyImg = isFullBlog
+        ? {
+            url: matchingImg.url,
+            alt: '',
+            caption: matchingImg.isExplicitCaption ? matchingImg.caption : '',
+            href: matchingImg.href,
+          }
+        : matchingImg;
+      bodyOut.push(buildImageFigureHtml(bodyImg, 'center'));
       continue;
     }
 

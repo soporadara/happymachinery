@@ -571,10 +571,13 @@ test('Google Docs blog import extracts Meta Title, Meta Description, pairs image
   assert.ok(!res.cleanedHtml.includes('Excavator_digging_on_constructio_9ad2f5ca_2K.webp'), 'Cover image must NOT be duplicated in body');
   assert.ok(!res.cleanedHtml.includes('AD_4nX-preview1'), 'Temp thumbnail must not be in body');
 
-  // 6. Second image MUST be present in body HTML as a rich figure
+  // 6. Second image MUST be present in body HTML as a figure with EMPTY alt and caption
   assert.ok(res.cleanedHtml.includes('Typhon_Kuvud_4_0_Excavator.webp'), 'Second image must be in body HTML');
   assert.ok(!res.cleanedHtml.includes('9k='), 'Garbage 9k= alt/caption must not be anywhere in body HTML');
-  assert.ok(res.cleanedHtml.includes('TYPHON &amp; KUVUD 4.0 MINI EXCAVATOR') || res.cleanedHtml.includes('TYPHON & KUVUD 4.0 MINI EXCAVATOR'), 'Second image title/caption must be preserved');
+  assert.ok(res.cleanedHtml.includes('alt=""'), 'Body image alt must be empty as requested');
+  assert.ok(res.cleanedHtml.includes('data-caption=""'), 'Body image caption must be empty as requested');
+  assert.strictEqual(res.remainingImages[0].alt, '', 'remainingImages alt must be empty');
+  assert.strictEqual(res.remainingImages[0].caption, '', 'remainingImages caption must be empty');
 });
 
 
