@@ -27,6 +27,7 @@ export function renderInlineMarkdownToHtml(text: string): string {
 export function isStandaloneHeading(line: string): boolean {
   if (!line || typeof line !== 'string') return false
   if (line.includes('\t')) return false
+  if (/<(?:\/)?(?:table|thead|tbody|tfoot|tr|th|td)[\s>]/i.test(line)) return false
   if (/^<(?:\/)?(?:table|thead|tbody|tr|th|td)/i.test(line.trim())) return false
   if (line.trim().startsWith('|')) return false
 
@@ -68,6 +69,7 @@ export interface HeadingMatch {
 export function getHeadingMatch(line: string, fallbackSuffix: number = 0): HeadingMatch | null {
   const trimmed = line.trim()
   if (!trimmed) return null
+  if (/<(?:\/)?(?:table|thead|tbody|tfoot|tr|th|td)[\s>]/i.test(trimmed)) return null
 
   // 1. Markdown: # Heading, ## Heading, ### Heading, #### Heading
   const md = trimmed.match(/^(#{1,6})\s+(.*)$/)
@@ -120,16 +122,90 @@ export function getHeadingMatch(line: string, fallbackSuffix: number = 0): Headi
 }
 
 /**
+ * Checks if a string chunk contains HTML table markup (or fragmented table elements)
+ */
+export function isTableFragment(block: string): boolean {
+  if (!block || typeof block !== 'string') return false
+  const trimmed = block.trim()
+  return (
+    /<(?:\/)?(?:table|thead|tbody|tfoot|tr|th|td)[\s>]/i.test(trimmed) ||
+    /^<\/(?:th|td|tr|thead|tbody|tfoot|table)>/i.test(trimmed) ||
+    /^<(?:th|td|tr|thead|tbody|tfoot|table)[\s>]/i.test(trimmed)
+  )
+}
+
+/**
+ * Merges contiguous table fragment blocks back into a single valid <table> element.
+ * Removes premature closing tags produced by fragmented HTML saves.
+ */
+export function stitchTableFragments(blocks: string[]): string[] {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return []
+
+  const result: string[] = []
+  let i = 0
+
+  while (i < blocks.length) {
+    const current = String(blocks[i] || '').trim()
+
+    if (isTableFragment(current)) {
+      const run: string[] = []
+      while (i < blocks.length && isTableFragment(String(blocks[i] || '').trim())) {
+        run.push(String(blocks[i] || '').trim())
+        i++
+      }
+
+      if (run.length === 1 && /^<table[\s\S]*?<\/table>$/i.test(run[0])) {
+        // Complete standalone table already
+        const cleaned = cleanHtmlTable(run[0])
+        result.push(cleaned ? cleaned.html : run[0])
+      } else {
+        // Contiguous sequence of table fragments
+        // Clean up premature closings from fragments before the final piece
+        const sanitizedRun = run.map((chunk, idx) => {
+          if (idx < run.length - 1) {
+            return chunk
+              .replace(/<\/tr>\s*<\/thead>\s*<tbody>\s*<\/tbody>\s*<\/table>/gi, '')
+              .replace(/<\/table>\s*$/gi, '')
+              .replace(/^<\/table>\s*/gi, '')
+          }
+          return chunk
+        })
+
+        let joined = sanitizedRun.join('')
+        if (!joined.includes('<table')) {
+          joined = `<table class="editor-table">${joined.includes('<tbody') ? joined : `<tbody>${joined}</tbody>`}</table>`
+        } else if (!joined.includes('</table>')) {
+          joined = `${joined}</table>`
+        }
+
+        if (joined.includes('<thead>') && !joined.includes('</thead>')) {
+          joined = joined.replace(/<\/tr>\s*<tr/i, '</tr></thead><tbody><tr')
+        }
+
+        const cleaned = cleanHtmlTable(joined)
+        result.push(cleaned ? cleaned.html : joined)
+      }
+    } else {
+      result.push(blocks[i])
+      i++
+    }
+  }
+
+  return result
+}
+
+/**
  * Splits raw content (string, HTML, markdown, or mixed string array)
  * into discrete standalone block elements (paragraphs, figures, headings, lists, tables).
- * Guarantees that figures, headings, and paragraphs are never fused together.
+ * Guarantees that tables, figures, headings, and paragraphs are never fused together or fragmented.
  */
 export function splitContentIntoBlocks(content: string | string[] | any): string[] {
   if (!content) return []
 
   let rawStrings: string[] = []
   if (Array.isArray(content)) {
-    rawStrings = content.map((p) => String(p || '')).filter(Boolean)
+    const rawBlocks = content.map((p) => String(p || '')).filter(Boolean)
+    rawStrings = stitchTableFragments(rawBlocks)
   } else if (typeof content === 'string') {
     rawStrings = [content]
   } else {
@@ -142,16 +218,45 @@ export function splitContentIntoBlocks(content: string | string[] | any): string
     const trimmed = str.trim()
     if (!trimmed) continue
 
+    // If str is ALREADY a single self-contained HTML table, do not split it
+    if (/^<table[\s\S]*?<\/table>$/i.test(trimmed)) {
+      const cleaned = cleanHtmlTable(trimmed)
+      result.push(cleaned ? cleaned.html : trimmed)
+      continue
+    }
+
+    // Protect <table>...</table>, <figure>...</figure>, <pre>...</pre> blocks with placeholders
+    // so internal <p>, </div>, or \n\n are never sliced into separate blocks
+    const tablePlaceholders: string[] = []
+    let protectedStr = trimmed.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+      const token = `__HM_BLOCK_TABLE_${tablePlaceholders.length}__`
+      const cleaned = cleanHtmlTable(match)
+      tablePlaceholders.push(cleaned ? cleaned.html : match.trim())
+      return `\n\n${token}\n\n`
+    })
+
+    const figurePlaceholders: string[] = []
+    protectedStr = protectedStr.replace(/<figure[\s\S]*?<\/figure>/gi, (match) => {
+      const token = `__HM_BLOCK_FIGURE_${figurePlaceholders.length}__`
+      figurePlaceholders.push(match.trim())
+      return `\n\n${token}\n\n`
+    })
+
+    const prePlaceholders: string[] = []
+    protectedStr = protectedStr.replace(/<pre[\s\S]*?<\/pre>/gi, (match) => {
+      const token = `__HM_BLOCK_PRE_${prePlaceholders.length}__`
+      prePlaceholders.push(match.trim())
+      return `\n\n${token}\n\n`
+    })
+
     // Normalize block boundaries by inserting double newlines after closing tags
-    const normalized = trimmed
-      .replace(/<\/figure>/gi, '</figure>\n\n')
+    const normalized = protectedStr
       .replace(/<\/p>/gi, '</p>\n\n')
       .replace(/<\/h([1-6])>/gi, '</h$1>\n\n')
       .replace(/<\/div>/gi, '</div>\n\n')
       .replace(/<\/blockquote>/gi, '</blockquote>\n\n')
       .replace(/<\/ul>/gi, '</ul>\n\n')
       .replace(/<\/ol>/gi, '</ol>\n\n')
-      .replace(/<\/table>/gi, '</table>\n\n')
       .replace(/<hr\s*\/?>/gi, '\n\n<hr />\n\n')
 
     // Split on double newlines
@@ -161,8 +266,16 @@ export function splitContentIntoBlocks(content: string | string[] | any): string
       .filter(Boolean)
 
     for (const chunk of chunks) {
-      if (chunk.includes('</figure>') && !chunk.endsWith('</figure>')) {
-        const parts = chunk.split(/<\/figure>/i)
+      let restored = chunk
+        .replace(/__HM_BLOCK_TABLE_(\d+)__/g, (_, idx) => tablePlaceholders[parseInt(idx, 10)] || '')
+        .replace(/__HM_BLOCK_FIGURE_(\d+)__/g, (_, idx) => figurePlaceholders[parseInt(idx, 10)] || '')
+        .replace(/__HM_BLOCK_PRE_(\d+)__/g, (_, idx) => prePlaceholders[parseInt(idx, 10)] || '')
+        .trim()
+
+      if (!restored) continue
+
+      if (restored.includes('</figure>') && !restored.endsWith('</figure>')) {
+        const parts = restored.split(/<\/figure>/i)
         for (let i = 0; i < parts.length; i++) {
           const part = parts[i].trim()
           if (!part) continue
@@ -173,12 +286,12 @@ export function splitContentIntoBlocks(content: string | string[] | any): string
           }
         }
       } else {
-        result.push(chunk)
+        result.push(restored)
       }
     }
   }
 
-  return result
+  return stitchTableFragments(result)
 }
 
 
@@ -191,7 +304,8 @@ export function convertContentToHtml(content: string | string[] | any): string {
   let paragraphs: string[] = []
 
   if (Array.isArray(content)) {
-    paragraphs = content.map(p => String(p || ''))
+    const rawBlocks = content.map(p => String(p || '')).filter(Boolean)
+    paragraphs = stitchTableFragments(rawBlocks)
   } else if (typeof content === 'string') {
     const trimmed = content.trim()
     // If it's ProseMirror JSON string, pass through untouched
@@ -351,6 +465,29 @@ export function convertContentToHtml(content: string | string[] | any): string {
       continue
     }
 
+    // 5.5. Tables: TSV Table, Markdown Table, or HTML Table (Handled BEFORE isStandaloneHeading!)
+    if (isTsvTable(raw)) {
+      const tsvRes = convertTsvToTableHtml(raw)
+      if (tsvRes) {
+        out.push(tsvRes.html)
+        continue
+      }
+    }
+
+    if (isMarkdownTable(raw)) {
+      const mdRes = convertMarkdownTableToHtml(raw)
+      if (mdRes) {
+        out.push(mdRes.html)
+        continue
+      }
+    }
+
+    if (/<table[\s>]/i.test(raw)) {
+      const cleaned = cleanHtmlTable(raw)
+      out.push(cleaned ? cleaned.html : raw)
+      continue
+    }
+
     // 6. Standalone section titles in imported articles (e.g. "Drum Surface and Drum Edges", "Vibration System Components")
     if (isStandaloneHeading(raw)) {
       const cleanH = raw
@@ -378,30 +515,6 @@ export function convertContentToHtml(content: string | string[] | any): string {
     if (/^\d+\.\s+/m.test(raw) && !raw.endsWith('?')) {
       const items = raw.split('\n').map(l => l.trim()).filter(Boolean)
       out.push(`<ol>${items.map(it => `<li>${renderInlineMarkdownToHtml(it.replace(/^\d+\.\s+/, ''))}</li>`).join('')}</ol>`)
-      continue
-    }
-
-    // 8.5. Tables: TSV Table or Markdown Table
-    if (isTsvTable(raw)) {
-      const tsvRes = convertTsvToTableHtml(raw)
-      if (tsvRes) {
-        out.push(tsvRes.html)
-        continue
-      }
-    }
-
-    if (isMarkdownTable(raw)) {
-      const mdRes = convertMarkdownTableToHtml(raw)
-      if (mdRes) {
-        out.push(mdRes.html)
-        continue
-      }
-    }
-
-    // 8.7. HTML Table
-    if (/<table[\s>]/i.test(raw)) {
-      const cleaned = cleanHtmlTable(raw)
-      out.push(cleaned ? cleaned.html : raw)
       continue
     }
 

@@ -8,7 +8,13 @@ import {
   cleanHtmlTable,
   detectAndConvertTable
 } from '../src/utils/tablePasteHelper.ts';
-import { isStandaloneHeading, convertContentToHtml } from '../src/utils/editorContentHelper.ts';
+import {
+  isStandaloneHeading,
+  convertContentToHtml,
+  splitContentIntoBlocks,
+  stitchTableFragments,
+  getHeadingMatch
+} from '../src/utils/editorContentHelper.ts';
 import { processPastedBlog } from '../src/utils/blogImportHelper.ts';
 
 test('1. TSV table copied from Google Sheets or plain-text is accurately detected and converted', () => {
@@ -281,4 +287,94 @@ test('11. convertContentToHtml protects HTML tables from having cells converted 
   assert.ok(!output.includes('<h2>Track Configuration</h2>'), 'Track Configuration must NOT be turned into <h2>');
   assert.ok(output.includes('Hydraulic Flow'), 'Hydraulic Flow must be preserved inside table');
 });
+
+test('12. splitContentIntoBlocks protects HTML tables from being fragmented by inner <p> tags', () => {
+  const editorHtml = `
+    <p>The table below summarizes the key specifications for both TYPHON heavy compact excavators.</p>
+    <table class="editor-table w-full border-collapse border border-slate-300 dark:border-slate-700 my-6 rounded-xl overflow-hidden text-sm">
+      <thead>
+        <tr>
+          <th class="editor-th p-3 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-left font-bold text-slate-900 dark:text-slate-100"><p><strong>Specification</strong></p></th>
+          <th class="editor-th bg-slate-100 dark:bg-slate-800 p-3 text-left font-bold text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700"><p><strong>TYPHON KUVUO 4.0 (TYPH-KUVUO)</strong></p></th>
+          <th class="editor-th bg-slate-100 dark:bg-slate-800 p-3 text-left font-bold text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700"><p><strong>TYPHON KUVUO 2.7 KONSTRUCTZ (TYPH-KUVUO27)</strong></p></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p><strong>Travel Speed</strong></p></td>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>2-speed: 2.4 km/h low / 4.2 km/h high</p></td>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>2-speed: 1.4–2.7 mph, 58% gradeability</p></td>
+        </tr>
+        <tr>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p><strong>Cab Type</strong></p></td>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>Enclosed AC/Heater cabin, pilot controls</p></td>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>Enclosed AC/Heater cab, full pilot joystick controls</p></td>
+        </tr>
+        <tr>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p><strong>Boom Swing</strong></p></td>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>Independent boom swing with True Zero Tail Swing</p></td>
+          <td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>45° left / 55° right, inverted protected boom</p></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Choose the TYPHON KUVUO 2.7 KONSTRUCTZ Series when access and terrain drive your decision.</p>
+  `;
+
+  const blocks = splitContentIntoBlocks(editorHtml);
+
+  // Must produce exactly 3 blocks: intro paragraph, intact table block, and concluding paragraph
+  assert.strictEqual(blocks.length, 3, `Expected 3 blocks (intro, table, outro), got ${blocks.length}`);
+  assert.ok(blocks[0].includes('The table below summarizes'), 'Block 0 must be intro paragraph');
+  assert.ok(blocks[1].startsWith('<table') && blocks[1].endsWith('</table>'), 'Block 1 must be a complete intact table');
+  assert.ok(blocks[1].includes('Travel Speed'), 'Table must retain Travel Speed');
+  assert.ok(blocks[1].includes('Cab Type'), 'Table must retain Cab Type');
+  assert.ok(blocks[1].includes('Boom Swing'), 'Table must retain Boom Swing');
+  assert.ok(blocks[2].includes('Choose the TYPHON KUVUO'), 'Block 2 must be concluding paragraph');
+});
+
+test('13. stitchTableFragments seamlessly reassembles fragmented table cell blocks from existing articles', () => {
+  const fragmentedBlocks = [
+    '<p>The table below summarizes the key specifications for both TYPHON heavy compact excavators.</p>',
+    '<table class="editor-table w-full border-collapse border border-slate-300 dark:border-slate-700 my-6 rounded-xl overflow-hidden text-sm"><thead><tr><th class="editor-th p-3 border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-left font-bold text-slate-900 dark:text-slate-100"><p><strong>Specification</strong></p>',
+    '</th></tr></thead><tbody></tbody></table>',
+    '</th><th class="editor-th bg-slate-100 dark:bg-slate-800 p-3 text-left font-bold text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700"><p><strong>TYPHON KUVUO 4.0 (TYPH-KUVUO)</strong></p>',
+    '</th><th class="editor-th bg-slate-100 dark:bg-slate-800 p-3 text-left font-bold text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700"><p><strong>TYPHON KUVUO 2.7 KONSTRUCTZ (TYPH-KUVUO27)</strong></p>',
+    '</th></tr><tr><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p><strong>Travel Speed</strong></p>',
+    '</td><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>2-speed: 2.4 km/h low / 4.2 km/h high</p>',
+    '</td><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>2-speed: 1.4–2.7 mph, 58% gradeability</p>',
+    '</td></tr><tr><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p><strong>Cab Type</strong></p>',
+    '</td><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>Enclosed AC/Heater cabin, pilot controls</p>',
+    '</td><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>Enclosed AC/Heater cab, full pilot joystick controls</p>',
+    '</td></tr><tr><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p><strong>Boom Swing</strong></p>',
+    '</td><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>Independent boom swing with True Zero Tail Swing</p>',
+    '</td><td class="editor-td p-3 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"><p>45° left / 55° right, inverted protected boom</p>',
+    '</td></tr></tbody></table>',
+    '<h3>Which Machine Fits Your Operation</h3>'
+  ];
+
+  const stitched = splitContentIntoBlocks(fragmentedBlocks);
+
+  assert.strictEqual(stitched.length, 3, `Expected 3 stitched blocks, got ${stitched.length}`);
+  assert.ok(stitched[0].includes('The table below summarizes'));
+  assert.ok(stitched[1].startsWith('<table') && stitched[1].endsWith('</table>'), 'Middle block must be unified table');
+  assert.ok(stitched[1].includes('Travel Speed'));
+  assert.ok(stitched[1].includes('Cab Type'));
+  assert.ok(stitched[1].includes('Boom Swing'));
+  assert.strictEqual(stitched[2], '<h3>Which Machine Fits Your Operation</h3>');
+
+  // Verify convertContentToHtml preserves the unified table without creating headings out of cells
+  const html = convertContentToHtml(fragmentedBlocks);
+  assert.ok(html.includes('<table class="editor-table'), 'Unified HTML must contain table');
+  assert.ok(!html.includes('<h2>Travel Speed</h2>'), 'Travel Speed must not be <h2>');
+  assert.ok(!html.includes('<h2>Cab Type</h2>'), 'Cab Type must not be <h2>');
+  assert.ok(!html.includes('<h2>Boom Swing</h2>'), 'Boom Swing must not be <h2>');
+});
+
+test('14. getHeadingMatch ignores any line or cell containing table markup', () => {
+  assert.strictEqual(getHeadingMatch('<td>Travel Speed</td>'), null);
+  assert.strictEqual(getHeadingMatch('</th><th class="editor-th"><p>TYPHON KUVUO 4.0</p>'), null);
+  assert.strictEqual(getHeadingMatch('<td class="editor-td"><p><strong>Cab Type</strong></p>'), null);
+  assert.strictEqual(getHeadingMatch('</td></tr></tbody></table>'), null);
+});
+
 
