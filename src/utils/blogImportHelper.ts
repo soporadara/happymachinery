@@ -20,6 +20,8 @@ export interface ProcessedBlogResult {
   hasMiniexcavatorLinks: boolean;
   isFullBlogImport: boolean;
   title?: string;
+  seoTitle?: string;
+  seoDescription?: string;
   coverImage?: {
     url: string;
     alt: string;
@@ -69,6 +71,19 @@ export interface ExtractedImageInfo {
 }
 
 /**
+ * Decode common HTML entities to prevent double-escaping
+ */
+export function decodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&#39;/g, "'");
+}
+
+/**
  * Extract the first image link found anywhere in an article (Markdown, HTML, or raw image link)
  * Guaranteed to find the earliest appearing image link in the content.
  */
@@ -96,8 +111,8 @@ export function extractFirstImageFromArticle(content: string): ExtractedImageInf
       const altMatch = fullFig.match(/alt=["']([^"']*)["']/i);
       const capMatch = fullFig.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i) || fullFig.match(/data-caption=["']([^"']*)["']/i);
       const hrefMatch = fullFig.match(/href=["']([^"']+)["']/i) || fullFig.match(/data-href=["']([^"']+)["']/i);
-      const alt = altMatch ? altMatch[1].trim() : '';
-      const cap = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+      const alt = decodeHtmlEntities(altMatch ? altMatch[1].trim() : '');
+      const cap = decodeHtmlEntities(capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '');
       candidates.push({
         url: src,
         alt: alt || cap || cleanImageTitle(src),
@@ -118,8 +133,8 @@ export function extractFirstImageFromArticle(content: string): ExtractedImageInf
       const altMatch = attrs.match(/alt=["']([^"']*)["']/i);
       const capMatch = attrs.match(/data-caption=["']([^"']*)["']/i);
       const hrefMatch = attrs.match(/data-href=["']([^"']+)["']/i);
-      const alt = altMatch ? altMatch[1].trim() : '';
-      const cap = capMatch ? capMatch[1].trim() : '';
+      const alt = decodeHtmlEntities(altMatch ? altMatch[1].trim() : '');
+      const cap = decodeHtmlEntities(capMatch ? capMatch[1].trim() : '');
       candidates.push({
         url: src,
         alt: alt || cap || cleanImageTitle(src),
@@ -167,7 +182,7 @@ export function extractFirstImageFromArticle(content: string): ExtractedImageInf
   for (const match of trimmed.matchAll(aLinkRegex)) {
     const href = match[1].trim();
     if (isImageUrl(href)) {
-      const text = match[2].replace(/<[^>]+>/g, '').trim();
+      const text = decodeHtmlEntities(match[2].replace(/<[^>]+>/g, '').trim());
       const isUrlText = text.startsWith('http://') || text.startsWith('https://');
       const label = isUrlText ? '' : text;
       candidates.push({
@@ -212,14 +227,25 @@ export function extractFirstImageFromArticle(content: string): ExtractedImageInf
 
   if (candidates.length === 0) return null;
 
-  // Sort by appearance index so the earliest image link in the content is selected
-  candidates.sort((a, b) => a.index - b.index);
+  // Sort by priority and appearance index:
+  // 1. Permanent URLs (img.miniexcavator.org, non-googleusercontent, non-data) have highest priority
+  // 2. Earliest appearance index
+  candidates.sort((a, b) => {
+    const aIsTemp = /googleusercontent\.com|data:image/i.test(a.url);
+    const bIsTemp = /googleusercontent\.com|data:image/i.test(b.url);
+    if (!aIsTemp && bIsTemp) return -1;
+    if (aIsTemp && !bIsTemp) return 1;
+    return a.index - b.index;
+  });
 
   const best = candidates[0];
+  const cleanAlt = !isGarbageAltOrCaption(best.alt) ? best.alt : cleanImageTitle(best.url);
+  const cleanCap = !isGarbageAltOrCaption(best.caption) ? best.caption : undefined;
+
   return {
     url: best.url,
-    alt: best.alt,
-    caption: best.caption,
+    alt: cleanAlt,
+    caption: cleanCap || cleanAlt,
     href: best.href,
   };
 }
@@ -286,6 +312,37 @@ export function cleanTitleText(text: string): string {
 }
 
 /**
+ * Detect garbage or auto-generated alt text from Google Docs or clipboard (e.g. "9k=", "image1.png")
+ */
+export function isGarbageAltOrCaption(text?: string | null): boolean {
+  if (!text) return true;
+  const t = text.trim();
+  if (t.length <= 3) return true;
+  if (/^[a-zA-Z0-9_\-+/]{2,8}=*$/.test(t) && t.includes('=')) return true; // base64 tokens like "9k="
+  if (/^image\d*\.(png|jpg|jpeg|webp|gif)$/i.test(t)) return true; // "image1.png"
+  if (/^image\d+$/i.test(t)) return true; // "image1"
+  if (/^untitled(\s+image)?$/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Detect Meta Title and Meta Description field lines:
+ * e.g. "Meta Title: Heavy Compact Excavators Guide: 2.7-Ton to 4-Ton Class | TYPHON"
+ * e.g. "Meta Description: Learn how to size, specify..."
+ */
+export function parseMetaFields(block: string): { type: 'seoTitle' | 'seoDesc'; value: string } | null {
+  if (!block || typeof block !== 'string') return null;
+  const clean = decodeHtmlEntities(block.replace(/<[^>]+>/g, '').replace(/\*\*/g, '').replace(/__/g, '').trim());
+  const titleMatch = clean.match(/^(?:meta\s*title|seo\s*title|page\s*meta\s*title)\s*:\s*(.+)$/i);
+  if (titleMatch) return { type: 'seoTitle', value: titleMatch[1].trim() };
+
+  const descMatch = clean.match(/^(?:meta\s*description|seo\s*description|meta\s*desc|search\s*snippet)\s*:\s*(.+)$/i);
+  if (descMatch) return { type: 'seoDesc', value: descMatch[1].trim() };
+
+  return null;
+}
+
+/**
  * Clean filename into a legible equipment asset title
  */
 export function cleanImageTitle(url: string): string {
@@ -293,7 +350,7 @@ export function cleanImageTitle(url: string): string {
     const filename = url.split('/').pop()?.split('?')[0] || '';
     const withoutExt = filename.replace(/\.[^/.]+$/, '');
     const readable = withoutExt.replace(/[-_]+/g, ' ').trim();
-    if (readable.length > 2) {
+    if (readable.length > 2 && !isGarbageAltOrCaption(readable)) {
       // Capitalize words
       return readable.replace(/\b\w/g, (c) => c.toUpperCase());
     }
@@ -447,8 +504,8 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
     if (srcMatch && (isMiniexcavatorUrl(srcMatch[1]) || isImageUrl(srcMatch[1]))) {
       const altMatch = trimmed.match(/<img\s+[^>]*alt=["']([^"']*)["']/i);
       const capMatch = trimmed.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i);
-      const alt = altMatch ? altMatch[1].trim() : '';
-      const caption = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+      const alt = decodeHtmlEntities(altMatch ? altMatch[1].trim() : '');
+      const caption = decodeHtmlEntities(capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : '');
       return {
         url: srcMatch[1].trim(),
         alt: alt || caption || cleanImageTitle(srcMatch[1]),
@@ -460,7 +517,7 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
   // 1. Markdown Linked Image: [![Alt](imgUrl)](linkUrl)
   const mdLinkedImg = trimmed.match(/^\[!\[(.*?)\]\((https?:\/\/[^\s)]+|\/images\/[^\s)]+)\)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)$/i);
   if (mdLinkedImg) {
-    const text = mdLinkedImg[1].trim();
+    const text = decodeHtmlEntities(mdLinkedImg[1].trim());
     return {
       url: mdLinkedImg[2].trim(),
       alt: text || cleanImageTitle(mdLinkedImg[2]),
@@ -472,7 +529,7 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
   // 2. Markdown image: ![Alt](url)
   const mdImg = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/i);
   if (mdImg && (isMiniexcavatorUrl(mdImg[2]) || isImageUrl(mdImg[2]))) {
-    const text = mdImg[1].trim();
+    const text = decodeHtmlEntities(mdImg[1].trim());
     return {
       url: mdImg[2].trim(),
       alt: text || cleanImageTitle(mdImg[2]),
@@ -483,7 +540,7 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
   // 3. Markdown link: [text](url) - common in copied blog drafts
   const mdLink = trimmed.match(/^\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/i);
   if (mdLink && (isMiniexcavatorUrl(mdLink[2]) || isImageUrl(mdLink[2]))) {
-    const text = mdLink[1].trim();
+    const text = decodeHtmlEntities(mdLink[1].trim());
     const isUrlText = text.startsWith('http://') || text.startsWith('https://');
     const label = isUrlText ? '' : text;
     return {
@@ -500,8 +557,8 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
     const url = htmlLinkedImg[2].trim();
     const altMatch = trimmed.match(/alt=["']([^"']*)["']/i);
     const capMatch = trimmed.match(/data-caption=["']([^"']*)["']/i);
-    const alt = altMatch ? altMatch[1].trim() : '';
-    const caption = capMatch ? capMatch[1].trim() : '';
+    const alt = decodeHtmlEntities(altMatch ? altMatch[1].trim() : '');
+    const caption = decodeHtmlEntities(capMatch ? capMatch[1].trim() : '');
     return {
       url,
       alt: alt || caption || cleanImageTitle(url),
@@ -513,7 +570,7 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
   // 5. HTML <a> tag: <a href="url">text</a>
   const htmlLink = trimmed.match(/^<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>$/i);
   if (htmlLink && (isMiniexcavatorUrl(htmlLink[1]) || isImageUrl(htmlLink[1]))) {
-    const text = htmlLink[2].replace(/<[^>]+>/g, '').trim();
+    const text = decodeHtmlEntities(htmlLink[2].replace(/<[^>]+>/g, '').trim());
     const isUrlText = text.startsWith('http://') || text.startsWith('https://');
     const label = isUrlText ? '' : text;
     return {
@@ -531,8 +588,8 @@ export function parseImageLine(line: string): { url: string; alt: string; captio
       const altMatch = trimmed.match(/alt=["']([^"']*)["']/i);
       const capMatch = trimmed.match(/data-caption=["']([^"']*)["']/i);
       const hrefMatch = trimmed.match(/data-href=["']([^"']+)["']/i);
-      const alt = altMatch ? altMatch[1].trim() : '';
-      const caption = capMatch ? capMatch[1].trim() : '';
+      const alt = decodeHtmlEntities(altMatch ? altMatch[1].trim() : '');
+      const caption = decodeHtmlEntities(capMatch ? capMatch[1].trim() : '');
       return {
         url: srcMatch[1].trim(),
         alt: alt || caption || cleanImageTitle(srcMatch[1]),
@@ -723,11 +780,30 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     };
   }
 
+  // 0. Extract Meta Title and Meta Description if provided
+  let foundSeoTitle = '';
+  let foundSeoDescription = '';
+  const processedBlockIndices = new Set<number>();
+
+  for (let i = 0; i < Math.min(rawBlocks.length, 10); i++) {
+    const meta = parseMetaFields(rawBlocks[i]);
+    if (meta) {
+      if (meta.type === 'seoTitle' && !foundSeoTitle) {
+        foundSeoTitle = meta.value;
+        processedBlockIndices.add(i);
+      } else if (meta.type === 'seoDesc' && !foundSeoDescription) {
+        foundSeoDescription = meta.value;
+        processedBlockIndices.add(i);
+      }
+    }
+  }
+
   // 1. Detect if this is a full blog import (has heading or multiple blocks with images)
   let foundTitle = '';
   let titleIndex = -1;
 
-  for (let i = 0; i < Math.min(rawBlocks.length, 5); i++) {
+  for (let i = 0; i < Math.min(rawBlocks.length, 8); i++) {
+    if (processedBlockIndices.has(i)) continue;
     const block = rawBlocks[i];
     // Markdown heading: # Title or ## Title
     const mdHead = block.match(/^(#{1,3})\s+(.+)$/);
@@ -743,33 +819,40 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
       titleIndex = i;
       break;
     }
-    // Explicit title prefix: "Title: ..."
+    // Explicit title prefix: "Title: ..." (excluding Meta Title)
     const prefixTitle = block.match(/^(?:article\s+)?title:\s*(.+)$/i);
-    if (prefixTitle) {
+    if (prefixTitle && !/^meta\s*title/i.test(block)) {
       foundTitle = cleanTitleText(prefixTitle[1]);
       titleIndex = i;
       break;
     }
   }
 
-  // If no explicit heading marker, check if the very first block looks like a standalone title
-  // (e.g. short string, no URLs, no image tag, followed by an image or paragraph)
+  // If no explicit heading marker, check if the first non-processed block looks like a standalone title
   if (!foundTitle && rawBlocks.length >= 2) {
-    const first = rawBlocks[0];
-    const strippedFirst = first.replace(/<[^>]+>/g, '').trim();
-    if (
-      strippedFirst.length > 5 &&
-      strippedFirst.length < 140 &&
-      !strippedFirst.startsWith('http') &&
-      !strippedFirst.includes('<img') &&
-      !strippedFirst.includes('miniexcavator.org') &&
-      !strippedFirst.endsWith('.') &&
-      !strippedFirst.endsWith(':')
-    ) {
-      // Check if subsequent block is an image or paragraph
-      foundTitle = cleanTitleText(first);
-      titleIndex = 0;
+    for (let i = 0; i < Math.min(rawBlocks.length, 6); i++) {
+      if (processedBlockIndices.has(i)) continue;
+      const candidate = rawBlocks[i];
+      const stripped = candidate.replace(/<[^>]+>/g, '').trim();
+      if (
+        stripped.length > 5 &&
+        stripped.length < 150 &&
+        !stripped.startsWith('http') &&
+        !stripped.includes('<img') &&
+        !stripped.includes('miniexcavator.org') &&
+        !stripped.endsWith('.') &&
+        !stripped.endsWith(':') &&
+        !parseMetaFields(candidate)
+      ) {
+        foundTitle = cleanTitleText(candidate);
+        titleIndex = i;
+        break;
+      }
     }
+  }
+
+  if (titleIndex >= 0) {
+    processedBlockIndices.add(titleIndex); // Remove title from body
   }
 
   // Check if content has embedded tables or YouTube
@@ -779,13 +862,8 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   // Check if we should consider this a full blog import
   const isFullBlog = Boolean(foundTitle) || (rawBlocks.length >= 3 && hasMiniexcavator) || (rawBlocks.length >= 2 && hasTable);
 
-  // 2. Scan and extract all images, pairing them with captions
+  // 2. Scan and extract all images, pairing adjacent thumbnails/links and captions
   const detectedImages: Array<DetectedImage & { blockIndex: number; consumedNextIndex?: number }> = [];
-  const processedBlockIndices = new Set<number>();
-
-  if (titleIndex >= 0 && isFullBlog) {
-    processedBlockIndices.add(titleIndex); // Remove title from body
-  }
 
   for (let i = 0; i < rawBlocks.length; i++) {
     if (processedBlockIndices.has(i)) continue;
@@ -793,22 +871,56 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
 
     const parsed = parseImageLine(block);
     if (parsed) {
-      let finalCaption = parsed.caption;
+      let finalUrl = parsed.url;
+      let finalAlt = !isGarbageAltOrCaption(parsed.alt) ? parsed.alt : '';
+      let finalCaption = !isGarbageAltOrCaption(parsed.caption) ? parsed.caption : '';
       let consumedIdx: number | undefined;
 
-      // If caption is empty, check if the NEXT block is a caption line
-      if (!finalCaption && i + 1 < rawBlocks.length) {
+      // Check if NEXT block is an adjacent image link or embedded image for the SAME asset
+      if (i + 1 < rawBlocks.length && !processedBlockIndices.has(i + 1)) {
         const nextBlock = rawBlocks[i + 1];
-        if (!processedBlockIndices.has(i + 1) && !parseImageLine(nextBlock) && isLikelyCaptionLine(nextBlock)) {
-          finalCaption = nextBlock.replace(/<[^>]+>/g, '').trim();
-          consumedIdx = i + 1;
-          processedBlockIndices.add(i + 1);
+        const nextParsed = parseImageLine(nextBlock);
+        if (nextParsed) {
+          const isCurrentTemp = /googleusercontent\.com|data:image/i.test(finalUrl);
+          const isNextTemp = /googleusercontent\.com|data:image/i.test(nextParsed.url);
+
+          if (isCurrentTemp && !isNextTemp) {
+            // Swap to real permanent URL
+            finalUrl = nextParsed.url;
+            if (!finalAlt && !isGarbageAltOrCaption(nextParsed.alt)) finalAlt = nextParsed.alt;
+            if (!finalCaption && !isGarbageAltOrCaption(nextParsed.caption)) finalCaption = nextParsed.caption;
+            consumedIdx = i + 1;
+            processedBlockIndices.add(i + 1);
+          } else if (!isCurrentTemp && isNextTemp) {
+            // Next is temp, keep current permanent
+            consumedIdx = i + 1;
+            processedBlockIndices.add(i + 1);
+          } else if (finalUrl === nextParsed.url || (nextParsed.href && nextParsed.href === finalUrl)) {
+            // Identical URL back to back
+            consumedIdx = i + 1;
+            processedBlockIndices.add(i + 1);
+          }
         }
       }
 
+      // If caption is empty, check if NEXT block is a caption line
+      if (!finalCaption && consumedIdx === undefined && i + 1 < rawBlocks.length) {
+        const nextBlock = rawBlocks[i + 1];
+        if (!processedBlockIndices.has(i + 1) && !parseImageLine(nextBlock) && isLikelyCaptionLine(nextBlock)) {
+          const rawCap = decodeHtmlEntities(nextBlock.replace(/<[^>]+>/g, '').trim());
+          if (!isGarbageAltOrCaption(rawCap)) {
+            finalCaption = rawCap;
+            consumedIdx = i + 1;
+            processedBlockIndices.add(i + 1);
+          }
+        }
+      }
+
+      const cleanAlt = finalAlt || finalCaption || cleanImageTitle(finalUrl);
+
       detectedImages.push({
-        url: parsed.url,
-        alt: parsed.alt || finalCaption || cleanImageTitle(parsed.url),
+        url: finalUrl,
+        alt: cleanAlt,
         caption: finalCaption,
         blockIndex: i,
         consumedNextIndex: consumedIdx,
@@ -818,9 +930,9 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     }
   }
 
-  const detected = hasMiniexcavator || (isFullBlog && (detectedImages.length > 0 || hasTable || rawBlocks.length >= 2)) || detectedImages.length > 0 || hasTable || hasYoutube;
+  const detected = hasMiniexcavator || (isFullBlog && (detectedImages.length > 0 || hasTable || rawBlocks.length >= 2)) || detectedImages.length > 0 || hasTable || hasYoutube || Boolean(foundSeoTitle);
 
-  if (!detected && detectedImages.length === 0 && !hasTable && !hasYoutube) {
+  if (!detected && detectedImages.length === 0 && !hasTable && !hasYoutube && !foundSeoTitle) {
     return {
       detected: false,
       hasMiniexcavatorLinks: false,
@@ -840,7 +952,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     const firstImg = detectedImages[0];
     coverImage = {
       url: firstImg.url,
-      alt: firstImg.alt || firstImg.caption || foundTitle || cleanImageTitle(firstImg.url),
+      alt: !isGarbageAltOrCaption(firstImg.alt) ? firstImg.alt : (foundTitle || cleanImageTitle(firstImg.url)),
     };
 
     if (isFullBlog) {
@@ -876,7 +988,7 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     if (fallback) {
       coverImage = {
         url: fallback.url,
-        alt: fallback.alt || foundTitle || cleanImageTitle(fallback.url),
+        alt: !isGarbageAltOrCaption(fallback.alt) ? fallback.alt : (foundTitle || cleanImageTitle(fallback.url)),
       };
     }
   }
@@ -885,24 +997,30 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
   const bodyOut: string[] = [];
 
   for (let i = 0; i < rawBlocks.length; i++) {
-    // If block was the first title, or first image, or consumed caption, SKIP IT!
+    // 1. If block is the article title, skip it
     if (isFullBlog && i === titleIndex) continue;
-    if (isFullBlog && coverImage && detectedImages[0]?.blockIndex === i) continue;
-    if (isFullBlog && coverImage && detectedImages[0]?.consumedNextIndex === i) continue;
-    if (isFullBlog && coverImage && !detectedImages[0] && rawBlocks[i].includes(coverImage.url) && (rawBlocks[i].includes('<img') || rawBlocks[i].includes('<a ') || isImageUrl(rawBlocks[i]))) {
-      continue;
-    }
 
-    // Check if this block is one of the remaining images
+    // 2. Check if this block is one of the detected images
     const matchingImg = detectedImages.find(img => img.blockIndex === i);
     if (matchingImg) {
-      // Replace link with rich CustomImage / figure HTML
+      // If this image is the cover image, never duplicate it in the body!
+      if (isFullBlog && coverImage && matchingImg.url === coverImage.url) {
+        continue;
+      }
       bodyOut.push(buildImageFigureHtml(matchingImg, 'center'));
       continue;
     }
 
-    // If this block was a consumed caption of an image, skip
+    // 3. Skip consumed captions or consumed duplicate thumbnail blocks
     if (detectedImages.some(img => img.consumedNextIndex === i)) {
+      continue;
+    }
+
+    // 4. If this block was explicitly marked processed (e.g. Meta Title, Meta Description)
+    if (processedBlockIndices.has(i)) continue;
+
+    // 5. Never duplicate the cover image in the body
+    if (isFullBlog && coverImage && rawBlocks[i].includes(coverImage.url) && (rawBlocks[i].includes('<img') || rawBlocks[i].includes('<a ') || isImageUrl(rawBlocks[i]))) {
       continue;
     }
 
@@ -965,6 +1083,8 @@ export function processPastedBlog(content: string, _options?: { currentTitle?: s
     hasMiniexcavatorLinks: hasMiniexcavator,
     isFullBlogImport: isFullBlog,
     title: foundTitle || undefined,
+    seoTitle: foundSeoTitle || undefined,
+    seoDescription: foundSeoDescription || undefined,
     coverImage,
     remainingImages,
     allImages: detectedImages.map(d => ({ url: d.url, alt: d.alt, caption: d.caption })),

@@ -767,6 +767,8 @@ export interface TiptapEditorProps {
   onMediaUploaded?: (newItem: any) => void;
   onAutoExtractTitle?: (title: string) => void;
   onAutoExtractCoverImage?: (url: string, alt?: string) => void;
+  onAutoExtractSeoTitle?: (seoTitle: string) => void;
+  onAutoExtractSeoDescription?: (seoDescription: string) => void;
 }
 
 export default function TiptapEditor({ 
@@ -777,12 +779,20 @@ export default function TiptapEditor({
   onMediaUploaded,
   onAutoExtractTitle,
   onAutoExtractCoverImage,
+  onAutoExtractSeoTitle,
+  onAutoExtractSeoDescription,
 }: TiptapEditorProps) {
   const onAutoExtractTitleRef = useRef(onAutoExtractTitle);
   useEffect(() => { onAutoExtractTitleRef.current = onAutoExtractTitle; }, [onAutoExtractTitle]);
 
   const onAutoExtractCoverImageRef = useRef(onAutoExtractCoverImage);
   useEffect(() => { onAutoExtractCoverImageRef.current = onAutoExtractCoverImage; }, [onAutoExtractCoverImage]);
+
+  const onAutoExtractSeoTitleRef = useRef(onAutoExtractSeoTitle);
+  useEffect(() => { onAutoExtractSeoTitleRef.current = onAutoExtractSeoTitle; }, [onAutoExtractSeoTitle]);
+
+  const onAutoExtractSeoDescriptionRef = useRef(onAutoExtractSeoDescription);
+  useEffect(() => { onAutoExtractSeoDescriptionRef.current = onAutoExtractSeoDescription; }, [onAutoExtractSeoDescription]);
 
   const onMediaUploadedRef = useRef(onMediaUploaded);
   useEffect(() => { onMediaUploadedRef.current = onMediaUploaded; }, [onMediaUploaded]);
@@ -1019,6 +1029,14 @@ export default function TiptapEditor({
               // 1. Auto-extract Article Title
               if (res.title && onAutoExtractTitleRef.current) {
                 onAutoExtractTitleRef.current(res.title);
+              }
+
+              // 1.5. Auto-extract Meta Title & Meta Description for SEO
+              if (res.seoTitle && onAutoExtractSeoTitleRef.current) {
+                onAutoExtractSeoTitleRef.current(res.seoTitle);
+              }
+              if (res.seoDescription && onAutoExtractSeoDescriptionRef.current) {
+                onAutoExtractSeoDescriptionRef.current(res.seoDescription);
               }
 
               // 2. Auto-fill Featured Cover Image

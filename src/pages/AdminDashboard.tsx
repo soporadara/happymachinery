@@ -1390,6 +1390,26 @@ export default function AdminDashboard() {
     }
   }, [editorContent, editorCoverImage, editorCoverAlt])
 
+  // Auto-detect Meta Title and Meta Description if present in article content
+  useEffect(() => {
+    if (editorContent && editorContent.length > 10) {
+      if (!editorSeoTitle.trim()) {
+        const titleMatch = editorContent.match(/(?:meta\s*title|seo\s*title|page\s*meta\s*title)\s*:\s*([^\n\r<]+)/i)
+        if (titleMatch) {
+          const clean = titleMatch[1].replace(/<[^>]+>/g, '').trim()
+          if (clean) setEditorSeoTitle(clean)
+        }
+      }
+      if (!editorSeoDesc.trim()) {
+        const descMatch = editorContent.match(/(?:meta\s*description|seo\s*description|meta\s*desc)\s*:\s*([^\n\r<]+)/i)
+        if (descMatch) {
+          const clean = descMatch[1].replace(/<[^>]+>/g, '').trim()
+          if (clean) setEditorSeoDesc(clean)
+        }
+      }
+    }
+  }, [editorContent, editorSeoTitle, editorSeoDesc])
+
   // Rich WYSIWYG & Media Editor States (Matches Image 2)
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -6134,6 +6154,14 @@ export default function AdminDashboard() {
                                 }
                                 showToast('Auto-filled Featured Cover Image from first photo!', 'success')
                               }}
+                              onAutoExtractSeoTitle={(seoTitle) => {
+                                setEditorSeoTitle(seoTitle)
+                                showToast(`Auto-imported Meta Title: "${seoTitle.slice(0, 45)}..."`, 'success')
+                              }}
+                              onAutoExtractSeoDescription={(seoDesc) => {
+                                setEditorSeoDesc(seoDesc)
+                                showToast('Auto-imported Meta Description!', 'success')
+                              }}
                             />
                           </div>
                         )}
@@ -6700,9 +6728,48 @@ export default function AdminDashboard() {
                               SEO &amp; Search Engine Meta
                             </h3>
                           </div>
-                          <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 650 }}>
-                            Google Ready
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                let foundT = ''
+                                let foundD = ''
+                                const titleMatch = editorContent.match(/(?:meta\s*title|seo\s*title|page\s*meta\s*title)\s*:\s*([^\n\r<]+)/i)
+                                if (titleMatch) foundT = titleMatch[1].replace(/<[^>]+>/g, '').trim()
+                                const descMatch = editorContent.match(/(?:meta\s*description|seo\s*description|meta\s*desc)\s*:\s*([^\n\r<]+)/i)
+                                if (descMatch) foundD = descMatch[1].replace(/<[^>]+>/g, '').trim()
+
+                                if (foundT) setEditorSeoTitle(foundT)
+                                if (foundD) setEditorSeoDesc(foundD)
+
+                                if (foundT || foundD) {
+                                  showToast('Meta title & description auto-imported from article!', 'success')
+                                } else {
+                                  showToast('No "Meta Title:" or "Meta Description:" lines found in article content.', 'warning')
+                                }
+                              }}
+                              className="cms-cover-autodetect-btn"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#0284c7',
+                                background: '#f0f9ff',
+                                border: '1px solid #bae6fd',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                              }}
+                              title="Auto-detect Meta Title and Description from article content"
+                            >
+                              Auto-detect
+                            </button>
+                            <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 650 }}>
+                              Google Ready
+                            </span>
+                          </div>
                         </div>
                         
                         <div>

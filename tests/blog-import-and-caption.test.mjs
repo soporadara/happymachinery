@@ -533,5 +533,49 @@ test('YouTube video embed ID works with youtube-nocookie and Google Docs image i
   assert.ok(res.cleanedHtml.includes('embed/eqOfmtTJD1A'), 'Must have YouTube embed src');
 });
 
+test('Google Docs blog import extracts Meta Title, Meta Description, pairs images, and prevents cover duplicate', async () => {
+  const { processPastedBlog } = await import('../src/utils/blogImportHelper.ts');
+
+  const gdocsPaste = `
+    <p><span>Meta Title: Heavy Compact Excavators Guide: 2.7-Ton to 4-Ton Class | TYPHON</span></p>
+    <p><span>Meta Description: Learn how to size, specify, and evaluate 2.7-ton to 4-ton compact excavators. Compare the TYPHON KUVUO 4.0 and KUVUO 2.7 on Kubota power, hydraulics, and protected engineering.</span></p>
+    <h1>The Ultimate Guide to Heavy Compact Excavators: Sizing, Hydraulics, and Performance in the 2.7-Ton to 4-Ton Class</h1>
+    <p><img src="https://lh7-rt.googleusercontent.com/docsz/AD_4nX-preview1=s1600" alt="9k=" /></p>
+    <p><a href="https://img.miniexcavator.org/ebay/Website-Team/high-end-mini_excavator/Pillar_blog_1/Excavator_digging_on_constructio_9ad2f5ca_2K.webp">https://img.miniexcavator.org/ebay/Website-Team/high-end-mini_excavator/Pillar_blog_1/Excavator_digging_on_constructio_9ad2f5ca_2K.webp</a></p>
+    <p>The heavy compact excavator class sits in the most demanding zone of modern construction.</p>
+    <p><img src="https://lh7-rt.googleusercontent.com/docsz/AD_4nX-preview2=s1600" alt="9k=" /></p>
+    <p><a href="https://img.miniexcavator.org/ebay/Website-Team/high-end-mini_excavator/Pillar_blog_1/Typhon_Kuvud_4_0_Excavator.webp">TYPHON &amp; KUVUD 4.0 MINI EXCAVATOR</a></p>
+    <p>Unmatched power and compact versatility for demanding jobs.</p>
+  `;
+
+  const res = processPastedBlog(gdocsPaste);
+  assert.strictEqual(res.detected, true, 'Should detect full blog');
+  
+  // 1. Meta Title & Description extracted
+  assert.strictEqual(res.seoTitle, 'Heavy Compact Excavators Guide: 2.7-Ton to 4-Ton Class | TYPHON');
+  assert.strictEqual(res.seoDescription, 'Learn how to size, specify, and evaluate 2.7-ton to 4-ton compact excavators. Compare the TYPHON KUVUO 4.0 and KUVUO 2.7 on Kubota power, hydraulics, and protected engineering.');
+
+  // 2. Article Title extracted
+  assert.strictEqual(res.title, 'The Ultimate Guide to Heavy Compact Excavators: Sizing, Hydraulics, and Performance in the 2.7-Ton to 4-Ton Class');
+
+  // 3. Cover Image extracted with permanent CDN URL, NOT temp Google Docs thumbnail
+  assert.ok(res.coverImage, 'Must extract cover image');
+  assert.strictEqual(res.coverImage.url, 'https://img.miniexcavator.org/ebay/Website-Team/high-end-mini_excavator/Pillar_blog_1/Excavator_digging_on_constructio_9ad2f5ca_2K.webp');
+  assert.notStrictEqual(res.coverImage.alt, '9k=', 'Garbage 9k= token must be filtered out');
+
+  // 4. Body HTML must NOT contain Meta Title or Meta Description
+  assert.ok(!res.cleanedHtml.includes('Meta Title:'), 'Meta Title should not be in body HTML');
+  assert.ok(!res.cleanedHtml.includes('Meta Description:'), 'Meta Description should not be in body HTML');
+
+  // 5. Cover Image must NOT be duplicated in body HTML
+  assert.ok(!res.cleanedHtml.includes('Excavator_digging_on_constructio_9ad2f5ca_2K.webp'), 'Cover image must NOT be duplicated in body');
+  assert.ok(!res.cleanedHtml.includes('AD_4nX-preview1'), 'Temp thumbnail must not be in body');
+
+  // 6. Second image MUST be present in body HTML as a rich figure
+  assert.ok(res.cleanedHtml.includes('Typhon_Kuvud_4_0_Excavator.webp'), 'Second image must be in body HTML');
+  assert.ok(!res.cleanedHtml.includes('9k='), 'Garbage 9k= alt/caption must not be anywhere in body HTML');
+  assert.ok(res.cleanedHtml.includes('TYPHON &amp; KUVUD 4.0 MINI EXCAVATOR') || res.cleanedHtml.includes('TYPHON & KUVUD 4.0 MINI EXCAVATOR'), 'Second image title/caption must be preserved');
+});
+
 
 
