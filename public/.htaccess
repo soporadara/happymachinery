@@ -27,7 +27,7 @@
 
 # Cache-Control policies: ensure index.html and API are never stale
 <IfModule mod_headers.c>
-  <FilesMatch "^(index\.html|content\.php|share_preview\.php)$">
+  <FilesMatch "^(index\.html|share_preview\.php)$">
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires 0
