@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 // Security Headers
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store, no-cache, must-revalidate');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('X-XSS-Protection: 1; mode=block');
@@ -479,15 +478,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $isProtected = in_array($key, $protectedReadKeys, true);
     if (!$isProtected) {
         $etag = '"' . md5($encoded) . '"';
-        header('ETag: ' . $etag);
-        header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
-        $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
-        if ($ifNoneMatch && trim($ifNoneMatch) === $etag) {
+        header('ETag: ' . $etag, true);
+        header('Cache-Control: public, max-age=60, stale-while-revalidate=300', true);
+        $ifNoneMatch = trim($_SERVER['HTTP_IF_NONE_MATCH'] ?? '');
+        $normMatch = trim(preg_replace('/^W\//i', '', $ifNoneMatch));
+        $normEtag = trim(preg_replace('/^W\//i', '', $etag));
+        if ($normMatch && ($normMatch === $normEtag || $ifNoneMatch === $etag)) {
             http_response_code(304);
             exit;
         }
     } else {
-        header('Cache-Control: private, no-cache, no-store, must-revalidate');
+        header('Cache-Control: private, no-cache, no-store, must-revalidate', true);
     }
 
     echo $encoded;
