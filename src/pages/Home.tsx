@@ -6,8 +6,8 @@ import {
 } from '../data/v900Pricing'
 import { DEFAULT_HOME_CONTENT, HomePageContent } from '../data/homeContent'
 import { readSharedContent } from '../data/sharedContentStorage'
-import { readPersistentContent } from '../data/persistentStorage'
-import { DEFAULT_POSTS, type BlogPost } from './adminData'
+import { readPersistentContent, writePersistentContent } from '../data/persistentStorage'
+import { DEFAULT_POSTS, getInitialBlogPosts, type BlogPost } from './adminData'
 import { getBlogPostPath } from '../data/blogUrls'
 import V900Showcase from '../components/V900Showcase'
 import './Home.css'
@@ -133,9 +133,13 @@ export default function Home() {
 
   const [latestPosts, setLatestPosts] = useState<BlogPost[]>(() => {
     try {
-      const local = localStorage.getItem('happy-machinery-blog-posts')
-      const parsed = local ? JSON.parse(local) : DEFAULT_POSTS
-      return (parsed as BlogPost[]).filter((p) => p.status !== 'Draft').slice(0, 3)
+      const initial = getInitialBlogPosts()
+      const sorted = [...initial].sort((a, b) => {
+        const idDiff = (Number(b.id) || 0) - (Number(a.id) || 0)
+        if (idDiff !== 0) return idDiff
+        return new Date(b.date).getTime() - new Date(a.date).getTime()
+      })
+      return sorted.filter((p) => p.status !== 'Draft').slice(0, 3)
     } catch {
       return DEFAULT_POSTS.filter((p) => p.status !== 'Draft').slice(0, 3)
     }
@@ -147,7 +151,16 @@ export default function Home() {
       try {
         const shared = await readSharedContent<BlogPost[]>('blog-posts')
         if (shared && Array.isArray(shared) && shared.length > 0 && mounted) {
-          setLatestPosts(shared.filter((p) => p.status !== 'Draft').slice(0, 3))
+          const sorted = [...shared].sort((a, b) => {
+            const idDiff = (Number(b.id) || 0) - (Number(a.id) || 0)
+            if (idDiff !== 0) return idDiff
+            return new Date(b.date).getTime() - new Date(a.date).getTime()
+          })
+          try {
+            localStorage.setItem('happy-machinery-blog-posts', JSON.stringify(sorted))
+          } catch {}
+          void writePersistentContent('blog-posts', sorted)
+          setLatestPosts(sorted.filter((p) => p.status !== 'Draft').slice(0, 3))
           return
         }
       } catch {}
@@ -155,7 +168,12 @@ export default function Home() {
       try {
         const persist = await readPersistentContent<BlogPost[]>('blog-posts')
         if (persist && Array.isArray(persist) && persist.length > 0 && mounted) {
-          setLatestPosts(persist.filter((p) => p.status !== 'Draft').slice(0, 3))
+          const sorted = [...persist].sort((a, b) => {
+            const idDiff = (Number(b.id) || 0) - (Number(a.id) || 0)
+            if (idDiff !== 0) return idDiff
+            return new Date(b.date).getTime() - new Date(a.date).getTime()
+          })
+          setLatestPosts(sorted.filter((p) => p.status !== 'Draft').slice(0, 3))
           return
         }
       } catch {}

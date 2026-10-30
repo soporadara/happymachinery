@@ -473,7 +473,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }, $result);
     }
 
-    echo json_encode(['value' => $result], JSON_UNESCAPED_SLASHES);
+    $encoded = json_encode(['value' => $result], JSON_UNESCAPED_SLASHES);
+
+    // ETag & Cache-Control for public keys to accelerate repeated reads
+    $isProtected = in_array($key, $protectedReadKeys, true);
+    if (!$isProtected) {
+        $etag = '"' . md5($encoded) . '"';
+        header('ETag: ' . $etag);
+        header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
+        $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+        if ($ifNoneMatch && trim($ifNoneMatch) === $etag) {
+            http_response_code(304);
+            exit;
+        }
+    } else {
+        header('Cache-Control: private, no-cache, no-store, must-revalidate');
+    }
+
+    echo $encoded;
     exit;
 }
 

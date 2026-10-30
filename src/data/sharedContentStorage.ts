@@ -19,14 +19,16 @@ export const getAuthHeaders = (): Record<string, string> => {
   return {}
 }
 
-export const readSharedContent = async <T>(key: string): Promise<T | undefined> => {
+export const readSharedContent = async <T>(key: string, options?: { fresh?: boolean }): Promise<T | undefined> => {
   try {
+    const authHeaders = getAuthHeaders()
+    const hasAuth = Object.keys(authHeaders).length > 0
     const response = await fetch(endpoint(key), {
       headers: {
         Accept: 'application/json',
-        ...getAuthHeaders()
+        ...authHeaders
       },
-      cache: 'no-store'
+      cache: options?.fresh || hasAuth ? 'no-store' : 'default'
     })
 
     if (response.status === 404) return undefined

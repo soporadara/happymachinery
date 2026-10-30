@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { DEFAULT_COMMENTS, DEFAULT_POSTS, BlogComment, BlogReply, BlogPost } from './adminData'
-import { readPersistentContent } from '../data/persistentStorage'
+import { DEFAULT_COMMENTS, DEFAULT_POSTS, getInitialBlogPosts, BlogComment, BlogReply, BlogPost } from './adminData'
+import { readPersistentContent, writePersistentContent } from '../data/persistentStorage'
 import { readSharedContent, appendSharedContent } from '../data/sharedContentStorage'
 import { getStoredSession } from '../data/cmsAuth'
 import { getBlogPostPath, getBlogPostSlug } from '../data/blogUrls'
@@ -475,10 +475,7 @@ export default function Blog() {
 
   const isAdmin = localStorage.getItem('happy-admin-auth') === 'true'
 
-  const [posts, setPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem('happy-machinery-blog-posts')
-    return saved ? JSON.parse(saved) : DEFAULT_POSTS
-  })
+  const [posts, setPosts] = useState<BlogPost[]>(() => getInitialBlogPosts())
 
   // Derived selectedPost from URL search parameters or slug
   const postId = searchParams.get('post')
@@ -662,6 +659,10 @@ export default function Blog() {
         const saved = await readSharedContent<BlogPost[]>('blog-posts')
         if (saved && Array.isArray(saved) && saved.length > 0) {
           setPosts(saved)
+          try {
+            localStorage.setItem('happy-machinery-blog-posts', JSON.stringify(saved))
+          } catch {}
+          void writePersistentContent('blog-posts', saved)
           return
         }
       } catch (error) {
@@ -913,7 +914,7 @@ export default function Blog() {
 
   // Filter posts based on Category and Search Query (excluding drafts for public visitors)
   const filteredPosts = useMemo(() => {
-    return posts.filter((post) => {
+    const valid = posts.filter((post) => {
       if (!isAdmin && post.status === 'Draft') return false
       const matchesCategory = activeCategory === 'All' || post.category === activeCategory
       const query = searchQuery.trim().toLowerCase()
@@ -923,6 +924,14 @@ export default function Blog() {
         post.excerpt.toLowerCase().includes(query) ||
         post.category.toLowerCase().includes(query)
       return matchesCategory && matchesSearch
+    })
+
+    // Guarantee that the latest post is always first (index 0 / featured story)
+    return valid.sort((a, b) => {
+      const idA = Number(a.id) || 0
+      const idB = Number(b.id) || 0
+      if (idA && idB && idA !== idB) return idB - idA
+      return new Date(b.date).getTime() - new Date(a.date).getTime()
     })
   }, [posts, activeCategory, searchQuery, isAdmin])
 

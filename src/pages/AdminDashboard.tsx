@@ -43,6 +43,7 @@ import {
   ProductAttribute,
   getUserProfileAvatar,
   DEFAULT_POSTS, 
+  getInitialBlogPosts,
   DEFAULT_PRODUCTS, 
   DEFAULT_MEDIA,
   DEFAULT_PRODUCT_ATTRIBUTES,
@@ -51,6 +52,7 @@ import {
   DEFAULT_COMMENTS
 } from './adminData'
 import { readSharedContent, writeSharedContent } from '../data/sharedContentStorage'
+import { writePersistentContent } from '../data/persistentStorage'
 import { getBlogPostPath } from '../data/blogUrls'
 import { DEFAULT_HOME_CONTENT, HomePageContent } from '../data/homeContent'
 import HomePageCmsEditor from '../components/HomePageCmsEditor'
@@ -721,13 +723,10 @@ export default function AdminDashboard() {
   // Primary CMS Collections Data
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     try {
-      const saved = localStorage.getItem('happy-machinery-blog-posts')
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
-      }
-    } catch {}
-    return DEFAULT_POSTS
+      return getInitialBlogPosts()
+    } catch {
+      return DEFAULT_POSTS
+    }
   })
   const [products, setProducts] = useState<AdminProduct[]>(() => {
     try {
@@ -1808,6 +1807,7 @@ export default function AdminDashboard() {
       if (fetchedPosts && Array.isArray(fetchedPosts) && fetchedPosts.length > 0) {
         setPosts(fetchedPosts)
         try { localStorage.setItem('happy-machinery-blog-posts', JSON.stringify(fetchedPosts)) } catch {}
+        void writePersistentContent('blog-posts', fetchedPosts)
       } else {
         setPosts((prev) => (prev.length > 0 ? prev : DEFAULT_POSTS))
       }
@@ -2946,6 +2946,16 @@ export default function AdminDashboard() {
     )
   }
 
+  const syncBlogPosts = async (updated: BlogPost[]) => {
+    setPosts(updated)
+    try {
+      localStorage.setItem('happy-machinery-blog-posts', JSON.stringify(updated))
+    } catch {}
+    void writePersistentContent('blog-posts', updated)
+    window.dispatchEvent(new CustomEvent('blog-updated', { detail: updated }))
+    await writeSharedContent('blog-posts', updated)
+  }
+
   const handleSaveArticle = async (status: 'Published' | 'Draft' | 'Scheduled') => {
     if (!editorTitle.trim()) {
       showToast('Article title is required.', 'error')
@@ -2996,8 +3006,7 @@ export default function AdminDashboard() {
             }
           : p
       )
-      setPosts(updated)
-      await writeSharedContent('blog-posts', updated)
+      await syncBlogPosts(updated)
       await logSecurityEvent('CONTENT_PUBLISHED', `Article "${editorTitle}" updated (${finalStatus}).`, 'info', currentUser?.username)
       showToast(`Article "${editorTitle}" saved as ${finalStatus}!`, 'success')
     } else {
@@ -3021,8 +3030,7 @@ export default function AdminDashboard() {
         content_raw: editorContentRaw || undefined
       }
       const updated = [newPost, ...posts]
-      setPosts(updated)
-      await writeSharedContent('blog-posts', updated)
+      await syncBlogPosts(updated)
       await logSecurityEvent('CONTENT_PUBLISHED', `New article "${newPost.title}" created as ${finalStatus}.`, 'info', currentUser?.username)
       showToast(`Article "${editorTitle}" saved as ${finalStatus}!`, 'success')
     }
@@ -3056,8 +3064,7 @@ export default function AdminDashboard() {
       // Update linked posts if name changed
       if (oldName !== catData.name) {
         const updatedPosts = posts.map((p) => (p.category === oldName ? { ...p, category: catData.name } : p))
-        setPosts(updatedPosts)
-        void writeSharedContent('blog-posts', updatedPosts)
+        void syncBlogPosts(updatedPosts)
       }
 
       showToast(`Category "${catData.name}" updated successfully!`, 'success')
@@ -3163,11 +3170,9 @@ export default function AdminDashboard() {
         const updatedPosts = posts.filter((p) => p.id !== post.id)
 
         setTrashItems(updatedTrash)
-        setPosts(updatedPosts)
-
         localStorage.setItem('happy-machinery-trash', JSON.stringify(updatedTrash))
         await writeSharedContent('trash-items', updatedTrash)
-        await writeSharedContent('blog-posts', updatedPosts)
+        await syncBlogPosts(updatedPosts)
         await logSecurityEvent('CONTENT_DELETED', `Article "${post.title}" moved to Trash.`, 'warning', currentUser?.username)
 
         showToast(`Article "${post.title}" moved to Trash.`, 'warning')
@@ -3182,8 +3187,7 @@ export default function AdminDashboard() {
       const restoredPost = item.data as BlogPost
       const exists = posts.some((p) => p.id === restoredPost.id)
       const updatedPosts = exists ? posts : [restoredPost, ...posts]
-      setPosts(updatedPosts)
-      await writeSharedContent('blog-posts', updatedPosts)
+      await syncBlogPosts(updatedPosts)
     } else if (item.type === 'product') {
       const restoredProd = item.data as AdminProduct
       const exists = products.some((p) => p.id === restoredProd.id)
@@ -3275,7 +3279,7 @@ export default function AdminDashboard() {
         localStorage.setItem('happy-machinery-trash', JSON.stringify([]))
         localStorage.setItem('happy-machinery-blog-categories', JSON.stringify(newBlogCats))
         await writeSharedContent('trash-items', [])
-        await writeSharedContent('blog-posts', newPosts)
+        await syncBlogPosts(newPosts)
         await writeSharedContent('products', newProds)
         await writeSharedContent('blog-categories', newBlogCats)
         await writeSharedContent('product-categories', newProdCats)
