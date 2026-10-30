@@ -7,7 +7,7 @@
 >
   <url>
     <loc>https://happymachinery.com/</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -66,7 +66,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/store</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
     <image:image>
@@ -76,7 +76,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/blog</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
     <image:image>
@@ -86,7 +86,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/about</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
     <image:image>
@@ -96,7 +96,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/contact</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
     <image:image>
@@ -106,19 +106,19 @@
   </url>
   <url>
     <loc>https://happymachinery.com/faq</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.80</priority>
   </url>
   <url>
     <loc>https://happymachinery.com/terms-of-service</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.60</priority>
   </url>
   <url>
     <loc>https://happymachinery.com/privacy-policy</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.60</priority>
   </url>
@@ -126,7 +126,7 @@
   <!-- Machinery Products -->
   <url>
     <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-red</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.90</priority>
     <image:image>
@@ -144,7 +144,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.90</priority>
     <image:image>
@@ -162,7 +162,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/product/typhon-stomp-v900-mini-track-loader-kubota-d1105-blue</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.90</priority>
     <image:image>
@@ -180,7 +180,7 @@
   </url>
   <url>
     <loc>https://happymachinery.com/product/typh-5005m-pallet-fork</loc>
-    <lastmod>2026-10-28</lastmod>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
     <image:image>
@@ -191,13 +191,13 @@
 
   <!-- Dynamic Blog Posts from Database -->
   <url>
-    <loc>https://happymachinery.com/blog/maximizing-skid-steer-efficiency-and-safety-on-residential-jobsites</loc>
-    <lastmod>2026-08-15</lastmod>
+    <loc>https://happymachinery.com/blog/the-ultimate-guide-to-heavy-compact-excavators-sizing-hydraulics-and-performance-in-the-2-7-ton-to-4-ton</loc>
+    <lastmod>2026-10-30</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.90</priority>
     <image:image>
-      <image:loc>https://happymachinery.com/images/why-choose-v900-jobsite.png</image:loc>
-      <image:title>Maximizing Skid Steer Efficiency &amp; Safety on Residential Jobsites</image:title>
+      <image:loc>https://img.miniexcavator.org/ebay/Website-Team/high-end-mini_excavator/Pillar_blog_1/Excavator_digging_on_constructio_9ad2f5ca_2K.webp</image:loc>
+      <image:title>The Ultimate Guide to Heavy Compact Excavators: Sizing, Hydraulics, and Performance in the 2.7-Ton to 4-Ton Class</image:title>
     </image:image>
   </url>
   <url>
@@ -287,7 +287,7 @@
     <priority>0.90</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/fork-blue-jobsite.png</image:loc>
-      <image:title>Can a Compact Excavator Work All Day? Continuous Digging Guide</image:title>
+      <image:title>Can a Compact Excavator Work All Day?</image:title>
     </image:image>
   </url>
   <url>
@@ -307,7 +307,7 @@
     <priority>0.90</priority>
     <image:image>
       <image:loc>https://happymachinery.com/images/loader-yellow.jpg</image:loc>
-      <image:title>5 Critical Signs Your Forklift Needs Immediate Maintenance</image:title>
+      <image:title>Signs Your Forklift Needs Immediate Maintenance</image:title>
     </image:image>
   </url>
   <url>
@@ -457,7 +457,7 @@
     <priority>0.90</priority>
     <image:image>
       <image:loc>https://img.miniexcavator.org/ebay/Blog/class7/27Aug/RoadRollerDrumWeight-01.webp</image:loc>
-      <image:title>How Drum Weight &amp; Centrifugal Force Dictate Road Roller Compaction Depth</image:title>
+      <image:title>How Drum Weight Affects Road Roller Compaction &amp; Depth</image:title>
     </image:image>
   </url>
 </urlset>

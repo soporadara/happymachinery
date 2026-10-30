@@ -629,8 +629,16 @@ export default function Blog() {
   const navigate = useNavigate()
   const { slug } = useParams<{ slug?: string }>()
   const [searchParams] = useSearchParams()
+  const initialQuery = searchParams.get('q') || searchParams.get('search') || ''
   const [activeCategory, setActiveCategory] = useState('All')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialQuery)
+
+  useEffect(() => {
+    const q = searchParams.get('q') || searchParams.get('search') || ''
+    if (q) {
+      setSearchQuery(q)
+    }
+  }, [searchParams])
   const [comments, setComments] = useState<BlogComment[]>(() => {
     const saved = localStorage.getItem('happy-machinery-comments')
     return saved ? JSON.parse(saved) : DEFAULT_COMMENTS
@@ -1101,7 +1109,10 @@ export default function Blog() {
         !query ||
         post.title.toLowerCase().includes(query) ||
         post.excerpt.toLowerCase().includes(query) ||
-        post.category.toLowerCase().includes(query)
+        post.category.toLowerCase().includes(query) ||
+        Boolean(post.seoTitle && post.seoTitle.toLowerCase().includes(query)) ||
+        Boolean(post.metaDescription && post.metaDescription.toLowerCase().includes(query)) ||
+        (Array.isArray(post.tags) && post.tags.some((t: string) => t.toLowerCase().includes(query)))
       return matchesCategory && matchesSearch
     })
 
@@ -2246,6 +2257,27 @@ export default function Blog() {
                 &times;
               </button>
             )}
+          </div>
+
+          {/* Quick Trending Topic Pills */}
+          <div className="raf-hero-topic-pills">
+            <span className="raf-topic-pills-label">Trending Topics:</span>
+            {[
+              { label: 'Mini Excavators', query: 'excavator' },
+              { label: 'Skid Steers', query: 'skid steer' },
+              { label: 'TYPHON Fleet', query: 'typhon' },
+              { label: 'Kubota Diesel', query: 'kubota' },
+              { label: 'Work Attachments', query: 'attachment' },
+            ].map((t) => (
+              <button
+                key={t.query}
+                type="button"
+                className={`raf-hero-topic-btn ${searchQuery.toLowerCase().includes(t.query) ? 'active' : ''}`}
+                onClick={() => setSearchQuery(t.query)}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </header>
 

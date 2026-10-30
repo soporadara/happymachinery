@@ -139,9 +139,9 @@ export default function Home() {
         if (idDiff !== 0) return idDiff
         return new Date(b.date).getTime() - new Date(a.date).getTime()
       })
-      return sorted.filter((p) => p.status !== 'Draft').slice(0, 3)
+      return sorted.filter((p) => p.status !== 'Draft').slice(0, 4)
     } catch {
-      return DEFAULT_POSTS.filter((p) => p.status !== 'Draft').slice(0, 3)
+      return DEFAULT_POSTS.filter((p) => p.status !== 'Draft').slice(0, 4)
     }
   })
 
@@ -160,7 +160,7 @@ export default function Home() {
             localStorage.setItem('happy-machinery-blog-posts', JSON.stringify(sorted))
           } catch {}
           void writePersistentContent('blog-posts', sorted)
-          setLatestPosts(sorted.filter((p) => p.status !== 'Draft').slice(0, 3))
+          setLatestPosts(sorted.filter((p) => p.status !== 'Draft').slice(0, 4))
           return
         }
       } catch {}
@@ -173,7 +173,7 @@ export default function Home() {
             if (idDiff !== 0) return idDiff
             return new Date(b.date).getTime() - new Date(a.date).getTime()
           })
-          setLatestPosts(sorted.filter((p) => p.status !== 'Draft').slice(0, 3))
+          setLatestPosts(sorted.filter((p) => p.status !== 'Draft').slice(0, 4))
           return
         }
       } catch {}
@@ -1186,6 +1186,17 @@ export default function Home() {
                     <path d="M5 12h14M12 5l7 7-7 7" />
                   </svg>
                 </Link>
+              </div>
+            </div>
+
+            <div className="latest-articles-topics-bar">
+              <span className="topics-bar-label">Explore Machinery Topics:</span>
+              <div className="topics-bar-pills">
+                <Link to="/blog?q=excavator" className="topic-pill">Mini Excavators</Link>
+                <Link to="/blog?q=skid+steer" className="topic-pill">Skid Steers</Link>
+                <Link to="/blog?q=typhon" className="topic-pill">TYPHON Machinery</Link>
+                <Link to="/blog?q=kubota" className="topic-pill">Kubota Diesel Power</Link>
+                <Link to="/blog?q=attachment" className="topic-pill">Work Attachments</Link>
               </div>
             </div>
 

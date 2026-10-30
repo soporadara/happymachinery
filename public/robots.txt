@@ -5,7 +5,35 @@ Disallow: /api/content.php
 Disallow: /admin
 Disallow: /checkout
 
-# AI Search Engine & Large Language Model Crawlers (Permit Content Indexing)
+# Search Engine Crawlers (Explicit Priority)
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Googlebot-Video
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: msnbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+# AI Search Engine & LLM Search Crawlers (Permit Content Indexing & Answers)
 User-agent: GPTBot
 Allow: /
 
@@ -22,6 +50,9 @@ User-agent: Google-Extended
 Allow: /
 
 User-agent: Applebot
+Allow: /
+
+User-agent: Bytespider
 Allow: /
 
 # Search Engine Sitemap Index

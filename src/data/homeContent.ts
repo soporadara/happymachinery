@@ -390,6 +390,14 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
     contactLinkUrl: '/contact',
     faqs: [
       {
+        question: 'What mini excavators and skid steers does TYPHON Machinery offer?',
+        answer: 'TYPHON Machinery manufactures heavy-duty commercial equipment, including the TYPHON KUVUO 4.0 Mini Excavator (4-ton class with Kubota D1703 diesel and True Zero Tail Swing), the TYPHON KUVUO 2.7 Mini Excavator (2.7-ton class with Kubota D1105 diesel, retractable metal tracks, and protected inverted boom), and the flagship STOMP V900 American Skid Steer Compact Track Loader with 25 HP Kubota power and 1,102 lb capacity. All units are supported with nationwide USA delivery and commercial warranty.'
+      },
+      {
+        question: 'Can mini excavator attachments be shared with skid steers?',
+        answer: 'Yes. TYPHON Machinery skid steers and compact equipment utilize universal quick-attach mounting plates (standard SAE J2513) and auxiliary high-flow hydraulic connections (up to 12.7 GPM on V900, 20.9 GPM on KUVUO 4.0), allowing operators to share hydraulic augers, trenchers, pallet forks, and breaker attachments across compatible equipment.'
+      },
+      {
         question: 'How much can the V900 lift?',
         answer: 'The V900 has a rated operating capacity of 1,014 lbs (460 kg). Actual safe handling depends on the attachment, load position, terrain, and operating conditions.'
       },
@@ -525,10 +533,10 @@ export const DEFAULT_HOME_CONTENT: HomePageContent = {
   },
   latestArticles: {
     visible: true,
-    eyebrow: 'Equipment Insights & Guides',
-    title: 'Latest Articles',
-    description: 'Explore field equipment guides, preventive maintenance checklists, and operational best practices.',
-    viewAllText: 'View All Blogs',
+    eyebrow: 'Equipment Insights & Field Guides',
+    title: 'Mini Excavator & Skid Steer Knowledge Hub',
+    description: 'Explore heavy compact excavator sizing guides, Kubota diesel maintenance checklists, American skid steer jobsite tips, and equipment ROI breakdowns.',
+    viewAllText: 'View All Blogs & Guides',
     viewAllUrl: '/blog'
   },
   ctaStrip: {

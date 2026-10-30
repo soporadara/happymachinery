@@ -16,6 +16,9 @@
   RewriteCond %{HTTP_USER_AGENT} (facebookexternalhit|twitterbot|linkedinbot|slackbot|embedly|outbrain|pinterestbot|vkShare|GPTBot|ChatGPT-User|PerplexityBot|ClaudeBot|Applebot|Bytespider) [NC]
   RewriteRule ^product/(\d+)$ share_preview.php?type=product&id=$1 [L,QSA]
 
+  # Route sitemap.xml dynamically to api/sitemap.php for real-time article indexing
+  RewriteRule ^sitemap\.xml$ api/sitemap.php [L]
+
   # Serve deployed assets, PHP endpoints, and other real files normally.
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
