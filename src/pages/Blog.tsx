@@ -14,6 +14,7 @@ import {
   splitContentIntoBlocks,
   type HeadingMatch
 } from '../utils/editorContentHelper'
+import { getYoutubeVideoId } from '../utils/blogImportHelper'
 
 export { isStandaloneHeading, slugifyHeading, getHeadingMatch, splitContentIntoBlocks, type HeadingMatch }
 
@@ -163,9 +164,129 @@ export function renderInlineMarkdown(text: string, keyPrefix: string): React.Rea
   return elements.length > 0 ? elements : text
 }
 
+/**
+ * High-Performance YouTube Video Player with Instant Thumbnail Facade.
+ * Eliminates blank white loading boxes, delays, and ad-blocker embed failures.
+ */
+export function BlogVideoPlayer({
+  videoId,
+  title,
+  caption,
+}: {
+  videoId: string
+  title?: string
+  caption?: string
+}) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [imgSrc, setImgSrc] = useState(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`)
+  const [isIframeLoaded, setIsIframeLoaded] = useState(false)
+
+  const fallbackImg = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`
+
+  return (
+    <div className="blog-body-video-card-wrapper my-8 w-full max-w-4xl mx-auto">
+      <div
+        className="blog-body-video-card relative w-full aspect-video bg-slate-950 rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 group cursor-pointer"
+        onClick={() => {
+          if (!isPlaying) setIsPlaying(true)
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label={title || 'Play YouTube Equipment Video'}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsPlaying(true)
+          }
+        }}
+      >
+        {/* High-res YouTube Thumbnail Poster - Always renders on Frame 0 */}
+        <img
+          src={imgSrc}
+          onError={() => {
+            if (imgSrc !== fallbackImg) setImgSrc(fallbackImg)
+          }}
+          alt={title || 'Equipment Video Walkaround'}
+          className={`absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+            isPlaying && isIframeLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+          loading="lazy"
+        />
+
+        {/* Ambient Dark Gradient Overlay */}
+        <div
+          className={`absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/25 transition-opacity duration-300 ${
+            isPlaying && isIframeLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        />
+
+        {/* Top Header Controls (Brand Badge & Direct YouTube link) */}
+        {!isPlaying && (
+          <div className="absolute top-3.5 left-4 right-4 flex items-center justify-between z-10">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 backdrop-blur-md border border-white/10 text-white shadow-lg pointer-events-none">
+              <svg className="w-4 h-4 fill-red-600 shrink-0" viewBox="0 0 24 24">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+              <span className="text-xs font-semibold tracking-wide truncate max-w-[200px] sm:max-w-md">
+                {title || 'Equipment Video Walkaround'}
+              </span>
+            </div>
+
+            <a
+              href={`https://www.youtube.com/watch?v=${videoId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-red-600 text-white text-xs font-medium backdrop-blur-md border border-white/10 transition-colors shadow-lg"
+              title="Watch directly on YouTube in new tab"
+            >
+              <span>Watch on YouTube</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+          </div>
+        )}
+
+        {/* Center Iconic Red Play Button */}
+        {!isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-red-600/95 group-hover:bg-red-600 group-hover:scale-110 flex items-center justify-center text-white shadow-2xl shadow-red-600/60 backdrop-blur-xs transition-all duration-300">
+              <svg className="w-7 h-7 sm:w-8 sm:h-8 fill-current translate-x-0.5" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
+          </div>
+        )}
+
+        {/* Active Iframe Player */}
+        {isPlaying && (
+          <iframe
+            src={embedUrl}
+            title={title || 'Jobsite Equipment Video'}
+            className="absolute inset-0 w-full h-full border-0 rounded-2xl z-20 bg-slate-950"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            onLoad={() => setIsIframeLoaded(true)}
+          />
+        )}
+      </div>
+
+      {caption && (
+        <p className="blog-body-video-caption text-xs text-center text-slate-500 dark:text-slate-400 mt-2.5 font-medium italic">
+          {caption}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function renderMarkdownToReact(text: string, key: string | number) {
   const line = text.trim()
-  if (!line) return null
+  if (!line || line === '</div>' || line === '</p>' || line === '</span>') return null
 
   // Heading check with Anchor link ID (for 'On This Page' table of contents)
   const heading = getHeadingMatch(line, typeof key === 'number' ? key : 0)
@@ -193,33 +314,36 @@ export function renderMarkdownToReact(text: string, key: string | number) {
     )
   }
 
-  // 5. Video detection: [Watch Video...](url) or direct YouTube/Vimeo
-  const vidLinkMatch = line.match(/^\[(.*?)\]\((https?:\/\/[^\s]+)\)$/)
-  const testUrl = vidLinkMatch ? vidLinkMatch[2] : line
-  if (/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/)|vimeo\.com)/i.test(testUrl)) {
-    let embedUrl = ''
-    const ytMatch = testUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/)
-    if (ytMatch && ytMatch[1]) {
-      embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}`
-    } else {
-      const vimeoMatch = testUrl.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)/)
-      if (vimeoMatch && vimeoMatch[1]) {
-        embedUrl = `https://player.vimeo.com/video/${vimeoMatch[1]}`
-      }
-    }
-    if (embedUrl) {
-      return (
-        <div key={key} className="blog-body-video-container">
-          <iframe
-            src={embedUrl}
-            title="Jobsite Equipment Video"
-            className="blog-body-video-iframe"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      )
-    }
+  // 5. Video detection: YouTube video (raw URL, markdown link, embed code, or HTML block) or Vimeo
+  const ytVideoId = getYoutubeVideoId(line)
+  if (ytVideoId) {
+    const capMatch = line.match(/data-caption=["']([^"']*)["']/i) || 
+                     line.match(/<figcaption[^>]*>(.*?)<\/figcaption>/i) ||
+                     line.match(/^\[(.*?)\]\(/)
+    const caption = capMatch ? capMatch[1].replace(/<[^>]+>/g, '').trim() : ''
+    return (
+      <BlogVideoPlayer
+        key={key}
+        videoId={ytVideoId}
+        caption={caption}
+      />
+    )
+  }
+
+  const vimeoMatch = line.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^\/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)/)
+  if (vimeoMatch && vimeoMatch[1]) {
+    const embedUrl = `https://player.vimeo.com/video/${vimeoMatch[1]}`
+    return (
+      <div key={key} className="blog-body-video-container my-8 w-full max-w-4xl mx-auto aspect-video rounded-2xl overflow-hidden shadow-2xl bg-slate-950">
+        <iframe
+          src={embedUrl}
+          title="Jobsite Equipment Video"
+          className="blog-body-video-iframe w-full h-full border-0 rounded-2xl"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    )
   }
 
   // 6. Markdown Table: | Col1 | Col2 |

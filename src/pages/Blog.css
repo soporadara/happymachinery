@@ -706,23 +706,47 @@ html.dark .raf-body-content figcaption {
   border-radius: 14px;
 }
 
-/* Embedded Jobsite Video Player */
+/* Embedded Jobsite Video Player & Interactive Facade */
+.blog-body-video-card-wrapper,
+.article-youtube-wrapper,
 .blog-body-video-container {
-  margin: 32px 0;
-  border-radius: 14px;
+  margin: 36px auto;
+  border-radius: 16px;
   overflow: hidden;
   position: relative;
   aspect-ratio: 16 / 9;
   width: 100%;
+  max-width: 56rem;
   background: #07182e;
-  box-shadow: 0 8px 24px rgba(7, 24, 46, 0.15);
+  box-shadow: 0 10px 30px rgba(7, 24, 46, 0.18);
 }
 
-.blog-body-video-iframe {
+.blog-body-video-card {
+  position: relative;
   width: 100%;
   height: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #07182e;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.blog-body-video-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25);
+}
+
+.article-youtube-iframe,
+.blog-body-video-iframe,
+.blog-body-html-block iframe {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16 / 9;
   border: none;
   display: block;
+  border-radius: 16px;
+  background: #07182e;
 }
 
 /* Equipment Specifications Table */

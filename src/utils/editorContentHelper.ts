@@ -249,6 +249,13 @@ export function splitContentIntoBlocks(content: string | string[] | any): string
       return `\n\n${token}\n\n`
     })
 
+    const videoPlaceholders: string[] = []
+    protectedStr = protectedStr.replace(/<div[^>]*data-youtube-video[^>]*>[\s\S]*?<\/div>/gi, (match) => {
+      const token = `__HM_BLOCK_VIDEO_${videoPlaceholders.length}__`
+      videoPlaceholders.push(match.trim())
+      return `\n\n${token}\n\n`
+    })
+
     // Normalize block boundaries by inserting double newlines after closing tags
     const normalized = protectedStr
       .replace(/<\/p>/gi, '</p>\n\n')
@@ -270,9 +277,10 @@ export function splitContentIntoBlocks(content: string | string[] | any): string
         .replace(/__HM_BLOCK_TABLE_(\d+)__/g, (_, idx) => tablePlaceholders[parseInt(idx, 10)] || '')
         .replace(/__HM_BLOCK_FIGURE_(\d+)__/g, (_, idx) => figurePlaceholders[parseInt(idx, 10)] || '')
         .replace(/__HM_BLOCK_PRE_(\d+)__/g, (_, idx) => prePlaceholders[parseInt(idx, 10)] || '')
+        .replace(/__HM_BLOCK_VIDEO_(\d+)__/g, (_, idx) => videoPlaceholders[parseInt(idx, 10)] || '')
         .trim()
 
-      if (!restored) continue
+      if (!restored || restored === '</div>' || restored === '</p>' || restored === '</span>') continue
 
       if (restored.includes('</figure>') && !restored.endsWith('</figure>')) {
         const parts = restored.split(/<\/figure>/i)
