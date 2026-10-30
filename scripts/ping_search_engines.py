@@ -1,46 +1,78 @@
 #!/usr/bin/env python3
 """
-Ping major search engines (Google, Bing, IndexNow) to notify them of fresh sitemaps
-and new content (Mini Excavator and Skid Steer guides).
+Ping IndexNow (Bing, Yandex, Seznam, Naver) and submit all live URLs
+for immediate search crawler priority.
 """
 
 import urllib.request
 import urllib.parse
 import json
+import xml.etree.ElementTree as ET
+import os
 import sys
 
-SITEMAP_URL = "https://happymachinery.com/sitemap.xml"
+KEY = "e69317b2b0054a8ea6ef07bc9db5ce54"
+HOST = "happymachinery.com"
+KEY_LOCATION = f"https://{HOST}/{KEY}.txt"
+INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow"
 
-ENDPOINTS = [
-    {
-        "name": "Google Sitemap Ping",
-        "url": f"https://www.google.com/ping?sitemap={urllib.parse.quote(SITEMAP_URL)}",
-        "method": "GET"
-    },
-    {
-        "name": "Bing Sitemap Ping",
-        "url": f"https://www.bing.com/ping?sitemap={urllib.parse.quote(SITEMAP_URL)}",
-        "method": "GET"
+def get_sitemap_urls():
+    sitemap_path = os.path.join(os.path.dirname(__DIR__ if '__DIR__' in dir() else os.path.dirname(__file__)), "public", "sitemap.xml")
+    if not os.path.exists(sitemap_path):
+        return [
+            f"https://{HOST}/",
+            f"https://{HOST}/blog",
+            f"https://{HOST}/store",
+            f"https://{HOST}/blog/the-ultimate-guide-to-heavy-compact-excavators-sizing-hydraulics-and-performance-in-the-2-7-ton-to-4-ton"
+        ]
+    
+    urls = []
+    try:
+        tree = ET.parse(sitemap_path)
+        root = tree.getroot()
+        namespace = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+        for loc in root.findall('.//ns:loc', namespace):
+            if loc.text:
+                urls.append(loc.text.strip())
+    except Exception as e:
+        print(f"Error parsing sitemap: {e}")
+        urls = [f"https://{HOST}/"]
+    return urls
+
+def submit_indexnow():
+    urls = get_sitemap_urls()
+    print(f"🚀 Found {len(urls)} URLs in sitemap to submit via IndexNow...")
+    
+    payload = {
+        "host": HOST,
+        "key": KEY,
+        "keyLocation": KEY_LOCATION,
+        "urlList": urls
     }
-]
-
-def ping_engines():
-    print(f"🚀 Pinging search engines with sitemap: {SITEMAP_URL}")
-    for ep in ENDPOINTS:
-        print(f"\n📡 Pinging {ep['name']}...")
-        req = urllib.request.Request(
-            ep['url'],
-            headers={
-                "User-Agent": "Mozilla/5.0 (compatible; HappyMachineryBot/1.0; +https://happymachinery.com)"
-            }
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                print(f"   Status: {resp.status} - Success!")
-        except Exception as e:
-            print(f"   Notice: {e}")
-
-    print("\n✅ Search engine notification process finished.")
+    
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(
+        INDEXNOW_ENDPOINT,
+        data=data,
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "HappyMachinerySEO/1.0"
+        },
+        method="POST"
+    )
+    
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print(f"📡 IndexNow Response: HTTP {resp.status} {resp.reason}")
+            if resp.status in (200, 202):
+                print("✅ Successfully submitted all URLs to IndexNow! Search engines will prioritize indexing.")
+            else:
+                body = resp.read().decode('utf-8')
+                print(f"Response body: {body}")
+    except urllib.error.HTTPError as e:
+        print(f"HTTP Error {e.code}: {e.read().decode('utf-8', errors='replace')}")
+    except Exception as e:
+        print(f"Error submitting to IndexNow: {e}")
 
 if __name__ == "__main__":
-    ping_engines()
+    submit_indexnow()
